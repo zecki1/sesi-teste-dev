@@ -17,10 +17,9 @@ public static class CatalogoSeeder
 
         var categorias = new List<Categoria>
         {
-            new() { Nome = "Ciências e Natureza", Slug = "ciencias-e-natureza", IconeUrl = "/icons/ciencias.svg", Cor = "#1E7F4F", Ordem = 1 },
-            new() { Nome = "Linguagens", Slug = "linguagens", IconeUrl = "/icons/linguagens.svg", Cor = "#C2410C", Ordem = 2 },
-            new() { Nome = "Matemática", Slug = "matematica", IconeUrl = "/icons/matematica.svg", Cor = "#1D4ED8", Ordem = 3 },
-            new() { Nome = "Sustentabilidade", Slug = "sustentabilidade", IconeUrl = "/icons/sustentabilidade.svg", Cor = "#047857", Ordem = 4 }
+            new() { Nome = "Tecnologia", Slug = "tecnologia", IconeUrl = "/icons/tecnologia.svg", Cor = "#1D4ED8", Ordem = 1 },
+            new() { Nome = "Gestão", Slug = "gestao", IconeUrl = "/icons/gestao.svg", Cor = "#C2410C", Ordem = 2 },
+            new() { Nome = "Segurança do Trabalho", Slug = "seguranca-do-trabalho", IconeUrl = "/icons/seguranca.svg", Cor = "#047857", Ordem = 3 }
         };
 
         var modalidades = new List<Modalidade>
@@ -46,90 +45,54 @@ public static class CatalogoSeeder
 
         var cursos = new List<Curso>
         {
-            NovoCurso("Robótica e Automação Industrial", "Robótica Industrial", "robotica-e-automacao-industrial",
-                "Introdução à robótica aplicada à indústria, com fundamentos de automação, sensores, atuadores e programação de CLPs.",
-                40, "Estudantes do ensino médio e profissionais da indústria", "/cursos/robotica.svg", true, cat["ciencias-e-natureza"], mod["presencial"], sta["disponivel"],
+            NovoCurso("Processo seletivo – Desenvolvedor de Sistemas I", "Desenvolvedor de Sistemas I", "processo-seletivo-desenvolvedor-de-sistemas-i",
+                "Curso voltado à capacitação para o processo seletivo com foco em desenvolvimento de sistemas, lógica de programação, modelagem e práticas para criação de aplicações web.",
+                40, "Candidatos a vagas de desenvolvedor de sistemas e estudantes de tecnologia", "/cursos/desenvolvedor-sistemas.svg", true, cat["tecnologia"], mod["presencial"], sta["disponivel"],
                 new[] {
-                    ("Fundamentos da Robótica", new[] { "História e evolução", "Tipos de robôs industriais", "Aplicações na indústria" }),
-                    ("Sensores e Atuadores", new[] { "Sensores de posição", "Atuadores elétricos", "Integração de sistemas" }),
-                    ("Programação de CLP", new[] { "Lógica ladder", "Variáveis e temporizadores", "Projeto prático" })
+                    ("Lógica e Algoritmos", new[] { "Conceitos básicos de algoritmos", "Estruturas condicionais", "Laços de repetição" }),
+                    ("Fundamentos Web", new[] { "HTML, CSS e semântica", "JavaScript básico", "Responsividade" }),
+                    ("Banco de Dados e APIs", new[] { "Modelagem relacional", "SQL básico", "Consumo e criação de APIs REST" })
                 }),
 
-            NovoCurso("Desenvolvimento Web Full Stack", "Web Full Stack", "desenvolvimento-web-full-stack",
-                "Formação em desenvolvimento web com HTML, CSS, JavaScript, TypeScript e frameworks modernos de front-end e back-end.",
-                60, "Jovens aprendizes e iniciantes em tecnologia", "/cursos/web-fullstack.svg", true, cat["linguagens"], mod["ead"], sta["disponivel"],
+            NovoCurso("Desenvolvimento de Aplicações Web com C# e .NET", "Aplicações Web C# .NET", "desenvolvimento-de-aplicacoes-web-com-csharp-e-dotnet",
+                "Formação prática em desenvolvimento web com ASP.NET Core, arquitetura em camadas, integração com banco de dados e publicação de aplicações.",
+                60, "Desenvolvedores iniciantes e profissionais que desejam migrar para .NET", "/cursos/dotnet-web.svg", true, cat["tecnologia"], mod["ead"], sta["inscricoes-abertas"],
                 new[] {
-                    ("Fundamentos da Web", new[] { "HTML semântico", "CSS e layout responsivo", "Introdução ao JavaScript" }),
-                    ("Front-end Moderno", new[] { "Componentes e estado", "Consumo de APIs", "Boas práticas de acessibilidade" }),
-                    ("Back-end e Banco de Dados", new[] { "APIs REST", "Modelagem de dados", "Publicação da aplicação" })
+                    ("Introdução ao .NET", new[] { "Ambiente de desenvolvimento", "Estrutura de projetos", "Tipos e sintaxe C#" }),
+                    ("ASP.NET Core Web API", new[] { "Minimal APIs e Controllers", "Validação e DTOs", "Documentação com Swagger" }),
+                    ("Integração com Banco de Dados", new[] { "Entity Framework Core", "Migrations", "Relacionamentos" })
                 }),
 
-            NovoCurso("Matemática Aplicada à Indústria", "Matemática Industrial", "matematica-aplicada-a-industria",
-                "Matemática aplicada a problemas reais da indústria: medições, proporções, funções, estatística e cálculo de produção.",
-                30, "Estudantes do ensino médio", "/cursos/matematica.svg", false, cat["matematica"], mod["presencial"], sta["disponivel"],
+            NovoCurso("Gestão de Projetos e Metodologias Ágeis", "Gestão de Projetos Ágeis", "gestao-de-projetos-e-metodologias-ageis",
+                "Aborda fundamentos de gestão, Scrum, Kanban, planejamento, acompanhamento de entregas e trabalho em equipe.",
+                32, "Líderes, coordenadores e profissionais envolvidos em projetos", "/cursos/gestao-projetos.svg", false, cat["gestao"], mod["presencial"], sta["disponivel"],
                 new[] {
-                    ("Medidas e Proporções", new[] { "Unidades e conversões", "Regra de três", "Escalas e plantas" }),
-                    ("Funções e Gráficos", new[] { "Função afim", "Função quadrática", "Leitura de gráficos" }),
-                    ("Estatística na Produção", new[] { "Média e dispersão", "Controle de qualidade", "Interpretação de dados" })
+                    ("Fundamentos de Gestão", new[] { "Ciclo de vida de projetos", "Papéis e responsabilidades", "Escopo e prazos" }),
+                    ("Metodologias Ágeis", new[] { "Scrum: sprints e cerimônias", "Kanban e fluxo", "Métricas ágeis" })
                 }),
 
-            NovoCurso("Sustentabilidade e Eficiência Energética", "Eficiência Energética", "sustentabilidade-e-eficiencia-energetica",
-                "Práticas de sustentabilidade industrial, uso racional de energia, resíduos e tecnologias limpas.",
-                24, "Profissionais da indústria e comunidade", "/cursos/sustentabilidade.svg", true, cat["sustentabilidade"], mod["ead"], sta["inscricoes-abertas"],
+            NovoCurso("Liderança e Comunicação Organizacional", "Liderança e Comunicação", "lideranca-e-comunicacao-organizacional",
+                "Desenvolve competências de liderança, comunicação assertiva, feedback construtivo e gestão de conflitos no ambiente organizacional.",
+                24, "Gestores, supervisores e profissionais em transição para liderança", "/cursos/lideranca.svg", false, cat["gestao"], mod["ead"], sta["inscricoes-abertas"],
                 new[] {
-                    ("Fundamentos da Sustentabilidade", new[] { "Desenvolvimento sustentável", "Pegada ambiental", "Legislação aplicada" }),
-                    ("Eficiência Energética", new[] { "Diagnóstico de consumo", "Fontes renováveis", "Indicadores de eficiência" })
+                    ("Comunicação Assertiva", new[] { "Escuta ativa", "Comunicação verbal e não-verbal", "Feedback eficaz" }),
+                    ("Liderança na Prática", new[] { "Estilos de liderança", "Gestão de conflitos", "Desenvolvimento de equipes" })
                 }),
 
-            NovoCurso("Leitura e Produção de Textos Técnicos", "Textos Técnicos", "leitura-e-producao-de-textos-tecnicos",
-                "Desenvolvimento da escrita técnica: relatórios, procedimentos, normas e comunicação profissional.",
-                20, "Estudantes e profissionais técnicos", "/cursos/textos-tecnicos.svg", false, cat["linguagens"], mod["presencial"], sta["disponivel"],
+            NovoCurso("Prevenção e Combate a Incêndios", "Prevenção e Combate a Incêndios", "prevencao-e-combate-a-incendios",
+                "Capacitação teórico-prática sobre prevenção, classes de incêndio, extintores, rotas de fuga e procedimentos de emergência.",
+                16, "Colaboradores de empresas de todos os setores", "/cursos/incendios.svg", true, cat["seguranca-do-trabalho"], mod["presencial"], sta["disponivel"],
                 new[] {
-                    ("Gêneros Técnicos", new[] { "Relatórios", "Procedimentos e instruções", "Normas e formatação" }),
-                    ("Clareza e Coesão", new[] { "Paragrafação", "Conectivos", "Revisão e edição" })
+                    ("Legislação e Conceitos", new[] { "Incêndio: teoria do triângulo", "Classes de incêndio", "Normas aplicáveis" }),
+                    ("Combate e Emergência", new[] { "Extintores e seu uso", "Rotas de fuga e sinalização", "Simulado prático" })
                 }),
 
-            NovoCurso("Introdução à Indústria 4.0", "Indústria 4.0", "introducao-a-industria-4-0",
-                "Conceitos da quarta revolução industrial: IoT, big data, sistemas ciber-físicos e manufatura inteligente.",
-                36, "Profissionais e estudantes da área industrial", "/cursos/industria-4-0.svg", true, cat["ciencias-e-natureza"], mod["ead"], sta["em-breve"],
+            NovoCurso("Segurança em Espaços Confinados", "Espaços Confinados", "seguranca-em-espacos-confinados",
+                "Formação sobre riscos, autorização de entrada, monitoramento atmosférico, equipamentos de proteção e procedimentos de resgate.",
+                20, "Trabalhadores, vigias e supervisores que atuam em espaços confinados", "/cursos/espacos-confinados.svg", false, cat["seguranca-do-trabalho"], mod["presencial"], sta["em-breve"],
                 new[] {
-                    ("A Quarta Revolução", new[] { "Contexto histórico", "Pilares da Indústria 4.0", "Impactos no trabalho" }),
-                    ("Tecnologias Habilitadoras", new[] { "Internet das Coisas", "Big data e analytics", "Sistemas ciber-físicos" }),
-                    ("Manufatura Inteligente", new[] { "Fábrica conectada", "Manutenção preditiva", "Estudo de caso" })
-                }),
-
-            NovoCurso("Gestão da Qualidade na Produção", "Gestão da Qualidade", "gestao-da-qualidade-na-producao",
-                "Fundamentos de qualidade, ferramentas de melhoria contínua, PDCA e indicadores de desempenho.",
-                28, "Lideranças e profissionais de produção", "/cursos/qualidade.svg", false, cat["matematica"], mod["presencial"], sta["inscricoes-abertas"],
-                new[] {
-                    ("Fundamentos da Qualidade", new[] { "Evolução do conceito", "Normas ISO", "Custo da qualidade" }),
-                    ("Ferramentas da Qualidade", new[] { "PDCA e MASP", "Diagrama de Ishikawa", "Cartas de controle" })
-                }),
-
-            NovoCurso("Inglês Técnico para a Indústria", "Inglês Técnico", "ingles-tecnico-para-a-industria",
-                "Inglês instrumental para leitura de manuais, normas técnicas e comunicação profissional na indústria.",
-                32, "Profissionais que lidam com documentação técnica", "/cursos/ingles-tecnico.svg", false, cat["linguagens"], mod["ead"], sta["disponivel"],
-                new[] {
-                    ("Estratégias de Leitura", new[] { "Skimming e scanning", "Cognatos e falsos cognatos", "Vocabulário técnico" }),
-                    ("Comunicação Profissional", new[] { "E-mails e mensagens", "Reuniões e apresentações", "Documentação técnica" })
-                }),
-
-            NovoCurso("Ciências Ambientais e Reciclagem", "Ciências Ambientais", "ciencias-ambientais-e-reciclagem",
-                "Ciências ambientais aplicadas: ciclos naturais, poluição, reciclagem e economia circular.",
-                26, "Estudantes e comunidade em geral", "/cursos/ciencias-ambientais.svg", true, cat["sustentabilidade"], mod["presencial"], sta["disponivel"],
-                new[] {
-                    ("Meio Ambiente e Sociedade", new[] { "Ecossistemas", "Ciclos biogeoquímicos", "Impactos humanos" }),
-                    ("Reciclagem e Economia Circular", new[] { "Tipos de resíduos", "Processos de reciclagem", "Design circular" }),
-                    ("Projeto Ambiental Comunitário", new[] { "Diagnóstico local", "Plano de ação", "Apresentação de resultados" })
-                }),
-
-            NovoCurso("Física Aplicada a Processos Industriais", "Física Aplicada", "fisica-aplicada-a-processos-industriais",
-                "Física aplicada à indústria: mecânica, calor, eletricidade e suas aplicações em processos produtivos.",
-                34, "Estudantes do ensino médio técnico", "/cursos/fisica.svg", false, cat["ciencias-e-natureza"], mod["presencial"], sta["em-breve"],
-                new[] {
-                    ("Mecânica Aplicada", new[] { "Movimento e força", "Trabalho e energia", "Máquinas simples" }),
-                    ("Calor e Termodinâmica", new[] { "Temperatura e calor", "Leis da termodinâmica", "Trocadores de calor" }),
-                    ("Eletricidade Básica", new[] { "Corrente e tensão", "Circuitos", "Motores elétricos" })
+                    ("Identificação de Riscos", new[] { "O que são espaços confinados", "Riscos atmosféricos", "Outros riscos" }),
+                    ("Permissão e Resgate", new[] { "Permissão de entrada e trabalho", "Monitoramento e EPI/EPC", "Plano de resgate" })
                 })
         };
 

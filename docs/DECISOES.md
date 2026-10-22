@@ -305,3 +305,42 @@ Figma → Frontend (Vercel) → fetch VITE_API_URL → API (Render) → EF Core 
   - No Render, **`Root Directory` define o build context**; o `Dockerfile Path` é sempre **relativo ao Root Directory** (ver D006).
   - O Render injeta a porta via `$PORT`; o Kestrel foi ajustado para escutar em `8080` conforme o Dockerfile (D005).
 - **Paralelos:** D002 (migração), D004 (multi-banco), D005 (Dockerfile), D006 (setup Render), D013 (Vercel).
+
+### D016 - Correção do build da Vercel (Root Directory + TypeScript 5) 
+
+- **Data:** 21/10/2026 (23:00 - 23:40)
+- **Problema:** O deploy da Vercel falhava com `sh: line 1: vite: command not found` / `Error: [BUILD_UTILS_SPAWN_127] Command "vite build" exited with 127`. Depois, com `tsconfig.json(19,5): error TS5102: Option 'baseUrl' has been removed`.
+- **Causa raiz:**
+  1. O projeto Vercel estava com `rootDirectory: null`, então o build rodava na **raiz do repositório**, onde não existe `package.json`. Os `vite`/`npm` não eram encontrados.
+  2. O `frontend/tsconfig.json` ainda usava `baseUrl`, opção **removida no TypeScript 5.x**. O `tsc -b` falha mesmo com `paths` configurado.
+  3. Faltava `src/vite-env.d.ts` (`/// <reference types="vite/client" />`), o que gerava `TS2882: Cannot find module ... side-effect import of './styles/globals.css'`.
+  4. As fontes OpenDyslexic estavam em `dist/` (ignorado no Git) e não em `public/fonts/`.
+- **Decisão:**
+  - Configurar `rootDirectory: frontend` no projeto Vercel via API (`PATCH /v9/projects/{id}`).
+  - Remover `baseUrl` do `tsconfig.json` (manter `paths`).
+  - Adicionar `frontend/src/vite-env.d.ts`.
+  - Mover `OpenDyslexic-Regular.woff/.woff2` para `frontend/public/fonts/`.
+  - Criar `frontend/vercel.json` com `framework`, `buildCommand`, `outputDirectory` e rewrites SPA.
+  - Adicionar `*.tsbuildinfo` ao `.gitignore`.
+- **Motivo:** Sem `rootDirectory` correto, a Vercel não enxerga o `frontend/`; e o TypeScript 5 exige a remoção de `baseUrl`.
+- **Como foi feito:**
+```bash
+# Ajuste via API do Vercel
+PATCH https://api.vercel.com/v9/projects/prj_3v2twn6AcK7dye1UnyHPZhmA8zFk
+  { "rootDirectory": "frontend", "framework": "vite",
+    "buildCommand": "npm run build", "outputDirectory": "dist" }
+```
+```jsonc
+// frontend/tsconfig.json (removido baseUrl)
+"paths": { "@/*": ["./src/*"] }
+```
+```ts
+// frontend/src/vite-env.d.ts
+/// <reference types="vite/client" />
+```
+- **Resultado:** `npm run build` passou localmente (`tsc -b && vite build` → built in ~850ms). Deploy automático da Vercel foi disparado no commit `0bc416f`.
+- **Pendência registrada (23:48):** o deploy na Vercel continuou travando em `Running "install" command: npm ci...` sem progredir, mesmo após cancelar e reenviar. Observações:
+  - Possível causa: `installCommand: "npm ci"` **fixado no `frontend/vercel.json`** sobrescreve a configuração do projeto, e a Vercel ficou sem cache (`Skipping build cache, deployment was triggered without cache`).
+  - Ação em andamento: remover o `installCommand` do `vercel.json` e deixar a Vercel decidir; testar `npm install --no-audit --no-fund` como alternativa.
+  - **Impacto atual:** frontend ainda **não publicado**; API (Render) já está no ar.
+- **Paralelos:** D013 (Vercel), D015 (infra de produção). Esta decisão é o **ponto de contato entre Frontend e Engenharia**: o build do frontend depende de configuração de projeto (Root Directory) e de ajustes de compilação (TypeScript 5) para ser publicado.

@@ -339,8 +339,13 @@ PATCH https://api.vercel.com/v9/projects/prj_3v2twn6AcK7dye1UnyHPZhmA8zFk
 /// <reference types="vite/client" />
 ```
 - **Resultado:** `npm run build` passou localmente (`tsc -b && vite build` → built in ~850ms). Deploy automático da Vercel foi disparado no commit `0bc416f`.
-- **Pendência registrada (23:48):** o deploy na Vercel continuou travando em `Running "install" command: npm ci...` sem progredir, mesmo após cancelar e reenviar. Observações:
-  - Possível causa: `installCommand: "npm ci"` **fixado no `frontend/vercel.json`** sobrescreve a configuração do projeto, e a Vercel ficou sem cache (`Skipping build cache, deployment was triggered without cache`).
-  - Ação em andamento: remover o `installCommand` do `vercel.json` e deixar a Vercel decidir; testar `npm install --no-audit --no-fund` como alternativa.
-  - **Impacto atual:** frontend ainda **não publicado**; API (Render) já está no ar.
+- **Desfecho (resolvido):** O travamento em `Running "install" command: npm ci...` era causado pelo **`installCommand: "npm ci"` fixado no `frontend/vercel.json`**, que sobrescrevia a configuração do projeto e travava a instalação sem cache. **Solução:** remover o `installCommand` do `vercel.json` (commit `645ffd7`). O deploy passou a `READY` imediatamente.
+- **Extras aplicados:**
+  - Desativada a **Vercel Authentication** (`ssoProtection`/`passwordProtection` = null) para o deploy de produção ficar público.
+- **Resultado final (validado):**
+  - Frontend público: **https://frontend-ezequiel-reginos-projects.vercel.app** → **HTTP 200**
+  - Rotas SPA (`/`, `/catalogo`, `/curso/teste`) → **200** (rewrites funcionando)
+  - Assets (`/assets/*.js`, `/assets/*.css`) → **200**
+  - Fonte OpenDyslexic (`/fonts/OpenDyslexic-Regular.woff2`) → **200**
+- **Aprendizado registrado:** No Vercel, evitar fixar `installCommand`/`buildCommand` no `vercel.json` quando a config do projeto já cobre — overrides podem conflitar com o comportamento de cache e travar o build.
 - **Paralelos:** D013 (Vercel), D015 (infra de produção). Esta decisão é o **ponto de contato entre Frontend e Engenharia**: o build do frontend depende de configuração de projeto (Root Directory) e de ajustes de compilação (TypeScript 5) para ser publicado.

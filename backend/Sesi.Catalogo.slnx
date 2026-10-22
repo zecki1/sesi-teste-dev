@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Sesi.Catalogo.Api/Sesi.Catalogo.Api.csproj" />
+  <Project Path="Sesi.Catalogo.Domain/Sesi.Catalogo.Domain.csproj" />
+  <Project Path="Sesi.Catalogo.Infrastructure/Sesi.Catalogo.Infrastructure.csproj" />
+  <Project Path="Sesi.Catalogo.Tests/Sesi.Catalogo.Tests.csproj" />
+</Solution>

@@ -1,0 +1,49 @@
+/* Filtros para daltonismo */
+html[data-color-filter="protanopia"] {
+  filter: url('#protanopia-filter');
+}
+
+html[data-color-filter="deuteranopia"] {
+  filter: url('#deuteranopia-filter');
+}
+
+html[data-color-filter="tritanopia"] {
+  filter: url('#tritanopia-filter');
+}
+
+html[data-color-filter="monocromia"] {
+  filter: grayscale(100%);
+}
+
+/* Tamanho de fonte */
+html[data-font-size="small"] {
+  font-size: 14px;
+}
+
+html[data-font-size="normal"] {
+  font-size: 16px;
+}
+
+html[data-font-size="large"] {
+  font-size: 18px;
+}
+
+html[data-font-size="xlarge"] {
+  font-size: 20px;
+}
+
+/* Fonte para dislexia */
+html[data-font="opendyslexic"] body {
+  font-family: 'OpenDyslexic', 'Open Sans', system-ui, sans-serif;
+}
+
+/* Redução de movimento */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

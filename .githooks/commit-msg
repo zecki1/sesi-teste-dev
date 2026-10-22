@@ -1,0 +1,25 @@
+#!/bin/sh
+# Validação de Conventional Commits
+
+MSG_FILE=$1
+MSG=$(cat "$MSG_FILE")
+
+# Permitir commits automáticos
+if echo "$MSG" | grep -qE "^(Merge|Revert|fixup!|squash!)"; then
+  exit 0
+fi
+
+# Padrão Conventional Commits
+PATTERN="^(feat|fix|test|docs|design|ops|backend|chore|refactor|perf|style|ci|build)(\([a-z0-9-]+\))?: .+"
+
+if echo "$MSG" | grep -qE "$PATTERN"; then
+  exit 0
+else
+  echo "ERRO: Mensagem de commit não segue o padrão Conventional Commits"
+  echo ""
+  echo "Padrão: <tipo>(<escopo>)?: <descrição>"
+  echo "Tipos: feat, fix, test, docs, design, ops, backend, chore, refactor, perf, style, ci, build"
+  echo ""
+  echo "Exemplo: feat(catalogo): adiciona filtros combinados"
+  exit 1
+fi

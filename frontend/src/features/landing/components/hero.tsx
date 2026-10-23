@@ -3,7 +3,8 @@ import { Link } from "react-router-dom"
 import gsap from "gsap"
 import { Container } from "@/components/layout/container"
 import { Button } from "@/components/ui/button"
-import heroImage from "@/assets/hero-image.png"
+
+const heroImage = "/images/hero-image.webp"
 
 export function Hero() {
   const scope = useRef<HTMLElement>(null)
@@ -25,7 +26,17 @@ export function Hero() {
 
   return (
     <section id="hero" ref={scope} className="relative isolate -mt-[72px] overflow-hidden pt-[72px]">
-      <img src={heroImage} alt="Hero image" className="absolute inset-0 -z-10 h-full w-full object-cover" />
+      <img
+        src={heroImage}
+        alt=""
+        aria-hidden="true"
+        width="1600"
+        height="900"
+        fetchPriority="high"
+        loading="eager"
+        decoding="async"
+        className="absolute inset-0 -z-10 h-full w-full object-cover"
+      />
       <div className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(208,6,2,0.92)_0%,rgba(208,6,2,0.86)_100%)]" />
       <Container className="flex min-h-[560px]  flex-col justify-center gap-6 py-16 text-white">
         <h1 data-hero className="max-w-[400px] font-['Open_Sans_Condensed',sans-serif] text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">

@@ -343,6 +343,10 @@ public class CatalogoApiTests : IClassFixture<WebApplicationFactory<Program>>
         var conteudo = await client.GetAsync(pacote.ConteudoUrl);
         conteudo.StatusCode.Should().Be(HttpStatusCode.OK);
         (await conteudo.Content.ReadAsStringAsync()).Should().Contain("conteudo scorm de teste");
+        var download = await client.GetAsync($"/api/v1/scorm/pacotes/{pacote.Id}/download");
+        download.StatusCode.Should().Be(HttpStatusCode.OK);
+        download.Content.Headers.ContentType?.MediaType.Should().Be("application/zip");
+        (await download.Content.ReadAsByteArrayAsync()).Should().Equal(memoria.ToArray());
 
         var primeiro = new SalvarProgressoScormRequest(
             slug, "aluno", "{\"pagina\":2}", "incomplete", "aula-2", null, 40, null);
@@ -372,6 +376,61 @@ public class CatalogoApiTests : IClassFixture<WebApplicationFactory<Program>>
         checkpointLimpo.LessonLocation.Should().BeNull();
         checkpointLimpo.LessonStatus.Should().BeNull();
         checkpointLimpo.CmiDataJson.Should().BeNull();
+
+        using var formularioSubstituto = new MultipartFormDataContent();
+        using var arquivoSubstituto = new ByteArrayContent(memoria.ToArray());
+        arquivoSubstituto.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
+        formularioSubstituto.Add(arquivoSubstituto, "arquivo", "curso-atualizado.zip");
+        formularioSubstituto.Add(new StringContent(slug), "cursoSlug");
+        formularioSubstituto.Add(new StringContent("1.2"), "versao");
+        var substituicao = await client.PostAsync("/api/v1/scorm/pacotes", formularioSubstituto);
+        substituicao.StatusCode.Should().Be(HttpStatusCode.OK);
+        var pacoteSubstituto = await substituicao.Content.ReadFromJsonAsync<ScormPacoteDto>();
+        pacoteSubstituto.Should().NotBeNull();
+        pacoteSubstituto!.Id.Should().NotBe(pacote.Id);
+        (await client.GetAsync($"/api/v1/scorm/pacotes/{pacote.Id}/download")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await client.GetFromJsonAsync<List<ScormPacoteDto>>("/api/v1/scorm/pacotes"))
+            .Should().ContainSingle(item => item.CursoSlug == slug);
+    }
+
+    [Fact]
+    public async Task ScormConfiguracoes_LimiteEPaginaDevemPersistirNoBackend()
+    {
+        var client = _factory.CreateClient();
+        (await client.GetFromJsonAsync<ScormConfiguracaoDto>("/api/v1/scorm/configuracoes"))!
+            .LimiteUploadMb.Should().Be(100);
+
+        var limite = await client.PutAsJsonAsync(
+            "/api/v1/scorm/configuracoes",
+            new AtualizarLimiteScormRequest(50));
+        limite.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await client.GetFromJsonAsync<ScormConfiguracaoDto>("/api/v1/scorm/configuracoes"))!
+            .LimiteUploadMb.Should().Be(50);
+
+        var limiteInvalido = await client.PutAsJsonAsync(
+            "/api/v1/scorm/configuracoes",
+            new AtualizarLimiteScormRequest(25));
+        limiteInvalido.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        (await client.PutAsJsonAsync(
+            "/api/v1/scorm/configuracoes",
+            new AtualizarLimiteScormRequest(20))).StatusCode.Should().Be(HttpStatusCode.OK);
+        using var formularioGrande = new MultipartFormDataContent();
+        using var arquivoGrande = new ByteArrayContent(new byte[20 * 1024 * 1024 + 1]);
+        formularioGrande.Add(arquivoGrande, "arquivo", "acima-do-limite.zip");
+        formularioGrande.Add(new StringContent("curso-grande"), "cursoSlug");
+        var uploadAcimaDoLimite = await client.PostAsync("/api/v1/scorm/pacotes", formularioGrande);
+        uploadAcimaDoLimite.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await uploadAcimaDoLimite.Content.ReadAsStringAsync()).Should().Contain("limite configurado de 20 MB");
+
+        var slug = $"pagina-scorm-{Guid.NewGuid():N}";
+        var pagina = new ScormPaginaConfigDto(
+            "Curso SCORM", "Subtítulo", "Sobre", "", "/capa.webp", 10, "Iniciar curso");
+        (await client.GetAsync($"/api/v1/scorm/paginas/{slug}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        var salva = await client.PutAsJsonAsync($"/api/v1/scorm/paginas/{slug}", pagina);
+        salva.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await client.GetFromJsonAsync<ScormPaginaConfigDto>($"/api/v1/scorm/paginas/{slug}"))
+            .Should().BeEquivalentTo(pagina);
     }
 
     [Fact]

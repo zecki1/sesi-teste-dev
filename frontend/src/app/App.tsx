@@ -7,7 +7,13 @@ import { SmoothScroll } from '@/components/motion/smooth-scroll'
 import { usePerfil } from '@/lib/auth/perfil'
 import { aplicarIdioma, iniciarIdioma } from '@/lib/i18n/idioma'
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: import.meta.env.DEV ? false : 3,
+    },
+  },
+})
 
 function App() {
   const perfil = usePerfil()

@@ -5,8 +5,8 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript)
 ![Tailwind](https://img.shields.io/badge/Tailwind-4-06B6D4?logo=tailwindcss)
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet)
-![E2E](https://img.shields.io/badge/E2E-28%2F28%20passing-brightgreen)
-![Unit](https://img.shields.io/badge/Unit-6%2F6%20passing-brightgreen)
+![E2E](https://img.shields.io/badge/E2E-32%2F32%20passing-brightgreen)
+![Unit](https://img.shields.io/badge/Unit-14%2F14%20passing-brightgreen)
 ![A11y](https://img.shields.io/badge/axe-0%20serious%2Fcritical-brightgreen)
 ![Vercel](https://img.shields.io/badge/front-Vercel-000000?logo=vercel)
 ![Render](https://img.shields.io/badge/API-Render-46E3B7?logo=render)
@@ -28,10 +28,11 @@
 - **Busca e filtros combináveis** por categoria, modalidade e status, com contador de resultados, ordenação, paginação e limpeza de filtros.
 - **Landing** com 6 cursos em destaque (Matemática e Ciências da Natureza), cards com capas em WebP, **sliders full-bleed** (4 cards + fração do 5º no desktop), card “Todos os cursos” e CTA final que abre o catálogo.
 - **Detalhe do curso** com módulos e aulas, certificação, benefícios, acordeão “Sobre o curso”, depoimentos e **modal de matrícula** com turmas, data, dias, horário, modalidade e vagas.
-- **Área do aluno** com login demonstrativo, perfil, matrículas, certificados, calendário de aulas gerado a partir das turmas e preferências de acessibilidade.
+- **Área do aluno** com login e cadastro demonstrativos, perfil, matrículas, certificados, calendário de aulas gerado a partir das turmas e preferências de acessibilidade.
 - **AVA** em `/area-do-aluno/curso/:slug`, em duas colunas, com introdução, seis módulos, busca, progresso e conteúdo.
-- **Página de curso SCORM** em `/curso/:slug/scorm`, com banner, imagem, textos, títulos, carga horária e player configuráveis pelo admin.
-- **Painel administrativo** para criar, editar e excluir cursos **na API**, com editor de módulos/aulas, blocos (texto, vídeo, imagem e quiz) e registro de pacote SCORM 1.2/2004.
+- **Página de curso SCORM** em `/curso/:slug/scorm`, compartilhando hero, benefícios, módulos/FAQ, depoimentos, suporte e matrícula com cursos em blocos; textos e imagens por URL são configuráveis no admin.
+- **Upload e player SCORM 1.2/2004** em `/curso/:slug/scorm/player`, com progresso persistente, um pacote ativo por curso, download do ZIP publicado e substituição validada; o player mantém o header, acessibilidade e retorno aos detalhes.
+- **Painel administrativo** para cursos e limite global de upload SCORM (20/50/80/100/200 MB; padrão 100 MB), com editor de módulos/aulas e blocos (texto, vídeo, imagem e quiz).
 - **Acessibilidade** com modal de ajustes, rolagem interna, filtros de visão, **slider de fonte em passos fixos**, modo dislexia, **VLibras opcional** e seletor de idioma.
 - **Consentimento de cookies** persistido em `localStorage` e no cookie `sesi_cookies`; o banner não reaparece após a decisão.
 - **Três idiomas** (PT-BR, EN-US, ES-ES) com detecção por fuso horário e persistência no perfil e no `localStorage`.
@@ -67,6 +68,10 @@ npm run dev                                # http://localhost:5173
 
 O front-end usa `http://localhost:5077` como API padrão. Para apontar para outro ambiente, crie
 `frontend/.env.local` com `VITE_API_URL=http://localhost:5077`. Se a porta `5173` estiver ocupada, o Vite pode abrir em `5174`; a API local também permite as origens `localhost:5174` e `127.0.0.1:5174` via CORS.
+Se o console mostrar `ERR_CONNECTION_REFUSED` em `localhost:5077`, inicie a API no terminal indicado acima (`dotnet run --project Sesi.Catalogo.Api`) e mantenha os dois processos em execução.
+No modo de desenvolvimento, chamadas da API não são substituídas por dados simulados: catálogo, matrículas e progresso exigem que a API local esteja rodando.
+Com a API iniciada, o health check local fica disponível em `http://localhost:5077/health`.
+O banco SQLite local (`catalogo.db`) e os pacotes SCORM enviados ficam em arquivos locais; a pasta `backend/Sesi.Catalogo.Api/App_Data/` é ignorada pelo Git para não versionar uploads e progresso de alunos.
 
 > **E2E:** na primeira vez, instale o navegador do Playwright com `npx playwright install chromium`.
 
@@ -113,10 +118,10 @@ projeto — a verificação estática é feita por `npm run typecheck`.
 | `/` | Landing: hero, cursos em destaque, diferenciais, depoimentos e CTA |
 | `/catalogo` | Catálogo completo com busca, filtros, ordenação e paginação |
 | `/curso/:slug` | Detalhe do curso, módulos, benefícios, acordeão e depoimentos |
-| `/curso/:slug/scorm` | Página do curso SCORM: banner, imagem, textos, carga horária e player configuráveis |
+| `/curso/:slug/scorm` | Página padronizada do curso SCORM, progresso e player |
 | `/area-do-aluno` | Login modal e dashboard do aluno (perfil, matrículas, certificados, calendário) |
 | `/area-do-aluno/curso/:slug` | AVA do curso: introdução, seis módulos, busca e progresso |
-| `/admin/cursos` | Painel administrativo com CRUD de cursos na API (restrito a e-mails SESI) |
+| `/admin/cursos` | CRUD de cursos, configuração do limite de upload e gestão do pacote SCORM ativo |
 | `/sobre` | Página institucional com história, valores, pilares e vídeos |
 | `*` | Página 404 |
 
@@ -139,6 +144,14 @@ projeto — a verificação estática é feita por `npm run typecheck`.
 | `GET` | `/api/v1/cursos/{slug}/progresso` | Progresso do aluno (header `X-Usuario-Id`) |
 | `POST` | `/api/v1/sessoes-scorm` | Commit de sessão SCORM |
 | `GET` | `/api/v1/sessoes-scorm?sessaoId=...` | Recupera sessão SCORM |
+| `GET/PUT` | `/api/v1/scorm/configuracoes` | Consulta/atualiza o limite global de upload SCORM |
+| `GET/PUT` | `/api/v1/scorm/paginas/{cursoSlug}` | Consulta/salva a configuração da página SCORM |
+| `POST` | `/api/v1/scorm/pacotes` | Envia e valida um pacote SCORM ZIP |
+| `GET` | `/api/v1/scorm/pacotes` | Lista pacotes ativos para o admin |
+| `GET` | `/api/v1/scorm/pacotes/{cursoSlug}` | Consulta o pacote ativo do curso |
+| `GET` | `/api/v1/scorm/pacotes/{id}/download` | Baixa o ZIP original do pacote ativo |
+| `DELETE` | `/api/v1/scorm/pacotes/{cursoSlug}` | Remove o pacote ativo do curso |
+| `GET/POST` | `/api/v1/scorm/progresso` | Consulta/persiste o progresso do player |
 
 Parâmetros de `/api/v1/cursos`: `busca`, `categoria`, `modalidade`, `status`, `pagina`,
 `tamanho` (máx. 48), `ordenar` (`nome`, `nome-desc`, `carga`, `carga-desc`, `recentes`) e
@@ -150,12 +163,12 @@ Parâmetros de `/api/v1/cursos`: `busca`, `categoria`, `modalidade`, `status`, `
 
 | Métrica | Resultado |
 |---------|-----------|
-| Testes unitários | **9/9** passando (Vitest + Testing Library) |
-| Testes E2E | **28/28** passando (Playwright, Chromium) — 22 fluxos + 6 verificações de axe/tema |
-| Testes de API | **15/15** passando (xUnit + `WebApplicationFactory` + SQLite in-memory) |
+| Testes unitários | **14/14** passando (Vitest + Testing Library) |
+| Testes E2E | **32/32** passando (Playwright, Chromium) — 26 fluxos + 6 verificações de axe/tema |
+| Testes de API | **20/20** passando (xUnit + `WebApplicationFactory` + SQLite in-memory) |
 | Acessibilidade (axe) | **0** violações `serious`/`critical` em `/`, `/catalogo`, detalhe do curso e página SCORM, nos temas claro e escuro |
 | Typecheck | OK (`tsc --noEmit`) |
-| Build | OK · JS ~685 kB · CSS ~79 kB (aviso de chunk > 500 kB) |
+| Build | OK · JS ~700 kB · CSS ~79 kB (aviso de chunk > 500 kB) |
 
 ---
 
@@ -236,7 +249,7 @@ repo/
   Cobre o store do banner, a persistência do consentimento de cookies e a configuração da página SCORM;
   roda rápido e sem backend.
 - **Playwright** para fluxos reais com **interceptação de rede** e fixtures capturadas da API
-  (`e2e/support/mock-api.ts`), portanto os E2E **não exigem o back-end no ar**. Os 22 fluxos cobrem
+  (`e2e/support/mock-api.ts`), portanto os E2E **não exigem o back-end no ar**. Os 26 fluxos cobrem
   landing, catálogo (busca, filtros, vazio), detalhe, AVA, página SCORM, matrícula, login, tema, fonte,
   VLibras, cookies, trava de rolagem dos modais, cards com capa WebP, badges coloridos/uppercase e ícone
   de categoria, geometria dos sliders full-bleed (4 cards + fração do 5º em 1440 px), clique e drag dos

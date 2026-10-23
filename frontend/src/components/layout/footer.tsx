@@ -78,7 +78,7 @@ export function Footer() {
     <footer className="bg-[var(--sesi-black)] text-white">
       <Container className="grid gap-10 py-12 sm:grid-cols-2 lg:grid-cols-4">
         <div className="flex flex-col gap-4">
-          <img src={logoWhite} alt="SESI Indústria" className="h-auto w-[150px]" />
+          <img src={logoWhite} alt="SESI Indústria" width="150" height="15" className="h-auto w-[150px]" />
           <div className="flex flex-col gap-1 text-sm text-white/80">
             <a href="mailto:contato@sesindustria.com.br" className="hover:underline">
               contato@sesindustria.com.br

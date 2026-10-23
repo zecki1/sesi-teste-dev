@@ -1,7 +1,7 @@
 import { useState } from "react"
-import videoThumb from "@/assets/video-thumb.png"
 
 const VIDEO_ID = "UOALUskXHcY"
+const videoThumb = "/images/video-thumb.webp"
 
 /** Capa do vídeo do curso com play; ao clicar, carrega o player do YouTube. */
 export function VideoCurso({ titulo }: { titulo: string }) {
@@ -19,7 +19,16 @@ export function VideoCurso({ titulo }: { titulo: string }) {
         />
       ) : (
         <>
-          <img src={videoThumb} alt={`Capa do vídeo sobre o curso ${titulo}`} className="h-full w-full object-cover" />
+          <img
+            src={videoThumb}
+            alt={`Capa do vídeo sobre o curso ${titulo}`}
+            width="1200"
+            height="675"
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
+            className="h-full w-full object-cover"
+          />
           <button
             type="button"
             onClick={() => setTocando(true)}

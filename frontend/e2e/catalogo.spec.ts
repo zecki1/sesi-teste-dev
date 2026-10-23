@@ -247,7 +247,35 @@ test("página SCORM usa os dados do curso e a configuração salva", async ({ pa
   await expect(page.locator("[data-imagem-scorm]")).toHaveAttribute("src", /matematica-precisao\.svg$/)
   await expect(page.locator("[data-player-demonstrativo]")).toBeVisible()
   await expect(page.getByRole("heading", { name: "Grandezas e Unidades" })).toHaveCount(0)
+  await page.getByText("Módulos", { exact: true }).click()
   await expect(page.getByText(/Grandezas e Unidades/).first()).toBeVisible()
+})
+
+test("admin salva o limite permitido de upload SCORM", async ({ page }) => {
+  const admin = {
+    nome: "Admin",
+    sobrenome: "SESI",
+    email: "admin@sesindustria.com.br",
+    telefone: "",
+    dataNascimento: "",
+    idioma: "pt-BR",
+    papel: "admin",
+    acessibilidade: { filtro: "none", tamanhoFonte: "normal", dislexia: false, tema: "claro", vlibras: true },
+    certificados: [],
+    matriculas: [],
+  }
+  await page.addInitScript((perfil) => {
+    window.localStorage.setItem("sesi.perfil.v1", JSON.stringify(perfil))
+    window.localStorage.setItem("sesi.sessao.v1", perfil.email)
+  }, admin)
+  await page.goto("/admin/cursos")
+
+  const limite = page.getByLabel("Tamanho máximo")
+  await expect(limite).toHaveValue("100")
+  await limite.selectOption("200")
+  await page.getByRole("button", { name: /salvar \(100 MB atual\)/i }).click()
+  await expect(page.getByRole("status")).toContainText("Limite de upload SCORM atualizado para 200 MB.")
+  await expect(limite).toHaveValue("200")
 })
 
 test("menu mobile abre a navegação", async ({ page }) => {

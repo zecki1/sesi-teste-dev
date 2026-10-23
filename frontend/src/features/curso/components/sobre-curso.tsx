@@ -55,14 +55,14 @@ const DUVIDAS = [
   },
 ]
 
-export function SobreCurso({ curso }: { curso: CursoDetalheDto }) {
+export function SobreCurso({ curso, descricao = curso.descricao }: { curso: CursoDetalheDto; descricao?: string }) {
   return (
     <section className="py-12 sm:py-16">
       <Container>
         <div className="grid gap-10 lg:grid-cols-12 lg:gap-12">
           <div data-aos="fade-up" className="flex flex-col gap-6 lg:col-span-4">
             <h2 className="font-['Open_Sans_Condensed',sans-serif] text-3xl font-bold sm:text-4xl">Sobre o curso</h2>
-            <p className="text-lg leading-relaxed text-[var(--sesi-muted)]">{curso.descricao}</p>
+            <p className="whitespace-pre-line text-lg leading-relaxed text-[var(--sesi-muted)]">{descricao}</p>
           </div>
 
           <div data-aos="fade-up" data-aos-delay="120" className="lg:col-span-8">

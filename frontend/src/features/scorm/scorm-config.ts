@@ -72,9 +72,12 @@ export function salvarConfigScorm(slug: string, config: ScormPaginaConfig) {
 }
 
 /** Junta o que foi configurado no admin com os dados reais do curso. */
-export function configScormEfetiva(curso: CursoDetalheDto): ScormPaginaConfig {
+export function configScormEfetiva(
+  curso: CursoDetalheDto,
+  configuracaoRemota?: Partial<ScormPaginaConfig> | null,
+): ScormPaginaConfig {
   const padrao = configScormPadrao(curso)
-  const salvo = carregarConfigScorm(curso.slug)
+  const salvo = configuracaoRemota ?? carregarConfigScorm(curso.slug)
   if (!salvo) return padrao
 
   return {
@@ -84,7 +87,7 @@ export function configScormEfetiva(curso: CursoDetalheDto): ScormPaginaConfig {
     subtitulo: salvo.subtitulo?.trim() ?? padrao.subtitulo,
     descricao: salvo.descricao?.trim() || padrao.descricao,
     imagemUrl: salvo.imagemUrl?.trim() || padrao.imagemUrl,
-    cargaHoraria: salvo.cargaHoraria > 0 ? salvo.cargaHoraria : padrao.cargaHoraria,
+    cargaHoraria: typeof salvo.cargaHoraria === "number" && salvo.cargaHoraria > 0 ? salvo.cargaHoraria : padrao.cargaHoraria,
     botaoTexto: salvo.botaoTexto?.trim() || padrao.botaoTexto,
   }
 }

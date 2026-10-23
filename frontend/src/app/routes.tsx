@@ -15,6 +15,7 @@ export function Routes() {
       <Route path="/" element={<Home />} />
       <Route path="/catalogo" element={<CatalogoPage />} />
       <Route path="/curso/:slug" element={<CursoDetalhePage />} />
+      <Route path="/curso/:slug/scorm/player" element={<ScormCursoPage />} />
       <Route path="/curso/:slug/scorm" element={<ScormCursoPage />} />
       <Route path="/area-do-aluno" element={<AlunoPage />} />
       <Route path="/area-do-aluno/curso/:slug" element={<AvaPage />} />

@@ -3,37 +3,54 @@
 ## Ferramenta utilizada
 
 - **OpenCode**, integrado à stack local **IA-Zecki** / **Ollama**
-- Revisão humana em todas as alterações, decisões e validações
+- Nesta rodada, a partir de **23/10/2026, aproximadamente 09:17 (horário de Brasília)**, também foi utilizado um assistente de IA via **Copilot SDK no VS Code**.
+- O projeto, seus requisitos e suas decisões são conduzidos pelo autor; a IA é uma ferramenta de apoio.
+- Sugestões e alterações propostas pela IA precisam de revisão e aprovação do autor antes de serem consideradas parte aceita do projeto.
+
+## Registro de revisão e controle de alterações
+
+- Em **23/10/2026 às 10:01:45 (horário de Brasília)**, o assistente criou por engano o commit `3721f1bf905a974c8512c34cc1dd39d031f7a4ad` diretamente na branch `main`, antes de o autor revisar ou aprovar as alterações. A mensagem também foi escrita em inglês, contrariando o padrão de commit descrito no README.
+- O autor informou que não havia solicitado o commit e que ainda precisava revisar o trabalho. O ponteiro local de `main` foi restaurado para `869fb17` (o mesmo commit de `origin/main`); as alterações foram preservadas sem commit na branch de feature `feat/scorm-upload-player`. O commit acidental não foi mantido em `main`.
+- **Regra de revisão acordada:** não criar commits até autorização explícita do autor após sua revisão.
+- O horário do primeiro uso desta ferramenta nesta rodada é aproximado, registrado a partir do início do trabalho anotado no `docs/TEMPO.md`; não representa uma medição automática de esforço.
+- As verificações descritas neste documento são registros do trabalho do projeto e não significam que a IA tenha executado ou produzido sozinha todas as implementações.
+- A disponibilidade da API variou ao longo da rodada: houve verificações locais bem-sucedidas e, em uma conferência posterior, a API em `localhost:5077` estava indisponível. Não se deve interpretar validações anteriores como garantia de disponibilidade atual.
+- O autor pediu que builds completas e novos commits aguardem sua revisão. As alterações mais recentes de interface não foram validadas por build/testes.
 
 ## Como a IA foi usada
 
-A IA foi usada como **auxílio** ao trabalho, **não como vibecoding**. Nenhuma entrega foi gerada de ponta a ponta e aceita sem leitura, teste e decisão humana: cada sugestão passou por revisão, validação no ambiente local e ajuste manual antes de entrar no projeto.
+A IA foi usada como apoio ao processo conduzido pelo autor, principalmente para:
 
-A IA ajudou **100% na formatação das documentações**, deixando os textos padronizados e mais fáceis de entender, sempre a partir das anotações pessoais e do conteúdo produzido durante o desenvolvimento.
+- planejar próximos passos e organizar requisitos;
+- sugerir melhorias e alternativas técnicas para avaliação do autor;
+- inspecionar implementações existentes e ajudar a diagnosticar problemas;
+- apoiar a validação de alterações, a análise de resultados de testes e a identificação de verificações necessárias;
+- ajudar a redigir e organizar documentação com base nas informações fornecidas pelo autor.
+
+Isso não significa que a IA tenha criado ou conduzido sozinha o projeto. O autor define o escopo, fornece o contexto, escolhe o que será aproveitado e é responsável por revisar e aceitar o resultado. Em algumas solicitações delimitadas, o assistente também preparou alterações pontuais diretamente nos arquivos para revisão; essas alterações não equivalem à autoria integral do trabalho e não devem ser consideradas aprovadas antes da revisão do autor.
 
 ## Objetivo do uso
 
-- **Revisão** do código, dos textos e das decisões já tomadas
-- **Criação de documentação** seguindo as anotações pessoais do autor
-- **Validação das configurações de ambiente e arquitetura** (front-end, back-end, banco e deploy)
-- **Identificação e correção de problemas antes da build e do deploy**
-- **Formatação e padronização das documentações** para melhor entendimento
-- **Apoio em tarefas repetitivas**, como transcrever textos, converter imagens, conferir contraste, revisar rotas e registrar o tempo de codificação
+- **Planejamento e sugestões** de melhorias a partir dos requisitos e das decisões do autor
+- **Apoio à validação** das implementações e à interpretação de testes e erros
+- **Revisão técnica** de código, documentação, configuração e arquitetura
+- **Organização da documentação** com base no conteúdo e nas informações do autor
+- **Apoio pontual** em tarefas repetitivas, como conferir rotas, acessibilidade e comportamento visual
 
-## O que a IA ajudou a fazer
+## Formas de apoio prestadas pela IA
 
-- Formatar e padronizar os documentos (`README`, `DECISOES`, `LIMITACOES`, `TEMPO` e este arquivo)
-- Transcrever textos entre idiomas e a partir das anotações pessoais
-- Ajustar e revisar testes unitários e E2E
-- Marcar o tempo de codificação
-- Testar em múltiplos dispositivos e resoluções
-- Validar desempenho e responsividade
-- Ajustar tomadas de decisão para ficarem mais claras e padronizadas
-- Apoiar a escrita das mensagens de commit
+- Ajudar o autor a estruturar e revisar documentos (`README`, `DECISOES`, `LIMITACOES`, `TEMPO` e este arquivo)
+- Sugerir casos de teste e ajudar a interpretar resultados de testes unitários, E2E e verificações manuais
+- Apontar riscos, divergências e alternativas para o autor decidir
+- Apoiar a conferência de desempenho, responsividade, acessibilidade, rotas e configurações
+- Organizar decisões e requisitos em registros mais claros
+- Preparar alterações pontuais quando solicitadas, para revisão do autor; isso não representa autoria independente do projeto
 
-## Prompts relevantes
+## Exemplos de solicitações de apoio
 
-| Prompt | Aproveitado | Descartado |
+Os exemplos abaixo registram temas tratados com a IA. As implementações listadas descrevem o contexto avaliado ou o resultado discutido, e não atribuem à IA a autoria integral dessas funcionalidades.
+
+| Solicitação | Contexto discutido com a IA | Alternativas não adotadas pelo autor |
 |--------|-------------|------------|
 | "Valide a estrutura do projeto conforme a especificação e aponte divergências" | Conferência de pastas, camadas e dependências | Sugestões de bibliotecas não necessárias |
 | "Analise a API REST e verifique filtros, paginação e contratos" | Endpoints, DTOs, filtros combinados e respostas de erro | Abordagem com GraphQL sugerida |
@@ -56,53 +73,44 @@ A IA ajudou **100% na formatação das documentações**, deixando os textos pad
 | "Verifique o contraste e a acessibilidade dos badges por categoria" | `IconeCategoria` com SVGs locais + `react-icons/fa` e texto preto/branco por luminância (limiar 0,179) | Cores fixas que reprovavam no axe |
 | "Revise o clique e o arrasto dos sliders de cursos e depoimentos" | `useSliderArrastavel` com limiar de arrasto, captura tardia do ponteiro, inércia e encaixe suave | Capturar o ponteiro no `pointerdown` (impedia o clique de abrir o curso) |
 | "Teste a navegação assistida e verifique as rotas do catálogo, curso, AVA e admin" | Cobertura de clique, arrasto, setas, filtros, rotas e estados de erro | Testes com dependência de serviços externos |
-| "Verifique a configuração da página de curso SCORM" | Página própria com banner, imagem, textos, títulos, carga horária e player configurável | Executar o pacote SCORM real (fora do escopo) |
+| "Verifique a configuração da página de curso SCORM" | Página própria com banner, imagem, textos, títulos e carga horária configuráveis | Pacotes autorais reais ainda não usados na validação |
+| "Foque no upload do pacote SCORM e no player, padronizando as páginas e configurando o limite no admin" | Planejamento, inspeção do fluxo existente, recomendações de validação e discussão de limites e riscos | O autor definiu o escopo e decide quais alterações e recomendações aceitar; Blob Storage e autenticação real permaneceram fora do escopo |
 | "Transcreva os textos do português para os demais idiomas e revise o tom" | Conteúdo em pt-BR, en-US e es-ES | Tradução automática sem revisão |
 | "Revise a documentação e o README, conferindo rotas e números dos testes" | Contagens, rotas, comandos e tabelas conferidos nos arquivos | Números desatualizados ou não verificados |
 
-## Como o conteúdo foi validado
+## Validações do projeto
+
+Os resultados a seguir são evidências do projeto, não uma medida de quanto código foi produzido pela IA. O autor conduz a revisão e decide se a validação é suficiente. Builds e testes citados em registros anteriores se referem às rodadas em que foram executados; não cobrem automaticamente alterações posteriores.
 
 - **Build local**: `dotnet build` e `npm run build` executados após cada alteração significativa
-- **Testes**: 15 testes de integração da API, 9 testes unitários e 28 testes E2E/axe aprovados
-- **Revisão manual**: todo código e texto revisados linha por linha antes de serem considerados
+- **Testes**: 20 testes de integração da API, 14 testes unitários e 32 testes E2E/axe aprovados
+- **Revisão manual**: responsabilidade do autor antes de aceitar alterações
 - **Testes em navegador**: validação visual em desktop, tablet e mobile, incluindo modal de acessibilidade, modal de matrícula, tema escuro e calendário
 - **Navegação assistida**: percursos de catálogo, detalhe, matrícula, AVA e admin conferidos rota a rota
 - **Testes de API**: endpoints testados com curl/Postman (cursos, turmas, matrículas e CRUD)
 - **Acessibilidade**: axe sem violações `serious`/`critical` nas rotas públicas
-- **Verificação de tipos**: TypeScript strict mode sem erros
+- **Verificação de tipos**: TypeScript strict mode sem erros; build de produção validada após a implementação SCORM
 
-## Exemplo de erro ou inadequação identificado
+## Exemplo de diagnóstico com apoio da IA
 
-**Erro:** na configuração da Vercel, a sugestão inicial era manter `installCommand: "npm ci"` no `vercel.json`, porém isso travava o build na plataforma.
+**Problema analisado:** na configuração da Vercel, `installCommand: "npm ci"` no `vercel.json` fazia o build ficar parado em "Running install command".
 
-**Contexto:** durante o deploy do front-end, o build ficava preso em "Running \"install\" command: npm ci..." sem progredir.
+**Apoio prestado:** a IA ajudou a analisar o sintoma e discutir alternativas. O autor avaliou a recomendação e conduziu a decisão de remover a configuração e ajustar `rootDirectory`.
 
-## Correção realizada
+**Resultado registrado no projeto**
 
-- Removido `installCommand` do `frontend/vercel.json` para que a Vercel use sua configuração padrão
-- Configurado `rootDirectory: frontend` via API do Vercel
-- Corrigidos problemas de TypeScript 5 (remoção de `baseUrl`)
-- Movidas as fontes para `public/fonts/`
-- Adicionado `vite-env.d.ts`
-- Resultado: deploy bem-sucedido, frontend publicado e acessível publicamente
+- `installCommand` removido de `frontend/vercel.json` para usar a configuração padrão da Vercel
+- `rootDirectory: frontend` configurado via API do Vercel
+- Problemas de TypeScript corrigidos, fontes movidas para `public/fonts/` e `vite-env.d.ts` adicionado
+- O deploy foi concluído e o front-end ficou acessível publicamente
 
-**Erro:** após a exclusão lógica de um curso, a API devolvia **500** ao criar outro com o mesmo slug.
+Esse exemplo ilustra apoio à análise e à tomada de decisão; não significa que a IA tenha realizado sozinha todo o trabalho de configuração e deploy.
 
-**Contexto:** o índice único de `Cursos.Slug` continuava valendo para o registro desativado. A validação da aplicação só consultava cursos ativos, então o `INSERT` falhava no banco.
+## Registro do apoio na rodada SCORM (23/10/2026)
 
-**Correção realizada:**
-
-- A exclusão lógica passou a renomear o slug para `{slug}-{id}-desativado`, liberando o endereço.
-- O caso foi coberto por teste de integração de criar → atualizar → excluir → recriar.
-
-**Erro:** o clique simples nos cards do slider não abria a página do curso.
-
-**Contexto:** o `setPointerCapture` era chamado no `pointerdown`, antes de existir arrasto. Com isso, o clique era redirecionado ao trilho e não chegava ao link do card.
-
-**Correção realizada:**
-
-- O ponteiro passou a ser capturado somente depois do limiar de 6 px de arrasto.
-- O clique é suprimido apenas quando houve arrasto real.
-- O snap do CSS é desligado durante o arrasto e religado após o encaixe suave no card mais próximo, com inércia ao soltar.
-
-**Lição aprendida:** testar as configurações de deploy em ambiente real, validar clique e arrasto separadamente e documentar as decisões com data/hora para referência futura.
+- **Assistente utilizado:** assistente de IA via Copilot SDK no VS Code.
+- **Papel principal:** apoiar o planejamento, a análise de problemas do upload/player e do progresso, as recomendações de melhoria e a interpretação das validações solicitadas pelo autor.
+- **Decisões de produto e escopo:** tomadas pelo autor, incluindo pacote ativo por curso, download e substituição, limites de upload e persistência das configurações.
+- **Alterações pontuais:** em respostas a solicitações específicas, o assistente também preparou mudanças localizadas para revisão. Elas não representam que a IA tenha criado ou conduzido sozinha a implementação completa e permanecem sujeitas à aprovação do autor.
+- **Validação:** os testes/builds descritos em checkpoints anteriores pertencem àquelas rodadas. As alterações mais recentes de progresso SCORM, catálogo, dashboard administrativo e indicador de upload aguardam revisão; não foram executados build ou testes completos após essas mudanças.
+- **Limites registrados:** Blob Storage, autenticação/RBAC reais e analytics completos continuam fora do escopo descrito nesta rodada.

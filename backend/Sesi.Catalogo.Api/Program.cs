@@ -13,11 +13,11 @@ var builder = WebApplication.CreateBuilder(args);
 // Configuração
 builder.Services.AdicionarInfraestrutura(builder.Configuration);
 
-// Pacotes SCORM: o zip pode passar do limite padrão de 30 MB do Kestrel.
+// Reserva espaço para os metadados multipart além do limite configurável de 200 MB.
 builder.WebHost.ConfigureKestrel(opcoes =>
-    opcoes.Limits.MaxRequestBodySize = 100 * 1024 * 1024);
+    opcoes.Limits.MaxRequestBodySize = 205 * 1024 * 1024);
 builder.Services.Configure<FormOptions>(opcoes =>
-    opcoes.MultipartBodyLengthLimit = 100 * 1024 * 1024);
+    opcoes.MultipartBodyLengthLimit = 205 * 1024 * 1024);
 builder.Services.AddSingleton<ScormArmazenamento>();
 
 // CORS
@@ -269,6 +269,75 @@ v1.MapGet("/sessoes-scorm", async ([FromQuery] string sessaoId, ICatalogoReposit
 .Produces(StatusCodes.Status404NotFound);
 
 // SCORM: upload do pacote, player e progresso persistente
+v1.MapGet("/scorm/configuracoes", async (ScormArmazenamento armazenamento, CancellationToken ct) =>
+{
+    var configuracao = await armazenamento.ObterConfiguracaoAsync(ct);
+    return Results.Ok(configuracao);
+})
+.WithName("ObterConfiguracaoScorm")
+.WithSummary("Obtém o limite configurado para pacotes SCORM")
+.Produces<ScormConfiguracaoDto>(StatusCodes.Status200OK);
+
+v1.MapPut("/scorm/configuracoes", async (
+    [FromBody] AtualizarLimiteScormRequest? request,
+    ScormArmazenamento armazenamento,
+    CancellationToken ct) =>
+{
+    if (request is null)
+        return Results.BadRequest(new { erro = "Informe o limite de upload SCORM." });
+
+    try
+    {
+        var configuracao = await armazenamento.AtualizarConfiguracaoAsync(request, ct);
+        return Results.Ok(configuracao);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return ErroValidacao(ex);
+    }
+})
+.WithName("AtualizarConfiguracaoScorm")
+.WithSummary("Atualiza o limite de upload SCORM (20, 50, 80, 100 ou 200 MB)")
+.Produces<ScormConfiguracaoDto>(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status400BadRequest);
+
+v1.MapGet("/scorm/paginas/{cursoSlug}", async (
+    string cursoSlug,
+    ScormArmazenamento armazenamento,
+    CancellationToken ct) =>
+{
+    var configuracao = await armazenamento.ObterConfiguracaoPaginaAsync(cursoSlug, ct);
+    return configuracao is null ? Results.NotFound() : Results.Ok(configuracao);
+})
+.WithName("ObterConfiguracaoPaginaScorm")
+.WithSummary("Obtém a configuração persistida da página pública SCORM")
+.Produces<ScormPaginaConfigDto>(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status404NotFound);
+
+v1.MapPut("/scorm/paginas/{cursoSlug}", async (
+    string cursoSlug,
+    [FromBody] ScormPaginaConfigDto? configuracao,
+    ScormArmazenamento armazenamento,
+    CancellationToken ct) =>
+{
+    if (configuracao is null)
+        return Results.BadRequest(new { erro = "Informe os dados da página SCORM." });
+
+    try
+    {
+        var salva = await armazenamento.SalvarConfiguracaoPaginaAsync(cursoSlug, configuracao, ct);
+        return Results.Ok(salva);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return ErroValidacao(ex);
+    }
+})
+.WithName("SalvarConfiguracaoPaginaScorm")
+.WithSummary("Salva a configuração pública da página SCORM")
+.Produces<ScormPaginaConfigDto>(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status400BadRequest);
+
 v1.MapPost("/scorm/pacotes", async (HttpRequest request, ScormArmazenamento armazenamento, CancellationToken ct) =>
 {
     if (!request.HasFormContentType)
@@ -318,16 +387,41 @@ v1.MapGet("/scorm/pacotes/{cursoSlug}", async (string cursoSlug, ScormArmazename
 .Produces<ScormPacoteDto>(StatusCodes.Status200OK)
 .Produces(StatusCodes.Status404NotFound);
 
+v1.MapGet("/scorm/pacotes", async (ScormArmazenamento armazenamento, CancellationToken ct) =>
+    Results.Ok(await armazenamento.ListarPacotesAsync(ct)))
+.WithName("ListarPacotesScorm")
+.WithSummary("Lista os pacotes SCORM ativos para identificação dos cursos no admin")
+.Produces<IReadOnlyList<ScormPacoteDto>>(StatusCodes.Status200OK);
+
 v1.MapGet("/scorm/pacotes/{id}/launch", async (string id, string? usuarioId, ScormArmazenamento armazenamento, CancellationToken ct) =>
 {
     var pacote = await armazenamento.ObterPorIdAsync(id, ct);
     if (pacote is null) return Results.NotFound();
 
     var aluno = string.IsNullOrWhiteSpace(usuarioId) ? "anonimo" : usuarioId.Trim();
-    return Results.Content(ScormWrapper.GerarHtml(pacote, aluno), "text/html; charset=utf-8");
+    var totalAulas = await armazenamento.ObterQuantidadeAulasAsync(pacote, ct);
+    return Results.Content(ScormWrapper.GerarHtml(pacote, aluno, totalAulas), "text/html; charset=utf-8");
 })
 .WithName("AbrirPlayerScorm")
 .WithSummary("Player SCORM com API 1.2/2004 e retomada de progresso");
+
+v1.MapGet("/scorm/pacotes/{id}/download", async (
+    string id,
+    ScormArmazenamento armazenamento,
+    CancellationToken ct) =>
+{
+    var caminho = await armazenamento.ObterCaminhoDownloadAsync(id, ct);
+    if (caminho is null) return Results.NotFound();
+
+    var pacote = await armazenamento.ObterPorIdAsync(id, ct);
+    return pacote is null
+        ? Results.NotFound()
+        : Results.File(caminho, "application/zip", Path.GetFileName(pacote.NomeArquivo), enableRangeProcessing: true);
+})
+.WithName("BaixarPacoteScorm")
+.WithSummary("Baixa o ZIP original do pacote SCORM ativo")
+.Produces(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status404NotFound);
 
 v1.MapDelete("/scorm/pacotes/{cursoSlug}", async (string cursoSlug, ScormArmazenamento armazenamento, CancellationToken ct) =>
 {
@@ -348,13 +442,15 @@ v1.MapGet("/scorm/progresso", async (
     if (string.IsNullOrWhiteSpace(cursoSlug) || string.IsNullOrWhiteSpace(usuarioId))
         return Results.BadRequest(new { erro = "cursoSlug e usuarioId são obrigatórios." });
 
-    var progresso = await armazenamento.ObterProgressoAsync(cursoSlug, usuarioId, ct);
-    return progresso is null ? Results.NotFound() : Results.Ok(progresso);
+    var pacote = await armazenamento.ObterPorCursoAsync(cursoSlug, ct);
+    var totalAulas = pacote is null ? 0 : await armazenamento.ObterQuantidadeAulasAsync(pacote, ct);
+    var progresso = await armazenamento.ObterProgressoAsync(cursoSlug, usuarioId, ct, totalAulas);
+    return progresso is null ? Results.NoContent() : Results.Ok(progresso);
 })
 .WithName("ObterProgressoScorm")
 .WithSummary("Recupera o progresso SCORM de um aluno")
 .Produces<ProgressoScormDto>(StatusCodes.Status200OK)
-.Produces(StatusCodes.Status404NotFound);
+.Produces(StatusCodes.Status204NoContent);
 
 v1.MapPost("/scorm/progresso", async (
     [FromBody] SalvarProgressoScormRequest request,

@@ -109,16 +109,20 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
       return
     }
     setErro("")
-    if (normalizado === EMAIL_ADMIN || normalizado.endsWith("@sesi.com.br")) {
-      entrarComEmail(normalizado)
-      return
-    }
-    setEmail(normalizado)
+    entrarComEmail(normalizado)
+  }
+
+  const aoIniciarCadastro = () => {
+    setErro("")
     setEtapa("cadastro")
   }
 
   const aoCriarConta = (evento: FormEvent) => {
     evento.preventDefault()
+    if (!EMAIL_VALIDO.test(email.trim().toLowerCase())) {
+      setErro(t("student:login.invalidEmail"))
+      return
+    }
     if (!nome.trim() || !sobrenome.trim() || !telefone.trim() || !dataNascimento) {
       setErro(t("student:login.required"))
       return
@@ -191,6 +195,16 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
                 {t("student:login.continue")}
               </button>
             </form>
+            <p className="mt-4 text-center text-sm text-[var(--sesi-muted)]">
+              {t("student:login.noAccount")}{" "}
+              <button
+                type="button"
+                className="font-semibold text-[var(--sesi-red)] hover:underline"
+                onClick={aoIniciarCadastro}
+              >
+                {t("student:login.createAccountLink")}
+              </button>
+            </p>
 
             <div className="my-5 flex items-center gap-3">
               <span className="h-px flex-1 bg-[var(--sesi-gray)]" />
@@ -284,7 +298,15 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
                 <label htmlFor="cadastro-email" className="text-sm font-semibold">
                   {t("student:login.email")}
                 </label>
-                <input id="cadastro-email" type="email" value={email} readOnly className={`${campo} bg-[#F5F5F5]`} />
+                <input
+                  id="cadastro-email"
+                  type="email"
+                  value={email}
+                  onChange={(evento) => setEmail(evento.target.value)}
+                  className={campo}
+                  required
+                  aria-invalid={Boolean(erro)}
+                />
               </div>
 
               {erro && (

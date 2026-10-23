@@ -11,7 +11,7 @@ namespace Sesi.Catalogo.Api.Scorm;
 /// </summary>
 public static class ScormWrapper
 {
-    public static string GerarHtml(ScormPacoteDto pacote, string usuarioId)
+    public static string GerarHtml(ScormPacoteDto pacote, string usuarioId, int totalAulas)
     {
         var config = JsonSerializer.Serialize(new
         {
@@ -19,6 +19,7 @@ public static class ScormWrapper
             usuarioId,
             conteudoUrl = pacote.ConteudoUrl,
             versao = pacote.Versao,
+            totalAulas,
         });
 
         return $$"""
@@ -92,12 +93,25 @@ public static class ScormWrapper
                     const status = status2004 && status2004 !== "not attempted" ? status2004 : status12;
                     if (status === "completed" || status === "passed") return 100;
 
-                    const bruto = cmi["cmi.progress_measure"] || cmi["cmi.score.raw"] || cmi["cmi.core.score.raw"];
+                    const medida = String(cmi["cmi.progress_measure"] || "").trim();
+                    const progressoMedido = Number(medida.replace(",", "."));
+                    if (medida && Number.isFinite(progressoMedido)) {
+                      return Math.min(100, Math.max(0, Math.round(progressoMedido * 100)));
+                    }
+
+                    const bruto = cmi["cmi.score.raw"] || cmi["cmi.core.score.raw"];
                     const numero = Number(String(bruto).replace(",", "."));
                     if (Number.isFinite(numero) && numero > 0) {
-                      const percentual = cmi["cmi.progress_measure"] ? numero * 100 : numero;
-                      return Math.min(100, Math.max(0, Math.round(percentual)));
+                      return Math.min(100, Math.max(0, Math.round(numero)));
                     }
+
+                    try {
+                      const dados = JSON.parse(cmi["cmi.suspend_data"] || "{}");
+                      const aulas = Array.isArray(dados.aulasLidas) ? new Set(dados.aulasLidas) : null;
+                      if (aulas && config.totalAulas > 0) {
+                        return Math.min(100, Math.max(0, Math.round(aulas.size * 100 / config.totalAulas)));
+                      }
+                    } catch (_) {}
 
                     return 0;
                   }
@@ -202,7 +216,7 @@ public static class ScormWrapper
                     encodeURIComponent(config.cursoSlug) + "&usuarioId=" + encodeURIComponent(config.usuarioId);
 
                   fetch(url)
-                    .then((resposta) => (resposta.ok ? resposta.json() : null))
+                    .then((resposta) => resposta.status === 204 ? null : (resposta.ok ? resposta.json() : null))
                     .then((progresso) => {
                       if (!progresso) return;
                       cmi["cmi.suspend_data"] = progresso.suspendData || "";

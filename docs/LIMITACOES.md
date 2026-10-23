@@ -23,20 +23,25 @@
 | **CRUD real de cursos no backend** | Implementado | `POST/PUT/DELETE /api/v1/cursos` e o admin usam a API. A exclusão é lógica e libera o slug. |
 | **Autenticação/Autorização real** | Demonstrativa | Login, cadastro, perfil e papéis são simulados em `localStorage`. Não há senha, token, sessão no servidor ou validação de identidade. |
 | **Login com Microsoft/Gmail** | Demonstrativo | Os botões apenas entram com um perfil de exemplo; não há OAuth configurado. |
-| **Upload SCORM real** | Parcial | O admin registra nome, tamanho e versão (1.2/2004) do arquivo e configura a página pública, mas não envia nem executa o pacote. O backend já expõe endpoints de sessão SCORM. |
-| **Página do curso SCORM** | Demonstrativa | `/curso/:slug/scorm` usa banner, imagem, textos, títulos, carga horária e URL de lançamento configurados no admin. A configuração fica no `localStorage` (por navegador) e não há rastreamento SCORM (`initialize`/`commit`). |
+| **Upload SCORM real** | Implementado | O admin envia ZIPs SCORM 1.2/2004; a API valida o manifesto, extrai o conteúdo, executa o player, persiste progresso, mantém um pacote ativo por curso e oferece download/substituição. O limite configurável é 20/50/80/100/200 MB (padrão 100 MB). A cobertura automatizada usa um ZIP sintético; exports reais de ferramentas de autoria ainda precisam de validação operacional. |
+| **Página do curso SCORM** | Implementada com dados persistidos no backend | `/curso/:slug/scorm` reutiliza hero, benefícios, módulos/FAQ, depoimentos, suporte e matrícula do detalhe de cursos em blocos. Textos e URLs de imagem/banner são configuráveis no admin e salvos no backend; benefícios e FAQs seguem estáticos. |
 | **Blocos de conteúdo no backend** | Parcial | Módulos e títulos de aulas são gravados; o conteúdo dos blocos (texto/vídeo/imagem/quiz) e o SCORM continuam demonstrativos no editor. |
 | **Matrícula real** | Implementada no backend | `POST /api/v1/matriculas` grava curso, turma e e-mail do perfil. Como a autenticação é demo, o `UsuarioId` é o e-mail informado no cliente, sem validação de identidade. |
 | **Conteúdo dos cursos em 3 idiomas** | Parcial | A interface (navegação, catálogo, área do aluno, AVA, acessibilidade e erros) é traduzida; os textos dos cursos vindos da API permanecem em português. |
-| **Conteúdo do AVA** | Parcial | “Introdução”, “Boas práticas” e “Recomendações” têm texto real (o curso de referência usa o texto integral fornecido); os módulos usam os dados da API e os excedentes (4–6) são placeholders curtos. Não há player SCORM funcional. |
+| **Conteúdo do AVA** | Parcial | “Introdução”, “Boas práticas” e “Recomendações” têm texto real (o curso de referência usa o texto integral fornecido); os módulos usam os dados da API e os excedentes (4–6) são placeholders curtos. O player e o progresso SCORM funcionam quando há pacote publicado. |
 | **Progresso do AVA** | Demonstrativo | O percentual é calculado pela posição do item selecionado no menu; os ícones de status (play/check/vazio) e a conclusão por aula não são persistidos no backend. |
 | **FAQs do detalhe do curso** | Estáticas | As 10 perguntas e respostas ficam no front-end e não são editáveis pelo admin. |
-| **E2E dos fluxos novos** | Implementado | A suíte permanente tem **28 testes** (22 fluxos + 6 verificações de axe/tema), incluindo modal de matrícula, login, AVA, página SCORM, slider de fonte, VLibras, cookies, trava de rolagem dos modais, clique e drag dos sliders de cursos/depoimentos. |
+| **E2E dos fluxos novos** | Implementado | A suíte permanente tem **32 testes** (26 fluxos + 6 verificações de axe/tema), incluindo modal de matrícula, login, AVA, página SCORM, configuração do limite no admin, slider de fonte, VLibras, cookies, trava de rolagem dos modais, clique e drag dos sliders de cursos/depoimentos. |
 | **Polimento visual 100% fiel ao Figma** | Em revisão | O foco foi atender aos requisitos funcionais e à hierarquia visual; ajustes finos podem ser feitos após a revisão do usuário. |
 
 ## Limitações técnicas
 
 - **Banco SQLite em dev:** arquivo local, ideal para desenvolvimento. Em produção usar PostgreSQL (`Database__Provider=Npgsql`).
+- **Arquivos e configurações SCORM:** índice, limite, dados da página e ZIP original ficam em arquivos sob `Scorm:Root` (padrão `App_Data/scorm`), não no PostgreSQL nem em Blob Storage. Em produção, `Scorm:Root` precisa apontar para um volume persistente; o armazenamento efêmero pode perder pacotes e configurações ao reiniciar/reimplantar o serviço.
+- **Limite de extração SCORM:** além do limite configurável para o ZIP enviado, a API limita o conteúdo expandido a 200 MiB. Pacotes com maior expansão são rejeitados.
+- **Autorização da API SCORM:** a autenticação atual é demonstrativa e validada somente no front-end. Endpoints de configuração, upload, download e conteúdo não verificam papel/token no backend; não devem ser expostos para uso público/produção antes de implementar autorização real.
+- **Arquivos de mídia do editor:** capa, banner e imagens da página aceitam URLs; upload de imagens/vídeos/documentos para Blob Storage, edição de blocos e exercícios/avaliações ainda não foram implementados nesta etapa.
+- **Acesso ao pacote:** o ZIP original fica fora da pasta estática, mas seu endpoint de download não exige login. O conteúdo extraído do SCORM é servido publicamente em `/scorm/{id}`. A troca remove o pacote anterior após validação e mantém apenas o atual; não há histórico/versionamento.
 - **Schema sem migrations:** o backend usa `EnsureCreated()` + seeders idempotentes. As tabelas novas (`Turmas` e `Matriculas`) exigem recriar o banco local; em produção, um banco já existente precisa ser recriado ou migrado manualmente. Não há histórico de migrations neste projeto.
 - **Capas dos cursos:** 12 fotos WebP (1200×1500) do Unsplash, mapeadas por slug; cursos novos usam a imagem de reserva da categoria ou a `imagemUrl` informada no admin. As 15 imagens fornecidas foram convertidas para WebP, sendo 12 aplicadas e 3 mantidas como reserva. Os SVGs antigos seguem em `public/cursos` apenas como fallback da API.
 - **API em localhost:** para testes locais completos, front-end e back-end precisam estar rodando. Os E2E usam fixtures e não dependem da API.
@@ -49,7 +54,8 @@
 - **Idioma por fuso horário:** é uma aproximação de região. VPN, fuso manual ou navegador com idioma diferente podem exigir ajuste manual, que sempre prevalece.
 - **Preferências locais:** acessibilidade, idioma e consentimento de cookies ficam no `localStorage` (e o consentimento também no cookie `sesi_cookies`) por dispositivo; não sincronizam entre navegadores.
 - **Dados de demonstração:** o perfil e o admin usam dados fictícios. Não inserir informações pessoais reais, pois ficam no `localStorage` sem criptografia.
+- **Uso de IA e revisão:** o assistente foi utilizado como apoio a planejamento, sugestões, análise, validação e testes, não como autor independente do projeto. Alterações pontuais preparadas durante a interação ainda dependem da revisão e aprovação do autor; não se deve estender resultados de builds/testes anteriores a mudanças posteriores que não foram revalidadas.
 
 ## Notas
 
-Todas as divergências foram intencionais para atender aos requisitos obrigatórios do desafio, que complementam o design fornecido no Figma. Os dados são fictícios, conforme solicitado.
+O autor conduziu os requisitos, as decisões e a revisão do trabalho. O apoio da IA foi complementar e não substitui a validação do autor. Todas as divergências de produto listadas foram intencionais para atender aos requisitos obrigatórios do desafio, que complementam o design fornecido no Figma. Os dados são fictícios, conforme solicitado.

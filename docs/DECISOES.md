@@ -678,3 +678,22 @@ aplicarNaRaiz(lerConfig())
 - **Motivo:** permitir que o frontend local continue acessando a API quando o Vite seleciona automaticamente a próxima porta disponível.
 - **Impacto/limitação:** a política configurada explicitamente por ambiente continua substituindo os padrões locais, conforme esperado; a alteração não amplia as origens de produção automaticamente.
 - **Validação:** backend **19/19**; GET real ao catálogo com `Origin: http://localhost:5174` retornou HTTP 200, cabeçalho `Access-Control-Allow-Origin` correto e 13 cursos; preflight OPTIONS retornou HTTP 204 com CORS válido.
+
+### D038 - Pacote SCORM substituível e página pública padronizada
+
+- **Data:** 23/10/2026
+- **Problema:** a página SCORM usava uma composição visual diferente do detalhe dos cursos em blocos, as configurações da página ficavam apenas no navegador, o upload tinha limite fixo de 100 MB e o ZIP original não podia ser baixado depois de publicado.
+- **Decisão:** manter um pacote SCORM ativo por curso; oferecer download do ZIP original e substituição; persistir o limite global e a configuração pública da página no backend; permitir limites de 20, 50, 80, 100 ou 200 MB (padrão 100 MB); validar o pacote antes de substituir o ativo.
+- **Como:** salvar índice, configurações e ZIPs originais no diretório privado definido por `Scorm:Root`; servir somente o conteúdo extraído no player; compartilhar no detalhe SCORM os componentes de hero, benefícios, accordion de módulos/FAQ, depoimentos, ajuda e matrícula usados pelos cursos em blocos.
+- **Motivo:** reduzir divergência de experiência entre formatos, permitir administração consistente entre dispositivos e preservar o pacote atualmente publicado quando um novo ZIP for inválido.
+- **Impacto/limitações:** o limite é imposto no cliente e novamente pela API; o conteúdo extraído permanece público em `/scorm`. O backend ainda não autentica nem autoriza por papel e o armazenamento requer disco persistente em produção. Upload de imagens/vídeos/documentos pelo editor e armazenamento Blob permanecem fora desta etapa.
+- **Validação:** testes de integração verificam limite padrão/configurável, rejeição acima do limite, persistência da página, download do ZIP e substituição; validação E2E do template SCORM e do controle administrativo.
+
+### D039 - Registro do uso de IA como apoio ao trabalho do autor
+
+- **Data:** 23/10/2026
+- **Contexto:** os registros anteriores podiam dar a entender que a IA havia conduzido ou produzido sozinha o projeto, quando o autor definiu os requisitos, tomou as decisões e conduziu a revisão.
+- **Decisão:** documentar a IA como ferramenta auxiliar, principalmente para planejamento, sugestões de melhoria, análise de problemas, validação e apoio a testes. Não atribuir à IA a autoria integral das funcionalidades ou do projeto.
+- **Responsabilidade:** o autor é responsável pelo escopo, pelas decisões e pela aceitação das alterações. Quando solicitado, o assistente pode preparar mudanças pontuais para revisão, mas elas não são consideradas aprovadas até a validação do autor.
+- **Registro de processo:** manter o incidente do commit de 23/10/2026 às 10:01:45 e a regra de não criar commits sem autorização explícita; não omitir esse evento ao revisar o texto sobre uso de IA.
+- **Validação documental:** alinhar `USO_DE_IA.md`, `LIMITACOES.md` e `TEMPO.md` a esta decisão, distinguindo janela de interação de esforço efetivo e registrando quais alterações ainda aguardam revisão/build/testes.

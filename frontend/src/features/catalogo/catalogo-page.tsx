@@ -15,7 +15,15 @@ export function CatalogoPage() {
   const [pagina, setPagina] = useState(1)
 
   const { data: facetas } = useFacetas()
-  const { data, isLoading, isError } = useCursos({ busca: busca || undefined, categoria: categoria || undefined, modalidade: modalidade || undefined, status: status || undefined, pagina })
+  const { data, isLoading, isError } = useCursos({
+    busca: busca || undefined,
+    categoria: categoria || undefined,
+    modalidade: modalidade || undefined,
+    status: status || undefined,
+    ordenar: "recentes",
+    pagina,
+    tamanho: 48,
+  })
 
   const temFiltros = busca || categoria || modalidade || status
 
@@ -82,7 +90,7 @@ export function CatalogoPage() {
           )}
           {isError && (
             <div className="flex items-center justify-center py-12">
-              <p className="text-red-600">Erro ao carregar cursos. Verifique a conexão com a API.</p>
+              <p className="text-red-600">Erro ao carregar cursos. Verifique se a API está em execução e acessível.</p>
             </div>
           )}
 

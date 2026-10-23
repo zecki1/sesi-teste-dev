@@ -94,4 +94,39 @@ export async function mockApi(page: Page) {
   await page.route("**/api/v1/scorm/pacotes/*", (route) =>
     route.fulfill({ status: 404, contentType: "application/problem+json", body: JSON.stringify({ status: 404 }) }),
   )
+
+  await page.route("**/api/v1/scorm/pacotes", async (route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "pacote-e2e",
+          cursoSlug: "curso-e2e",
+          nomeArquivo: "curso-e2e.zip",
+          tamanho: 1024,
+          versao: "1.2",
+          entryFile: "index.html",
+          criadoEm: new Date().toISOString(),
+          conteudoUrl: "/scorm/pacote-e2e/index.html",
+          lancamentoUrl: "/api/v1/scorm/pacotes/pacote-e2e/launch",
+        }),
+      })
+    }
+    return route.fulfill({ status: 200, contentType: "application/json", body: "[]" })
+  })
+
+  await page.route("**/api/v1/scorm/configuracoes", async (route) => {
+    if (route.request().method() === "PUT") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: route.request().postData() ?? "{}" })
+    }
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ limiteUploadMb: 100 }) })
+  })
+
+  await page.route("**/api/v1/scorm/paginas/*", async (route) => {
+    if (route.request().method() === "PUT") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: route.request().postData() ?? "{}" })
+    }
+    return route.fulfill({ status: 404, contentType: "application/problem+json", body: JSON.stringify({ status: 404 }) })
+  })
 }

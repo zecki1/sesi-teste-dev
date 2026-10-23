@@ -47,3 +47,19 @@ html[data-font="opendyslexic"] body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Esconde o widget flutuante do VLibras enquanto o modal de acessibilidade está aberto. */
+html[data-a11y-aberto="true"] #vlibras-access-wrapper,
+html[data-a11y-aberto="true"] [vw],
+html[data-a11y-aberto="true"] [vw-access-button],
+html[data-a11y-aberto="true"] [vw-plugin-wrapper] {
+  display: none !important;
+}
+
+/* Preferência do usuário: VLibras desativado. */
+html[data-vlibras="off"] #vlibras-access-wrapper,
+html[data-vlibras="off"] [vw],
+html[data-vlibras="off"] [vw-access-button],
+html[data-vlibras="off"] [vw-plugin-wrapper] {
+  display: none !important;
+}

@@ -1,6 +1,6 @@
 export default {
-  home: 'Início',
+  home: 'Inicio',
   courses: 'Cursos',
-  about: 'Sobre',
-  studentArea: 'Área do aluno',
+  about: 'Sobre nosotros',
+  studentArea: 'Área del alumno',
 }

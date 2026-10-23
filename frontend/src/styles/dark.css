@@ -1,0 +1,128 @@
+/*
+ * Tema escuro.
+ *
+ * A interface foi construída com a paleta SESI em variáveis, mas muitos
+ * componentes usam utilitários com os tokens de marca (text-[var(--sesi-black)],
+ * bg-white etc.). Para não reescrever todas as telas, o tema escuro sobrescreve
+ * os utilitários de superfície/texto e preserva as cores de marca (vermelho,
+ * bege e preto) e as exceções de contraste.
+ */
+
+html[data-theme="escuro"] {
+  color-scheme: dark;
+  --sesi-dark-bg: #0c0c0d;
+  --sesi-dark-surface: #17171a;
+  --sesi-dark-surface-2: #232327;
+  --sesi-dark-border: #2e2e33;
+  --sesi-dark-text: #f4f4f5;
+  --sesi-dark-muted: #a1a1aa;
+  --sesi-dark-red: #ff6b6b;
+}
+
+html[data-theme="escuro"] body {
+  background-color: var(--sesi-dark-bg);
+  color: var(--sesi-dark-text);
+}
+
+/* Superfícies claras */
+html[data-theme="escuro"] .bg-white,
+html[data-theme="escuro"] .bg-\[var\(--sesi-white\)\],
+html[data-theme="escuro"] .bg-white\/95 {
+  background-color: var(--sesi-dark-surface);
+}
+
+html[data-theme="escuro"] .bg-\[\#F5F5F5\],
+html[data-theme="escuro"] .hover\:bg-\[\#F5F5F5\]:hover,
+html[data-theme="escuro"] .bg-\[var\(--sesi-gray\)\] {
+  background-color: var(--sesi-dark-surface-2);
+}
+
+html[data-theme="escuro"] .hover\:bg-white:hover {
+  background-color: var(--sesi-dark-surface-2);
+}
+
+html[data-theme="escuro"] .hover\:bg-white\/85:hover {
+  background-color: var(--sesi-dark-surface-2);
+}
+
+/* Texto */
+html[data-theme="escuro"] .text-\[var\(--sesi-black\)\] {
+  color: var(--sesi-dark-text);
+}
+
+html[data-theme="escuro"] .text-\[var\(--sesi-muted\)\] {
+  color: var(--sesi-dark-muted);
+}
+
+html[data-theme="escuro"] .text-\[var\(--sesi-red\)\] {
+  color: var(--sesi-dark-red);
+}
+
+html[data-theme="escuro"] .hover\:text-\[var\(--sesi-black\)\]:hover {
+  color: var(--sesi-dark-text);
+}
+
+/* Botões com hover branco continuam com texto escuro */
+html[data-theme="escuro"] .hover\:bg-white:hover.hover\:text-\[var\(--sesi-black\)\]:hover {
+  color: #0c0c0d;
+}
+
+/* Bordas e divisórias */
+html[data-theme="escuro"] .border-\[var\(--sesi-gray\)\] {
+  border-color: var(--sesi-dark-border);
+}
+
+html[data-theme="escuro"] .border-\[var\(--sesi-black\)\] {
+  border-color: var(--sesi-dark-text);
+}
+
+html[data-theme="escuro"] .border-black\/5 {
+  border-color: rgb(255 255 255 / 0.1);
+}
+
+html[data-theme="escuro"] .border-black\/10 {
+  border-color: rgb(255 255 255 / 0.14);
+}
+
+html[data-theme="escuro"] .hover\:bg-black\/5:hover {
+  background-color: rgb(255 255 255 / 0.08);
+}
+
+html[data-theme="escuro"] .divide-\[var\(--sesi-gray\)\] > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--sesi-dark-border);
+}
+
+/* Bege e preto são cores de marca: mantêm o texto escuro/claro original. */
+html[data-theme="escuro"] .bg-\[var\(--sesi-beige\)\] {
+  color: #0c0c0d;
+}
+
+html[data-theme="escuro"] .bg-\[var\(--sesi-beige\)\] .text-\[var\(--sesi-black\)\] {
+  color: #0c0c0d;
+}
+
+html[data-theme="escuro"] .bg-\[var\(--sesi-beige\)\] .text-\[var\(--sesi-muted\)\] {
+  color: #4b5563;
+}
+
+/* Cards e controles claros dentro da faixa bege continuam claros. */
+html[data-theme="escuro"] .bg-\[var\(--sesi-beige\)\] .bg-white {
+  background-color: #fff;
+}
+
+html[data-theme="escuro"] .bg-\[var\(--sesi-beige\)\] .bg-white .text-\[var\(--sesi-black\)\],
+html[data-theme="escuro"] .bg-\[var\(--sesi-beige\)\] .bg-white.text-\[var\(--sesi-black\)\] {
+  color: #0c0c0d;
+}
+
+/* Campos nativos */
+html[data-theme="escuro"] input,
+html[data-theme="escuro"] select,
+html[data-theme="escuro"] textarea {
+  color: var(--sesi-dark-text);
+}
+
+html[data-theme="escuro"] select option {
+  background-color: var(--sesi-dark-surface);
+  color: var(--sesi-dark-text);
+}

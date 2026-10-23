@@ -6,6 +6,7 @@ import course from './course'
 import ava from './ava'
 import errors from './errors'
 import a11y from './a11y'
+import student from './student'
 
 export default {
   common,
@@ -16,4 +17,5 @@ export default {
   ava,
   errors,
   a11y,
+  student,
 }

@@ -50,6 +50,7 @@ public static class InjecaoDependencia
         var db = scope.ServiceProvider.GetRequiredService<CatalogoDbContext>();
         await db.Database.EnsureCreatedAsync(ct);
         await CatalogoSeeder.SemearAsync(db, ct);
+        await CatalogoTurmasSeeder.SemearAsync(db, ct);
         await CatalogoScormSeeder.SemearAsync(db, ct);
     }
 }

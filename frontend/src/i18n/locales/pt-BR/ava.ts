@@ -4,4 +4,13 @@ export default {
   searchLessons: 'Buscar aulas',
   restart: 'Reiniciar',
   recommendations: 'Recomendações',
+  backToArea: 'Área do aluno',
+  lesson: 'Aula',
+  module: 'Módulo',
+  nextLesson: 'Próxima aula',
+  nextLessonDesc: 'Continue seu aprendizado',
+  materials: 'Materiais complementares',
+  materialsDesc: 'Aprofunde o conteúdo',
+  exercises: 'Exercícios',
+  exercisesDesc: 'Pratique o que aprendeu',
 }

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1000" role="img" aria-label="Prevenção e Combate a Incêndios">
+  <defs>
+    <linearGradient id="fundo" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#170404"/>
+      <stop offset="1" stop-color="#320606"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="1000" fill="url(#fundo)"/>
+  <g stroke="#ffffff" stroke-opacity="0.05" stroke-width="1">
+    <line x1="100" y1="0" x2="100" y2="1000"/>
+    <line x1="200" y1="0" x2="200" y2="1000"/>
+    <line x1="300" y1="0" x2="300" y2="1000"/>
+    <line x1="400" y1="0" x2="400" y2="1000"/>
+    <line x1="500" y1="0" x2="500" y2="1000"/>
+    <line x1="600" y1="0" x2="600" y2="1000"/>
+    <line x1="700" y1="0" x2="700" y2="1000"/>
+    <line x1="800" y1="0" x2="800" y2="1000"/>
+    <line x1="0" y1="100" x2="800" y2="100"/>
+    <line x1="0" y1="200" x2="800" y2="200"/>
+    <line x1="0" y1="300" x2="800" y2="300"/>
+    <line x1="0" y1="400" x2="800" y2="400"/>
+    <line x1="0" y1="500" x2="800" y2="500"/>
+    <line x1="0" y1="600" x2="800" y2="600"/>
+    <line x1="0" y1="700" x2="800" y2="700"/>
+    <line x1="0" y1="800" x2="800" y2="800"/>
+    <line x1="0" y1="900" x2="800" y2="900"/>
+    <line x1="0" y1="1000" x2="800" y2="1000"/>
+  </g>
+  <circle cx="640" cy="250" r="240" fill="#E30513" opacity="0.20"/>
+  <circle cx="170" cy="470" r="130" fill="#FCD19C" opacity="0.07"/>
+  <g fill="none" stroke="#FCD19C" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" opacity="0.92">
+    <path d="M400 250 c70 90 130 150 130 240 a130 130 0 0 1 -260 0 c0 -60 30 -100 70 -140 c5 50 25 75 55 85 c-20 -60 -10 -120 5 -185z" stroke-width="12"/>
+    <path d="M400 470 a60 60 0 0 1 60 60 a60 60 0 0 1 -120 0 a60 60 0 0 1 60 -60z" stroke-width="8" opacity="0.6"/>
+  </g>
+</svg>

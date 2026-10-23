@@ -17,6 +17,8 @@ public class CatalogoDbContext(DbContextOptions<CatalogoDbContext> options) : Db
     public DbSet<AulaScorm> AulasScorm => Set<AulaScorm>();
     public DbSet<SessaoScorm> SessoesScorm => Set<SessaoScorm>();
     public DbSet<TentativaScorm> TentativasScorm => Set<TentativaScorm>();
+    public DbSet<Turma> Turmas => Set<Turma>();
+    public DbSet<Matricula> Matriculas => Set<Matricula>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -134,6 +136,42 @@ public class CatalogoDbContext(DbContextOptions<CatalogoDbContext> options) : Db
             e.HasOne(x => x.SessaoScorm)
                 .WithMany(s => s.Tentativas)
                 .HasForeignKey(x => x.SessaoScormId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Turma>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Codigo).HasMaxLength(120).IsRequired();
+            e.Property(x => x.DiasSemana).HasMaxLength(80).IsRequired();
+            e.HasIndex(x => new { x.CursoId, x.Codigo }).IsUnique();
+
+            e.HasOne(x => x.Curso)
+                .WithMany(c => c.Turmas)
+                .HasForeignKey(x => x.CursoId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(x => x.Modalidade)
+                .WithMany(m => m.Turmas)
+                .HasForeignKey(x => x.ModalidadeId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Matricula>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.UsuarioId).HasMaxLength(200).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            e.HasIndex(x => new { x.UsuarioId, x.TurmaId }).IsUnique();
+
+            e.HasOne(x => x.Curso)
+                .WithMany(c => c.Matriculas)
+                .HasForeignKey(x => x.CursoId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(x => x.Turma)
+                .WithMany(t => t.Matriculas)
+                .HasForeignKey(x => x.TurmaId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

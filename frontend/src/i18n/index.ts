@@ -18,7 +18,7 @@ i18n
     fallbackLng: 'pt-BR',
     supportedLngs: ['pt-BR', 'en-US', 'es-ES'],
     defaultNS: 'common',
-    ns: ['common', 'nav', 'landing', 'catalog', 'course', 'ava', 'errors', 'a11y'],
+    ns: ['common', 'nav', 'landing', 'catalog', 'course', 'ava', 'errors', 'a11y', 'student'],
     detection: {
       order: ['querystring', 'localStorage', 'navigator'],
       lookupQuerystring: 'lang',

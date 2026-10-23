@@ -48,6 +48,9 @@ export interface CursoResumoDto {
   publicoAlvo: string
   imagemUrl: string
   dataDisponibilizacao?: string
+  dataPublicacao?: string | null
+  dataLiberacaoMatricula?: string | null
+  etapaDesenvolvimento: "Rascunho" | "Homologado" | "Publicado"
   destaque: boolean
   categoria: Categoria
   modalidade: Modalidade
@@ -105,6 +108,9 @@ export interface CursoSalvarRequest {
   publicoAlvo: string
   imagemUrl: string
   dataDisponibilizacao?: string | null
+  dataPublicacao?: string | null
+  dataLiberacaoMatricula?: string | null
+  etapaDesenvolvimento: "Rascunho" | "Homologado" | "Publicado"
   destaque: boolean
   categoriaSlug: string
   modalidadeSlug: string

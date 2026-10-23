@@ -1,12 +1,44 @@
 @import "tailwindcss";
 @import "./tokens.css";
 
-@font-face {
-  font-family: 'OpenDyslexic';
-  src: url('/fonts/OpenDyslexic-Regular.woff2') format('woff2');
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
+@keyframes sesi-confete {
+  from {
+    transform: translateY(-10vh) rotate(0deg);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(110vh) rotate(540deg);
+    opacity: 0;
+  }
+}
+
+.sesi-confete {
+  animation: sesi-confete 2.4s ease-in forwards;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .sesi-certificado-overlay,
+  .sesi-certificado-overlay * {
+    visibility: visible;
+  }
+
+  .sesi-certificado-overlay {
+    position: absolute;
+    inset: 0;
+    display: block;
+    overflow: visible;
+    background: white;
+    padding: 0;
+  }
+
+  .sesi-certificado-overlay > section > div:last-child,
+  .sesi-confete {
+    display: none;
+  }
 }
 
 :root {

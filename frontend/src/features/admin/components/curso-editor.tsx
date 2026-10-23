@@ -182,6 +182,14 @@ export function CursoEditor({
       setErro("Anexe o pacote SCORM (.zip) para continuar.")
       return
     }
+    if (
+      draft.dataPublicacao &&
+      draft.dataLiberacaoMatricula &&
+      draft.dataLiberacaoMatricula < draft.dataPublicacao
+    ) {
+      setErro("A liberação de matrícula não pode anteceder a data de publicação.")
+      return
+    }
     setErro("")
     const slugFinal = gerarSlug(draft.slug || draft.nomeBreve)
 
@@ -313,6 +321,23 @@ export function CursoEditor({
               ))}
             </select>
           </Campo>
+          <Campo titulo="Etapa interna do curso">
+            <select
+              value={draft.etapaDesenvolvimento}
+              onChange={(evento) =>
+                alterar("etapaDesenvolvimento", evento.target.value as CursoAdmin["etapaDesenvolvimento"])
+              }
+              className={campo}
+              required
+            >
+              <option value="Rascunho">Rascunho</option>
+              <option value="Homologado">Homologado</option>
+              <option value="Publicado">Publicado</option>
+            </select>
+            <span className="text-xs text-[var(--sesi-muted)]">
+              Rascunhos e cursos em homologação não aparecem no catálogo. Publicar libera a visibilidade conforme as datas.
+            </span>
+          </Campo>
           <Campo titulo="Carga horária (horas)">
             <input
               type="number"
@@ -331,6 +356,22 @@ export function CursoEditor({
               type="date"
               value={draft.dataDisponibilizacao ?? ""}
               onChange={(evento) => alterar("dataDisponibilizacao", evento.target.value)}
+              className={campo}
+            />
+          </Campo>
+          <Campo titulo="Data de publicação">
+            <input
+              type="date"
+              value={draft.dataPublicacao ?? ""}
+              onChange={(evento) => alterar("dataPublicacao", evento.target.value)}
+              className={campo}
+            />
+          </Campo>
+          <Campo titulo="Liberação das matrículas">
+            <input
+              type="date"
+              value={draft.dataLiberacaoMatricula ?? ""}
+              onChange={(evento) => alterar("dataLiberacaoMatricula", evento.target.value)}
               className={campo}
             />
           </Campo>

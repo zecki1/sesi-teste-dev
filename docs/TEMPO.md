@@ -8,8 +8,8 @@ Registro aproximado do esforço total do projeto, montado a partir dos checkpoin
 |---|---|
 | Início | 21/10/2026, 19:45 |
 | Primeiro uso do assistente Copilot nesta rodada | 23/10/2026, ~09:17 |
-| Última atualização do registro | 23/10/2026, 11:24 |
-| Janela total | ~38 h 33 min |
+| Última atualização do registro | 23/10/2026, 14:54 |
+| Janela total | ~43 h 09 min |
 | Pausa informada pelo autor | 4 h entre 21/10 e 22/10 |
 | Tempo efetivo estimado | ~25 h 36 min |
 | Tempo com checkpoints registrados | ~17 h 21 min |
@@ -35,6 +35,9 @@ Registro aproximado do esforço total do projeto, montado a partir dos checkpoin
 | 23/10 | 09:17–10:00 | Upload e substituição de pacotes SCORM, limite configurável persistido, página padronizada, validação final e documentação |
 | 23/10 | 10:00–10:18 | Remoção do commit acidental de `main` para branch de feature sem novo commit; cadastro visível, player SCORM separado, otimização de imagens, correção do preload e inicialização/verificação da API local |
 | 23/10 | 10:18–11:24 | Continuação do apoio assistido: análise do progresso SCORM, visibilidade do curso no catálogo, indicadores do admin, percentual de upload e revisão da forma de registrar o uso de IA |
+| 23/10 | 13:25:34–13:31:56 | Validação dos requisitos do case: inspeção da API e dos dados, execução dos E2E de catálogo e verificação da publicação |
+| 23/10 | 13:31:56–13:35:13 | Escopo adicional solicitado durante a validação: testes automatizados do skeleton/erro, busca sem acento e registro separado da janela adicional |
+| 23/10 | 14:37:24–14:54:21 | Retomada da validação: Lighthouse CI com CORS permitido (12 medições), ajuste dos E2E para aguardar a decodificação das capas, regeneração das oito capturas e documentação dos resultados |
 
 ## Observações
 
@@ -44,3 +47,5 @@ Registro aproximado do esforço total do projeto, montado a partir dos checkpoin
 - Em algumas solicitações específicas, o assistente preparou alterações pontuais nos arquivos para revisão. Isso não significa que tenha produzido sozinho o projeto ou que essas mudanças estejam aprovadas.
 - O commit acidental foi criado às 10:01:45 antes da revisão do autor e removido de `main`; não houve novo commit.
 - A API local respondeu a verificações anteriores de health, catálogo, facetas, matrículas, configuração SCORM e CORS, e foi detectado um pacote ativo. Em verificação posterior, a API local estava indisponível. Builds anteriores foram validadas, mas as alterações mais recentes aguardam revisão e não foram buildadas/testadas novamente, conforme orientação do autor.
+- Para a validação iniciada em 23/10 às 13:25:34, a janela observável foi de aproximadamente 9 min 39 s até 13:35:13. A solicitação dos itens adicionais chegou às 13:31:56, enquanto a validação anterior ainda estava em andamento; portanto, a janela adicional de aproximadamente 3 min 17 s está contida na janela total e não deve ser somada a ela. Esses intervalos registram tempo de interação, não o tempo ativo individual do autor nem esforço de implementação medido. Para contabilizar o tempo pessoal do autor com precisão, registrar separadamente início/fim informados por ele; não inferir esse dado a partir do tempo de resposta da IA.
+- A retomada de 14:37:24 a 14:54:21 registra uma janela observável de interação de aproximadamente 17 min. Ela inclui espera por ferramentas e auditorias; não representa tempo ativo do autor nem deve ser somada ao tempo efetivo estimado sem apontamento pessoal.

@@ -84,8 +84,27 @@ export function CatalogoPage() {
           )}
 
           {isLoading && (
-            <div className="flex items-center justify-center py-12">
-              <p className="text-[var(--sesi-muted)]">Carregando cursos...</p>
+            <div
+              className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+              aria-label="Carregando cursos"
+              aria-busy="true"
+              role="status"
+            >
+              {Array.from({ length: 6 }, (_, indice) => (
+                <div
+                  key={indice}
+                  className="relative flex aspect-[4/5] animate-pulse flex-col justify-between overflow-hidden rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-[#F5F5F5] p-6"
+                >
+                  <span className="h-7 w-28 rounded-full bg-[#E5E5E5]" />
+                  <div className="flex flex-col gap-3">
+                    <span className="h-7 w-full rounded bg-[#E5E5E5]" />
+                    <span className="h-4 w-4/5 rounded bg-[#E5E5E5]" />
+                    <span className="h-4 w-2/3 rounded bg-[#E5E5E5]" />
+                    <span className="mt-2 h-3 w-1/3 rounded bg-[#E5E5E5]" />
+                  </div>
+                </div>
+              ))}
+              <span className="sr-only">Carregando cursos...</span>
             </div>
           )}
           {isError && (
@@ -127,7 +146,7 @@ export function CatalogoPage() {
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <span
                         style={estiloBadgeCategoria(curso.categoria.cor)}
-                        className="flex w-fit items-center gap-2 rounded-[var(--radius-pill)] px-3 py-1 text-sm font-semibold uppercase tracking-wide"
+                        className="flex w-fit items-center gap-2 rounded px-3 py-1 text-sm font-semibold uppercase tracking-wide"
                       >
                         <IconeCategoria slug={curso.categoria.slug} className="h-4 w-4 shrink-0" />
                         {curso.categoria.nome}

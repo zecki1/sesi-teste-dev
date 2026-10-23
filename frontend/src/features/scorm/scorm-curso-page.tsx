@@ -1,8 +1,9 @@
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useCurso } from "@/hooks/use-catalogo"
 import { ApiError, API_URL } from "@/lib/api/catalogo"
 import { usePerfil } from "@/lib/auth/perfil"
+import { useScormAcessibilidade } from "@/features/scorm/use-scorm-acessibilidade"
 import { MainLayout } from "@/components/layout/main-layout"
 import { Container } from "@/components/layout/container"
 import { Button } from "@/components/ui/button"
@@ -22,6 +23,7 @@ import {
   type PacoteScormDto,
   type ScormPaginaConfigDto,
 } from "./scorm-api"
+import { gestaoLocalHabilitada, registrarMarcoCurso } from "@/lib/api/gestao"
 
 export function ScormCursoPage() {
   const { slug } = useParams<{ slug: string }>()
@@ -38,7 +40,20 @@ export function ScormCursoPage() {
   const [progresso, setProgresso] = useState(0)
   const [statusScorm, setStatusScorm] = useState("")
   const [matriculaAberta, setMatriculaAberta] = useState(false)
+  const conclusaoRegistrada = useRef(false)
   const emPlayer = pathname.endsWith("/scorm/player")
+  useScormAcessibilidade(Boolean(pacote && emPlayer), pacote?.id)
+
+  useEffect(() => {
+    conclusaoRegistrada.current = false
+  }, [slug, perfil?.email])
+
+  useEffect(() => {
+    if (!gestaoLocalHabilitada || !emPlayer || !slug || !perfil?.email) return
+    registrarMarcoCurso(slug, perfil.email, "inicio").catch((falha: unknown) => {
+      setErroProgresso(falha instanceof Error ? falha.message : "Não foi possível registrar o início do curso.")
+    })
+  }, [emPlayer, slug, perfil?.email])
 
   useEffect(() => {
     if (!slug || !curso) return
@@ -127,6 +142,38 @@ export function ScormCursoPage() {
     window.addEventListener("message", aoReceberMensagem)
     return () => window.removeEventListener("message", aoReceberMensagem)
   }, [])
+
+  useEffect(() => {
+    const statusConcluido = ["completed", "passed", "complete"].includes(statusScorm.toLowerCase())
+    if (
+      !gestaoLocalHabilitada ||
+      !emPlayer ||
+      !slug ||
+      !perfil?.email ||
+      conclusaoRegistrada.current ||
+      (progresso < 100 && !statusConcluido)
+    ) return
+
+    conclusaoRegistrada.current = true
+    registrarMarcoCurso(slug, perfil.email, "conclusao", progresso)
+      .then((marco) => {
+        const chaveAviso = `sesi.certificado.mostrado.${slug}::${perfil.email.toLowerCase()}`
+        if (window.localStorage.getItem(chaveAviso) || !marco.concluidoEm) return
+        window.localStorage.setItem(chaveAviso, "1")
+        window.dispatchEvent(new CustomEvent("sesi:curso-concluido", {
+          detail: {
+            slug,
+            titulo: curso?.nomeCompleto ?? slug,
+            aluno: `${perfil.nome} ${perfil.sobrenome}`.trim(),
+            concluidoEm: marco.concluidoEm,
+          },
+        }))
+      })
+      .catch((falha: unknown) => {
+        conclusaoRegistrada.current = false
+        setErroProgresso(falha instanceof Error ? falha.message : "Não foi possível registrar a conclusão do curso.")
+      })
+  }, [emPlayer, slug, perfil?.email, perfil?.nome, perfil?.sobrenome, progresso, statusScorm, curso?.nomeCompleto])
 
   if (isLoading) {
     return (
@@ -337,7 +384,11 @@ export function ScormCursoPage() {
       <SobreCurso curso={curso} descricao={config.descricao} />
       <DepoimentosCurso />
       <AjudaCurso />
-      <FaixaMatricula nomeCurso={curso.nomeCompleto} onMatricular={() => setMatriculaAberta(true)} />
+      <FaixaMatricula
+        nomeCurso={curso.nomeCompleto}
+        onMatricular={() => setMatriculaAberta(true)}
+        matriculaEmBreve={curso.status.slug === "em-breve"}
+      />
       <MatriculaModal curso={curso} aberto={matriculaAberta} onFechar={() => setMatriculaAberta(false)} />
     </MainLayout>
   )

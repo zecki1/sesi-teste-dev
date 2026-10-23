@@ -64,6 +64,7 @@ public static class ScormWrapper
                   let inicializado = false;
                   let finalizado = false;
                   let ultimoErro = "0";
+                  let ultimaAcessibilidade = null;
 
                   const erros = {
                     "0": "No error",
@@ -194,10 +195,117 @@ public static class ScormWrapper
                   window.addEventListener("message", (evento) => {
                     const dados = evento.data;
                     if (!dados || typeof dados !== "object") return;
+                    if (evento.source === window.parent && dados.type === "SESI_A11Y_CONFIG") {
+                      aplicarAcessibilidade(dados.config);
+                      return;
+                    }
                     if (dados.type === "SCORM_GET_STATUS") {
                       notificar("SCORM_STATUS", { dados: estado() });
                     }
                   });
+
+                  function aplicarAcessibilidade(preferencias) {
+                    if (!preferencias || typeof preferencias !== "object") return;
+                    const filtros = ["none", "protanopia", "deuteranopia", "tritanopia", "monocromia"];
+                    const tamanhos = ["small", "normal", "large", "xlarge"];
+                    const temas = ["claro", "escuro"];
+                    const configA11y = {
+                      filtro: filtros.includes(preferencias.filtro) ? preferencias.filtro : "none",
+                      tamanhoFonte: tamanhos.includes(preferencias.tamanhoFonte) ? preferencias.tamanhoFonte : "normal",
+                      dislexia: preferencias.dislexia === true,
+                      tema: temas.includes(preferencias.tema) ? preferencias.tema : "claro",
+                      vlibras: preferencias.vlibras !== false
+                    };
+                    const fonteDataUrl = typeof preferencias.fontDataUrl === "string" &&
+                      /^data:font\/woff2;base64,[a-zA-Z0-9+/]+={0,2}$/.test(preferencias.fontDataUrl)
+                      ? preferencias.fontDataUrl
+                      : null;
+                    ultimaAcessibilidade = { ...configA11y, fontDataUrl: fonteDataUrl };
+
+                    function aplicarNoDocumento(documento) {
+                      const raiz = documento.documentElement;
+                      if (!raiz) return;
+                      raiz.setAttribute("data-color-filter", configA11y.filtro);
+                      raiz.setAttribute("data-font-size", configA11y.tamanhoFonte);
+                      raiz.setAttribute("data-font", configA11y.dislexia ? "opendyslexic" : "default");
+                      raiz.setAttribute("data-theme", configA11y.tema);
+                      raiz.setAttribute("data-vlibras", configA11y.vlibras ? "on" : "off");
+
+                      let estilos = documento.getElementById("sesi-a11y-styles");
+                      if (!estilos) {
+                        estilos = documento.createElement("style");
+                        estilos.id = "sesi-a11y-styles";
+                        estilos.textContent = `
+                          html[data-theme="escuro"], html[data-theme="escuro"] body {
+                            color-scheme: dark !important;
+                            background: #0c0c0d !important;
+                            color: #f4f4f5 !important;
+                          }
+                          html[data-theme="escuro"] body :is(main, section, article, header, footer, nav, aside, form, fieldset, table, th, td) {
+                            background-color: #17171a !important;
+                            border-color: #2e2e33 !important;
+                          }
+                          html[data-theme="escuro"] body :is(p, li, label, h1, h2, h3, h4, h5, h6, dt, dd, td, th, small, strong, em) {
+                            color: #f4f4f5 !important;
+                          }
+                          html[data-theme="escuro"] body :is(input, select, textarea, button) {
+                            color: #f4f4f5 !important;
+                            background-color: #232327 !important;
+                            border-color: #3f3f46 !important;
+                          }
+                          html[data-color-filter="protanopia"] body { filter: url(#sesi-protanopia-filter); }
+                          html[data-color-filter="deuteranopia"] body { filter: url(#sesi-deuteranopia-filter); }
+                          html[data-color-filter="tritanopia"] body { filter: url(#sesi-tritanopia-filter); }
+                          html[data-color-filter="monocromia"] body { filter: grayscale(1); }
+                          html[data-font-size="small"] { font-size: 14px !important; }
+                          html[data-font-size="normal"] { font-size: 16px !important; }
+                          html[data-font-size="large"] { font-size: 18px !important; }
+                          html[data-font-size="xlarge"] { font-size: 20px !important; }
+                          html[data-font="opendyslexic"] body { font-family: OpenDyslexic, "Open Sans", system-ui, sans-serif !important; }
+                        `;
+                        (documento.head || raiz).appendChild(estilos);
+                      }
+
+                      if (fonteDataUrl) {
+                        let fonte = documento.getElementById("sesi-a11y-font");
+                        if (!fonte) {
+                          fonte = documento.createElement("style");
+                          fonte.id = "sesi-a11y-font";
+                          (documento.head || raiz).appendChild(fonte);
+                        }
+                        fonte.textContent = `@font-face { font-family: OpenDyslexic; src: url("${fonteDataUrl}") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }`;
+                      }
+
+                      if (!documento.getElementById("sesi-a11y-filters")) {
+                        const svg = documento.createElementNS("http://www.w3.org/2000/svg", "svg");
+                        svg.id = "sesi-a11y-filters";
+                        svg.setAttribute("aria-hidden", "true");
+                        svg.setAttribute("style", "position:fixed;width:0;height:0;overflow:hidden");
+                        svg.innerHTML = `
+                          <defs>
+                            <filter id="sesi-protanopia-filter"><feColorMatrix type="matrix" values="0.567,0.433,0,0,0 0.558,0.442,0,0,0 0,0.242,0.758,0,0 0,0,0,1,0" /></filter>
+                            <filter id="sesi-deuteranopia-filter"><feColorMatrix type="matrix" values="0.625,0.375,0,0,0 0.7,0.3,0,0,0 0,0.3,0.7,0,0 0,0,0,1,0" /></filter>
+                            <filter id="sesi-tritanopia-filter"><feColorMatrix type="matrix" values="0.95,0.05,0,0,0 0,0.433,0.567,0,0 0,0.475,0.525,0,0 0,0,0,1,0" /></filter>
+                          </defs>
+                        `;
+                        (documento.body || raiz).prepend(svg);
+                      }
+
+                      for (const interno of Array.from(documento.querySelectorAll("iframe"))) {
+                        try {
+                          if (!interno.dataset.sesiA11yListener) {
+                            interno.dataset.sesiA11yListener = "true";
+                            interno.addEventListener("load", () => {
+                              if (ultimaAcessibilidade) aplicarAcessibilidade(ultimaAcessibilidade);
+                            });
+                          }
+                          if (interno.contentDocument) aplicarNoDocumento(interno.contentDocument);
+                        } catch (_) {}
+                      }
+                    }
+
+                    aplicarNoDocumento(document);
+                  }
 
                   window.addEventListener("beforeunload", () => {
                     if (!finalizado && inicializado) persistir();

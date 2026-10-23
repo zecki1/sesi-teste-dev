@@ -3,6 +3,8 @@ import { Link, Navigate, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useCurso } from "@/hooks/use-catalogo"
 import { usePerfil } from "@/lib/auth/perfil"
+import { useScormAcessibilidade } from "@/features/scorm/use-scorm-acessibilidade"
+import { useBodyScrollLock } from "@/lib/ui/use-body-scroll-lock"
 import { API_URL, type CursoDetalheDto, type ModuloDto } from "@/lib/api/catalogo"
 import { Container } from "@/components/layout/container"
 import { SesiMark } from "@/components/layout/footer"
@@ -17,6 +19,7 @@ import {
   type PacoteScormDto,
   type ProgressoScormDto,
 } from "@/features/scorm/scorm-api"
+import { gestaoLocalHabilitada, registrarMarcoCurso } from "@/lib/api/gestao"
 
 const SLUG_PADRAO = "matematica-para-a-precisao-medidas-e-escalas-na-metalurgia"
 const TOTAL_ITENS_AVA = 9
@@ -168,6 +171,57 @@ export function AvaPage() {
   const [playerScormAtivo, setPlayerScormAtivo] = useState(true)
   const [versaoPlayerScorm, setVersaoPlayerScorm] = useState(0)
   const retomadaAvaliada = useRef<string | null>(null)
+  const conclusaoRegistrada = useRef(false)
+  useBodyScrollLock(mostrarRetomada)
+  useScormAcessibilidade(
+    Boolean(pacoteScorm && scormResolvido && playerScormAtivo),
+    `${pacoteScorm?.id ?? ""}:${versaoPlayerScorm}`,
+  )
+
+  useEffect(() => {
+    conclusaoRegistrada.current = false
+  }, [slug, perfil?.email])
+
+  useEffect(() => {
+    if (!gestaoLocalHabilitada || !perfil?.email || !slug) return
+    registrarMarcoCurso(slug, perfil.email, "inicio").catch((falha: unknown) => {
+      setErroScorm(falha instanceof Error ? falha.message : "Não foi possível registrar o início do curso.")
+    })
+  }, [slug, perfil?.email])
+
+  useEffect(() => {
+    const statusConcluido = ["completed", "passed", "complete"].includes(
+      (progressoScorm?.lessonStatus ?? "").toLowerCase(),
+    )
+    if (
+      !gestaoLocalHabilitada ||
+      !perfil?.email ||
+      !slug ||
+      conclusaoRegistrada.current ||
+      (pacoteScorm ? (progressoScorm?.percentual ?? 0) < 100 && !statusConcluido : percentualMaximo < 100)
+    ) return
+
+    conclusaoRegistrada.current = true
+    const percentual = pacoteScorm ? progressoScorm?.percentual ?? 0 : percentualMaximo
+    registrarMarcoCurso(slug, perfil.email, "conclusao", percentual)
+      .then((marco) => {
+        const chaveAviso = `sesi.certificado.mostrado.${slug}::${perfil.email.toLowerCase()}`
+        if (window.localStorage.getItem(chaveAviso) || !marco.concluidoEm) return
+        window.localStorage.setItem(chaveAviso, "1")
+        window.dispatchEvent(new CustomEvent("sesi:curso-concluido", {
+          detail: {
+            slug,
+            titulo: curso?.nomeCompleto ?? slug,
+            aluno: `${perfil.nome} ${perfil.sobrenome}`.trim(),
+            concluidoEm: marco.concluidoEm,
+          },
+        }))
+      })
+      .catch((falha: unknown) => {
+        conclusaoRegistrada.current = false
+        setErroScorm(falha instanceof Error ? falha.message : "Não foi possível registrar a conclusão do curso.")
+      })
+  }, [slug, perfil?.email, perfil?.nome, perfil?.sobrenome, pacoteScorm, progressoScorm?.percentual, progressoScorm?.lessonStatus, percentualMaximo, curso?.nomeCompleto])
 
   useEffect(() => {
     if (!slug) return
@@ -374,6 +428,7 @@ export function AvaPage() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="titulo-retomada"
+          data-lenis-prevent
         >
           <div className="w-full max-w-md rounded-[var(--radius-lg)] bg-white p-6 shadow-2xl">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sesi-muted)]">Sua jornada</p>

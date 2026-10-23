@@ -53,6 +53,34 @@ test("busca sem resultado mostra estado vazio", async ({ page }) => {
   await expect(page.getByText(/nenhum curso encontrado/i)).toBeVisible()
 })
 
+test("catálogo mostra skeleton enquanto aguarda a API", async ({ page }) => {
+  await page.route("**/api/v1/cursos?*", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    await route.fallback()
+  })
+
+  await page.goto("/catalogo")
+  await expect(page.locator('[aria-busy="true"]')).toBeVisible()
+  await expect(page.locator("a[href^='/curso/']")).toHaveCount(12)
+  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0)
+})
+
+test("catálogo mostra mensagem quando a API falha", async ({ page }) => {
+  await page.route("**/api/v1/cursos?*", (route) => route.abort())
+
+  await page.goto("/catalogo")
+  await expect(page.getByText("Erro ao carregar cursos. Verifique se a API está em execução e acessível.")).toBeVisible()
+  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0)
+})
+
+test("busca no catálogo ignora acentos", async ({ page }) => {
+  await page.goto("/catalogo")
+  await page.locator("#busca").fill("incendios")
+
+  await expect(page.locator("a[href^='/curso/']")).toHaveCount(1)
+  await expect(page.getByText("1 resultado(s) encontrado(s)")).toBeVisible()
+})
+
 test("detalhe do curso mostra hero, diferenciais, accordion e contato", async ({ page }) => {
   await page.goto("/catalogo")
   await page.locator("a[href='/curso/matematica-para-a-precisao-medidas-e-escalas-na-metalurgia']").first().click()

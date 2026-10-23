@@ -59,6 +59,7 @@ public class CatalogoDbContext(DbContextOptions<CatalogoDbContext> options) : Db
             e.Property(x => x.Descricao).HasMaxLength(2000);
             e.Property(x => x.PublicoAlvo).HasMaxLength(400);
             e.Property(x => x.ImagemUrl).HasMaxLength(400);
+            e.Property(x => x.EtapaDesenvolvimento).HasMaxLength(20).IsRequired();
             e.HasIndex(x => x.Slug).IsUnique();
 
             e.HasOne(x => x.Categoria)

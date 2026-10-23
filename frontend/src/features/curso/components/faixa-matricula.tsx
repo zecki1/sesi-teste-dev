@@ -5,7 +5,15 @@ import { Button } from "@/components/ui/button"
  * Barra flutuante de matrícula. Fica escondida até o CTA principal sair da tela;
  * então sobe a 5 px do rodapé, na largura do container e com o nome do curso fixo.
  */
-export function FaixaMatricula({ nomeCurso, onMatricular }: { nomeCurso: string; onMatricular: () => void }) {
+export function FaixaMatricula({
+  nomeCurso,
+  onMatricular,
+  matriculaEmBreve = false,
+}: {
+  nomeCurso: string
+  onMatricular: () => void
+  matriculaEmBreve?: boolean
+}) {
   const [visivel, setVisivel] = useState(false)
 
   useEffect(() => {
@@ -63,11 +71,12 @@ export function FaixaMatricula({ nomeCurso, onMatricular }: { nomeCurso: string;
           <Button
             type="button"
             onClick={onMatricular}
-            withArrow
+            disabled={matriculaEmBreve}
+            withArrow={!matriculaEmBreve}
             tabIndex={visivel ? undefined : -1}
             className="rounded-lg bg-white text-[var(--sesi-black)] hover:bg-white/85"
           >
-            Matricule-se
+            {matriculaEmBreve ? "Matrículas em breve" : "Matricule-se"}
           </Button>
         </div>
       </section>

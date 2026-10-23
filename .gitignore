@@ -53,6 +53,8 @@ obj/
 coverage/
 test-results/
 playwright-report/
+/.lhci/
+/frontend/.lighthouseci/
 
 # Misc
 *.tmp

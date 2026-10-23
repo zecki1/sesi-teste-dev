@@ -3,6 +3,8 @@ import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Routes } from './routes'
 import { AccessibilityMenu } from '@/components/a11y/AccessibilityMenu'
+import { StudentSupportDialog } from '@/components/support/StudentSupportDialog'
+import { StudentCertificateCelebration } from '@/components/support/StudentCertificateCelebration'
 import { SmoothScroll } from '@/components/motion/smooth-scroll'
 import { usePerfil } from '@/lib/auth/perfil'
 import { aplicarIdioma, iniciarIdioma } from '@/lib/i18n/idioma'
@@ -30,6 +32,8 @@ function App() {
         <SmoothScroll />
         <Routes />
         <AccessibilityMenu />
+        <StudentSupportDialog />
+        <StudentCertificateCelebration />
       </BrowserRouter>
     </QueryClientProvider>
   )

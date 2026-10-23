@@ -3,8 +3,9 @@ import { Link, Navigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { MainLayout } from "@/components/layout/main-layout"
 import { Container } from "@/components/layout/container"
-import { useCursos, useFacetas } from "@/hooks/use-catalogo"
+import { useFacetas } from "@/hooks/use-catalogo"
 import { atualizarCurso, criarCurso, excluirCurso } from "@/lib/api/catalogo"
+import { listarCursosAdministracao } from "@/lib/api/gestao"
 import {
   carregarConfigScorm,
   configScormPadrao,
@@ -65,10 +66,15 @@ function GraficoBarras({ titulo, itens }: { titulo: string; itens: { rotulo: str
 export function AdminCursosPage() {
   const perfil = usePerfil()
   const queryClient = useQueryClient()
-  const { data } = useCursos({ tamanho: 48 })
   const { data: facetas } = useFacetas()
+  const cursosQuery = useQuery({
+    queryKey: ["cursos-admin"],
+    queryFn: listarCursosAdministracao,
+    enabled: perfil?.papel === "admin",
+  })
   const [editando, setEditando] = useState<CursoAdmin | null>(null)
   const [busca, setBusca] = useState("")
+  const [etapaSelecionada, setEtapaSelecionada] = useState<"Todos" | CursoAdmin["etapaDesenvolvimento"]>("Todos")
   const [aviso, setAviso] = useState("")
   const [erro, setErro] = useState("")
   const [salvando, setSalvando] = useState(false)
@@ -139,11 +145,12 @@ export function AdminCursosPage() {
   }
 
   const slugsScorm = new Set((pacotesQuery.data ?? []).map((pacote) => pacote.cursoSlug))
-  const cursos = (data?.itens ?? []).map((curso) => {
+  const cursos = (cursosQuery.data ?? []).map((curso) => {
     const cursoAdmin = cursoDaApi(curso)
     return { ...cursoAdmin, tipo: slugsScorm.has(cursoAdmin.slug) ? "scorm" as const : "blocos" as const }
   })
   const filtrados = cursos.filter((curso) =>
+    (etapaSelecionada === "Todos" || curso.etapaDesenvolvimento === etapaSelecionada) &&
     `${curso.nomeCompleto} ${curso.categoria} ${curso.modalidade}`.toLowerCase().includes(busca.toLowerCase()),
   )
   const totalBlocos = cursos.filter((curso) => curso.tipo === "blocos").length
@@ -163,10 +170,15 @@ export function AdminCursosPage() {
     }, new Map<string, number>()),
     ([rotulo, valor]) => ({ rotulo, valor }),
   ).sort((a, b) => b.valor - a.valor || a.rotulo.localeCompare(b.rotulo))
+  const cursosPorEtapa = ["Rascunho", "Homologado", "Publicado"].map((rotulo) => ({
+    rotulo,
+    valor: cursos.filter((curso) => curso.etapaDesenvolvimento === rotulo).length,
+  }))
 
   const recarregar = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["cursos"] }),
+      queryClient.invalidateQueries({ queryKey: ["cursos-admin"] }),
       queryClient.invalidateQueries({ queryKey: ["facetas"] }),
       queryClient.invalidateQueries({ queryKey: ["curso"] }),
       queryClient.invalidateQueries({ queryKey: ["turmas"] }),
@@ -282,6 +294,12 @@ export function AdminCursosPage() {
           </div>
           <div className="flex flex-wrap gap-3">
             <Link
+              to="/admin/gestao"
+              className="rounded-[var(--radius-lg)] border border-white/30 px-4 py-2.5 text-sm font-semibold transition hover:bg-white hover:text-[var(--sesi-black)]"
+            >
+              Usuários e suporte
+            </Link>
+            <Link
               to="/area-do-aluno"
               className="rounded-[var(--radius-lg)] border border-white/30 px-4 py-2.5 text-sm font-semibold transition hover:bg-white hover:text-[var(--sesi-black)]"
             >
@@ -368,6 +386,11 @@ export function AdminCursosPage() {
               {erro}
             </p>
           )}
+          {cursosQuery.isError && (
+            <p role="alert" className="rounded-[var(--radius-lg)] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+              {cursosQuery.error instanceof Error ? cursosQuery.error.message : "Não foi possível carregar os cursos da administração."}
+            </p>
+          )}
 
           {carregandoEditor ? (
             <p role="status" className="py-8 text-center text-sm text-[var(--sesi-muted)]">Carregando configurações do curso...</p>
@@ -386,7 +409,7 @@ export function AdminCursosPage() {
             <>
               <div className="grid gap-4 sm:grid-cols-3">
                 {[
-                  { rotulo: "Cursos no catálogo", valor: data?.total ?? 0 },
+                  { rotulo: "Cursos cadastrados", valor: cursos.length },
                   { rotulo: "Cursos em blocos", valor: totalBlocos },
                   { rotulo: "Pacotes SCORM", valor: totalScorm },
                   { rotulo: "Carga horária cadastrada", valor: `${cargaHorariaTotal}h` },
@@ -407,7 +430,7 @@ export function AdminCursosPage() {
                     Distribuição dos cursos carregados no catálogo por categoria e status.
                   </p>
                 </div>
-                <div className="grid gap-4 lg:grid-cols-3">
+                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
                   <GraficoBarras
                     titulo="Cursos por formato"
                     itens={[
@@ -417,6 +440,7 @@ export function AdminCursosPage() {
                   />
                   <GraficoBarras titulo="Cursos por categoria" itens={cursosPorCategoria.slice(0, 6)} />
                   <GraficoBarras titulo="Cursos por status" itens={cursosPorStatus} />
+                  <GraficoBarras titulo="Etapa de desenvolvimento" itens={cursosPorEtapa} />
                 </div>
               </section>
 
@@ -429,6 +453,28 @@ export function AdminCursosPage() {
                   aria-label="Buscar cursos"
                   className="w-full max-w-sm rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] px-3 py-2.5 text-sm outline-none focus:border-[var(--sesi-red)]"
                 />
+              </div>
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por etapa do curso">
+                {(["Todos", "Rascunho", "Homologado", "Publicado"] as const).map((etapa) => {
+                  const quantidade = etapa === "Todos"
+                    ? cursos.length
+                    : cursos.filter((curso) => curso.etapaDesenvolvimento === etapa).length
+                  return (
+                    <button
+                      key={etapa}
+                      type="button"
+                      aria-pressed={etapaSelecionada === etapa}
+                      onClick={() => setEtapaSelecionada(etapa)}
+                      className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                        etapaSelecionada === etapa
+                          ? "border-[var(--sesi-black)] bg-[var(--sesi-black)] text-white"
+                          : "border-[var(--sesi-gray)] bg-white text-[var(--sesi-black)] hover:border-[var(--sesi-red)]"
+                      }`}
+                    >
+                      {etapa} <span className="ml-1 tabular-nums opacity-75">{quantidade}</span>
+                    </button>
+                  )
+                })}
               </div>
 
               <div className="overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white">
@@ -484,9 +530,14 @@ export function AdminCursosPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${CORES_STATUS[curso.status] ?? "bg-[#F5F5F5]"}`}>
-                            {curso.status || "—"}
-                          </span>
+                          <div className="flex flex-col items-start gap-2">
+                            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${CORES_STATUS[curso.status] ?? "bg-[#F5F5F5]"}`}>
+                              Oferta: {curso.status || "—"}
+                            </span>
+                            <span className="rounded-full bg-purple-100 px-2.5 py-1 text-xs font-semibold text-purple-800">
+                              {curso.etapaDesenvolvimento}
+                            </span>
+                          </div>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-3">
@@ -497,14 +548,17 @@ export function AdminCursosPage() {
                             >
                               Editar
                             </button>
-                            <Link
-                              to={`/curso/${curso.slug}/scorm`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-xs font-semibold text-[var(--sesi-black)] underline-offset-4 hover:underline"
-                            >
-                              Página SCORM ↗
-                            </Link>
+                            {curso.etapaDesenvolvimento === "Publicado" &&
+                              (!curso.dataPublicacao || curso.dataPublicacao <= new Date().toISOString().slice(0, 10)) && (
+                                <Link
+                                  to={`/curso/${curso.slug}/scorm`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-xs font-semibold text-[var(--sesi-black)] underline-offset-4 hover:underline"
+                                >
+                                  Página SCORM ↗
+                                </Link>
+                              )}
                             <button
                               type="button"
                               onClick={() => aoExcluir(curso)}

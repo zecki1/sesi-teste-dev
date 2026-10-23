@@ -14,6 +14,9 @@ public class Curso
     public string PublicoAlvo { get; set; } = string.Empty;
     public string ImagemUrl { get; set; } = string.Empty;
     public DateOnly? DataDisponibilizacao { get; set; }
+    public DateOnly? DataPublicacao { get; set; }
+    public DateOnly? DataLiberacaoMatricula { get; set; }
+    public string EtapaDesenvolvimento { get; set; } = "Publicado";
     public bool Destaque { get; set; }
     public bool Ativo { get; set; } = true;
 

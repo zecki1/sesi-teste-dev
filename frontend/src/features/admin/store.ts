@@ -36,6 +36,9 @@ export interface CursoAdmin {
   publicoAlvo: string
   imagemUrl: string
   dataDisponibilizacao?: string
+  dataPublicacao?: string
+  dataLiberacaoMatricula?: string
+  etapaDesenvolvimento: "Rascunho" | "Homologado" | "Publicado"
   destaque: boolean
   categoria: string
   modalidade: string
@@ -73,6 +76,9 @@ export function cursoDaApi(curso: CursoResumoDto): CursoAdmin {
     publicoAlvo: curso.publicoAlvo,
     imagemUrl: curso.imagemUrl,
     dataDisponibilizacao: curso.dataDisponibilizacao,
+    dataPublicacao: curso.dataPublicacao ?? "",
+    dataLiberacaoMatricula: curso.dataLiberacaoMatricula ?? "",
+    etapaDesenvolvimento: curso.etapaDesenvolvimento ?? "Publicado",
     destaque: curso.destaque,
     categoria: curso.categoria.nome,
     modalidade: curso.modalidade.nome,
@@ -95,6 +101,9 @@ export function criarCursoVazio(categoria = "", modalidade = "", status = ""): C
     publicoAlvo: "",
     imagemUrl: "",
     dataDisponibilizacao: "",
+    dataPublicacao: "",
+    dataLiberacaoMatricula: "",
+    etapaDesenvolvimento: "Rascunho",
     destaque: false,
     categoria,
     modalidade,
@@ -125,6 +134,9 @@ export function paraPayload(curso: CursoAdmin, facetas: FacetasDto | undefined):
     publicoAlvo: curso.publicoAlvo.trim(),
     imagemUrl: curso.imagemUrl.trim(),
     dataDisponibilizacao: curso.dataDisponibilizacao || null,
+    dataPublicacao: curso.dataPublicacao || null,
+    dataLiberacaoMatricula: curso.dataLiberacaoMatricula || null,
+    etapaDesenvolvimento: curso.etapaDesenvolvimento,
     destaque: curso.destaque,
     categoriaSlug: slugPorNome(facetas?.categorias, curso.categoria),
     modalidadeSlug: slugPorNome(facetas?.modalidades, curso.modalidade),

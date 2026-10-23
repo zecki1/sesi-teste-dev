@@ -37,6 +37,7 @@ export function HeroCurso({
 }: HeroCursoProps) {
   const inicio = formatarData(curso.dataDisponibilizacao)
   const cta = aoClicarCta ?? onMatricular
+  const matriculaEmBreve = curso.status.slug === "em-breve"
 
   return (
     <section
@@ -110,8 +111,14 @@ export function HeroCurso({
           </ul>
 
           <div data-cta-principal className="flex flex-wrap items-center gap-3">
-            <Button type="button" onClick={cta} withArrow className="rounded-lg">
-              {textoCta}
+            <Button
+              type="button"
+              onClick={cta}
+              disabled={matriculaEmBreve}
+              withArrow={!matriculaEmBreve}
+              className="rounded-lg"
+            >
+              {matriculaEmBreve ? "Matrículas em breve" : textoCta}
             </Button>
           </div>
         </div>

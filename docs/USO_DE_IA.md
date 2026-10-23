@@ -83,7 +83,7 @@ Os exemplos abaixo registram temas tratados com a IA. As implementações listad
 Os resultados a seguir são evidências do projeto, não uma medida de quanto código foi produzido pela IA. O autor conduz a revisão e decide se a validação é suficiente. Builds e testes citados em registros anteriores se referem às rodadas em que foram executados; não cobrem automaticamente alterações posteriores.
 
 - **Build local**: `dotnet build` e `npm run build` executados após cada alteração significativa
-- **Testes**: 20 testes de integração da API, 14 testes unitários e 32 testes E2E/axe aprovados
+- **Testes**: 23 testes de integração da API, 14 testes unitários e 43 testes E2E/axe/capturas aprovados
 - **Revisão manual**: responsabilidade do autor antes de aceitar alterações
 - **Testes em navegador**: validação visual em desktop, tablet e mobile, incluindo modal de acessibilidade, modal de matrícula, tema escuro e calendário
 - **Navegação assistida**: percursos de catálogo, detalhe, matrícula, AVA e admin conferidos rota a rota

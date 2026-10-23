@@ -7,9 +7,23 @@ import { LoginModal } from "./components/login-modal"
 import { useCursos, useMatriculas } from "@/hooks/use-catalogo"
 import type { MatriculaDto } from "@/lib/api/catalogo"
 import { imagemDoCurso } from "@/lib/ui/imagens-cursos"
-import { sair, usePerfil, type Idioma, type Matricula, type PerfilAluno } from "@/lib/auth/perfil"
+import {
+  atualizarPerfil,
+  papelDeGestao,
+  sair,
+  usePerfil,
+  type Idioma,
+  type Matricula,
+  type PerfilAluno,
+} from "@/lib/auth/perfil"
 import { carregarProgressoAva } from "@/features/ava/progresso-ava"
 import { obterProgressoScorm } from "@/features/scorm/scorm-api"
+import {
+  gestaoLocalHabilitada,
+  obterMarcosCurso,
+  obterUsuarioGestaoPorEmail,
+  type MarcoCurso,
+} from "@/lib/api/gestao"
 
 const NOMES_IDIOMAS: Record<Idioma, string> = {
   "pt-BR": "Português",
@@ -78,18 +92,72 @@ function aulasDasMatriculas(matriculas: MatriculaDto[], limite = 8): Date[] {
   return aulas.sort((a, b) => a.getTime() - b.getTime()).slice(0, limite)
 }
 
+function aulasNoMes(matriculas: MatriculaDto[], ano: number, mes: number): Date[] {
+  const aulas: Date[] = []
+  const quantidadeDias = new Date(ano, mes + 1, 0).getDate()
+
+  for (const matricula of matriculas) {
+    const [hora, minuto] = matricula.turma.horarioInicio.split(":").map(Number)
+    const dias = matricula.turma.diasSemana.split(",").map((dia) => dia.trim())
+    const inicio = new Date(`${matricula.turma.dataInicio}T00:00:00`)
+    const fim = matricula.turma.dataFim ? new Date(`${matricula.turma.dataFim}T23:59:59`) : null
+
+    for (let dia = 1; dia <= quantidadeDias; dia++) {
+      const data = new Date(ano, mes, dia, hora, minuto)
+      if (data < inicio || (fim && data > fim) || !dias.includes(DIAS_DA_SEMANA[data.getDay()])) continue
+      aulas.push(data)
+    }
+  }
+
+  return aulas.sort((a, b) => a.getTime() - b.getTime())
+}
+
 export function AlunoPage() {
   const { t, i18n } = useTranslation(["student", "common"])
   const perfil = usePerfil()
   const [modalAberto, setModalAberto] = useState(false)
   const [progressoScorm, setProgressoScorm] = useState<Record<string, number>>({})
   const [erroProgressoScorm, setErroProgressoScorm] = useState("")
+  const [marcos, setMarcos] = useState<Record<string, MarcoCurso>>({})
+  const [erroMarcos, setErroMarcos] = useState("")
+  const [erroUsuario, setErroUsuario] = useState("")
+  const [mesCalendario, setMesCalendario] = useState(() => new Date())
   const { data } = useCursos({ tamanho: 48 })
   const { data: matriculasApi } = useMatriculas(perfil?.email)
 
   useEffect(() => {
     if (!perfil) setModalAberto(true)
   }, [perfil])
+
+  useEffect(() => {
+    if (!gestaoLocalHabilitada || !perfil?.email) return
+
+    let ativo = true
+    setErroUsuario("")
+    obterUsuarioGestaoPorEmail(perfil.email)
+      .then((usuario) => {
+        if (!ativo || !usuario) return
+        const nomeCompleto = usuario.nome.trim()
+        const [nome, ...sobrenome] = nomeCompleto.split(/\s+/)
+        const papel = papelDeGestao(usuario.papel)
+        if (
+          nomeCompleto &&
+          (perfil.nome !== nome || perfil.sobrenome !== sobrenome.join(" ") || perfil.papel !== papel)
+        ) {
+          atualizarPerfil({ nome, sobrenome: sobrenome.join(" "), papel })
+        }
+      })
+      .catch((falha: unknown) => {
+        if (ativo) {
+          setErroUsuario(
+            falha instanceof Error ? falha.message : "Não foi possível sincronizar seu perfil com a conta local.",
+          )
+        }
+      })
+    return () => {
+      ativo = false
+    }
+  }, [perfil?.email])
 
   useEffect(() => {
     if (!perfil?.email) {
@@ -126,10 +194,31 @@ export function AlunoPage() {
     }
   }, [perfil?.email, perfil?.matriculas, matriculasApi])
 
+  useEffect(() => {
+    if (!gestaoLocalHabilitada || !perfil?.email) {
+      setMarcos({})
+      return
+    }
+
+    let ativo = true
+    setErroMarcos("")
+    obterMarcosCurso(perfil.email)
+      .then((lista) => {
+        if (ativo) setMarcos(Object.fromEntries(lista.map((marco) => [marco.cursoSlug, marco])))
+      })
+      .catch((falha: unknown) => {
+        if (ativo) setErroMarcos(falha instanceof Error ? falha.message : "Não foi possível carregar as datas dos cursos.")
+      })
+    return () => {
+      ativo = false
+    }
+  }, [perfil?.email])
+
   const cursos = data?.itens ?? []
   const porSlug = new Map(cursos.map((curso) => [curso.slug, curso]))
-  const matriculas = (perfil?.matriculas ?? []).map((matricula) => {
+  const matriculas: Matricula[] = (perfil?.matriculas ?? []).map((matricula) => {
     const daApi = matriculasApi?.find((item) => item.curso.slug === matricula.slug)
+    const marco = marcos[matricula.slug]
     const progressoLocal = perfil?.email
       ? carregarProgressoAva(matricula.slug, perfil.email)?.percentualMaximo ?? 0
       : 0
@@ -140,23 +229,69 @@ export function AlunoPage() {
           ...matricula,
           progresso: Math.max(matricula.progresso, daApi.progresso, progressoLocal, progressoDoScorm),
           matriculadoEm: daApi.dataMatricula.slice(0, 10),
+          iniciadoEm: marco?.iniciadoEm?.slice(0, 10),
+          concluidoEm: marco?.concluidoEm?.slice(0, 10),
+          concluido: matricula.concluido || daApi.concluido || Boolean(marco?.concluidoEm),
         }
-      : { ...matricula, progresso: Math.max(matricula.progresso, progressoLocal, progressoDoScorm) }
+      : {
+          ...matricula,
+          progresso: Math.max(matricula.progresso, progressoLocal, progressoDoScorm),
+          iniciadoEm: marco?.iniciadoEm?.slice(0, 10),
+          concluidoEm: marco?.concluidoEm?.slice(0, 10),
+          concluido: matricula.concluido || Boolean(marco?.concluidoEm),
+        }
   })
 
   for (const daApi of matriculasApi ?? []) {
     if (!matriculas.some((matricula) => matricula.slug === daApi.curso.slug)) {
       const nova = matriculaDoBackend(daApi)
+      const marco = marcos[daApi.curso.slug]
       const progressoLocal = perfil?.email
         ? carregarProgressoAva(daApi.curso.slug, perfil.email)?.percentualMaximo ?? 0
         : 0
       nova.progresso = Math.max(nova.progresso, progressoLocal, progressoScorm[daApi.curso.slug] ?? 0)
+      nova.iniciadoEm = marco?.iniciadoEm?.slice(0, 10)
+      nova.concluidoEm = marco?.concluidoEm?.slice(0, 10)
+      nova.concluido = nova.concluido || Boolean(marco?.concluidoEm)
       matriculas.push(nova)
     }
   }
 
   const emAndamento = matriculas.filter((matricula) => !matricula.concluido)
   const aulas = matriculasApi?.length ? aulasDasMatriculas(matriculasApi, 8) : proximasAulas(4)
+  const diasNoMes = new Date(mesCalendario.getFullYear(), mesCalendario.getMonth() + 1, 0).getDate()
+  const inicioMes = new Date(mesCalendario.getFullYear(), mesCalendario.getMonth(), 1).getDay()
+  const aulasDoMes = matriculasApi?.length
+    ? aulasNoMes(matriculasApi, mesCalendario.getFullYear(), mesCalendario.getMonth())
+    : aulas.filter((aula) =>
+        aula.getFullYear() === mesCalendario.getFullYear() && aula.getMonth() === mesCalendario.getMonth(),
+      )
+  const eventosMarco = matriculas.flatMap((matricula) => {
+    const curso = porSlug.get(matricula.slug)
+    return [
+      ...(matricula.iniciadoEm ? [{ data: matricula.iniciadoEm, titulo: `Início: ${curso?.nomeBreve ?? matricula.slug}`, tipo: "início" as const }] : []),
+      ...(matricula.concluidoEm ? [{ data: matricula.concluidoEm, titulo: `Conclusão: ${curso?.nomeBreve ?? matricula.slug}`, tipo: "conclusão" as const }] : []),
+    ]
+  })
+  const eventosMarcoDoMes = eventosMarco.filter((evento) => {
+    const data = new Date(`${evento.data}T00:00:00`)
+    return data.getFullYear() === mesCalendario.getFullYear() && data.getMonth() === mesCalendario.getMonth()
+  })
+  const eventosCalendario = [
+    ...aulasDoMes.map((data, indice) => ({
+      data,
+      titulo: tituloDaAula(emAndamento[indice % Math.max(emAndamento.length, 1)]) || t("student:calendar.nextClasses"),
+      tipo: "Aula",
+    })),
+    ...eventosMarcoDoMes.map((evento) => ({
+      data: new Date(`${evento.data}T00:00:00`),
+      titulo: evento.titulo,
+      tipo: evento.tipo,
+    })),
+  ].sort((a, b) => a.data.getTime() - b.data.getTime())
+  const mesAtual = mesCalendario.toLocaleDateString(i18n.language, { month: "long", year: "numeric" })
+  const alterarMesCalendario = (quantidade: number) =>
+    setMesCalendario((atual) => new Date(atual.getFullYear(), atual.getMonth() + quantidade, 1))
 
   if (!perfil) {
     return (
@@ -252,6 +387,16 @@ export function AlunoPage() {
               {erroProgressoScorm}
             </p>
           )}
+          {erroMarcos && (
+            <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 lg:col-span-2">
+              {erroMarcos}
+            </p>
+          )}
+          {erroUsuario && (
+            <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 lg:col-span-2">
+              {erroUsuario}
+            </p>
+          )}
           <div className="flex flex-col gap-10">
             <section aria-labelledby="cursos-andamento">
               <div className="mb-4 flex items-center justify-between">
@@ -344,6 +489,8 @@ export function AlunoPage() {
                             <p className="text-xs text-[var(--sesi-muted)]">
                               {t("student:courses.since", { data: formatarData(matricula.matriculadoEm, i18n.language) })}
                             </p>
+                            {matricula.iniciadoEm && <p className="text-xs text-[var(--sesi-muted)]">Iniciado em {formatarData(matricula.iniciadoEm, i18n.language)}</p>}
+                            {matricula.concluidoEm && <p className="text-xs text-green-700">Concluído em {formatarData(matricula.concluidoEm, i18n.language)}</p>}
                           </td>
                           <td className="hidden px-4 py-3 text-[var(--sesi-muted)] sm:table-cell">
                             {curso?.modalidade.nome ?? "—"}
@@ -371,9 +518,25 @@ export function AlunoPage() {
               </h2>
               <div className="grid gap-6 rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white p-5 sm:grid-cols-[1fr_240px]">
                 <div>
-                  <p className="mb-3 text-sm font-semibold capitalize text-[var(--sesi-black)]">
-                    {new Date().toLocaleDateString(i18n.language, { month: "long", year: "numeric" })}
-                  </p>
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => alterarMesCalendario(-1)}
+                      aria-label="Mês anterior"
+                      className="grid h-9 w-9 place-items-center rounded-full border border-[var(--sesi-gray)] text-lg hover:border-[var(--sesi-red)]"
+                    >
+                      ‹
+                    </button>
+                    <p aria-live="polite" className="text-sm font-semibold capitalize text-[var(--sesi-black)]">{mesAtual}</p>
+                    <button
+                      type="button"
+                      onClick={() => alterarMesCalendario(1)}
+                      aria-label="Próximo mês"
+                      className="grid h-9 w-9 place-items-center rounded-full border border-[var(--sesi-gray)] text-lg hover:border-[var(--sesi-red)]"
+                    >
+                      ›
+                    </button>
+                  </div>
                   <div className="grid grid-cols-7 gap-1 text-center text-xs text-[var(--sesi-muted)]" aria-hidden="true">
                     {t("student:calendar.weekdays").split(",").map((dia) => (
                       <span key={dia} className="py-1 font-semibold">
@@ -382,58 +545,65 @@ export function AlunoPage() {
                     ))}
                   </div>
                   <div className="grid grid-cols-7 gap-1 text-center text-sm">
-                    {Array.from({ length: new Date(new Date().getFullYear(), new Date().getMonth(), 1).getDay() }).map((_, indice) => (
+                    {Array.from({ length: inicioMes }).map((_, indice) => (
                       <span key={`vazio-${indice}`} />
                     ))}
-                    {Array.from({ length: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() }).map((_, indice) => {
+                    {Array.from({ length: diasNoMes }).map((_, indice) => {
                       const dia = indice + 1
-                      const data = new Date(new Date().getFullYear(), new Date().getMonth(), dia)
+                      const data = new Date(mesCalendario.getFullYear(), mesCalendario.getMonth(), dia)
                       const chave = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}-${String(dia).padStart(2, "0")}`
                       const temAula = aulas.some((aula) => {
                         const chaveAula = `${aula.getFullYear()}-${String(aula.getMonth() + 1).padStart(2, "0")}-${String(aula.getDate()).padStart(2, "0")}`
                         return chaveAula === chave
                       })
-                      const hoje = dia === new Date().getDate()
+                      const marcoDia = eventosMarcoDoMes.filter((evento) => evento.data === chave)
+                      const hoje = data.toDateString() === new Date().toDateString()
+                      const temMarco = marcoDia.length > 0
                       return (
                         <span
                           key={chave}
+                          aria-label={[
+                            data.toLocaleDateString(i18n.language),
+                            ...(temAula ? [t("student:calendar.nextClasses")] : []),
+                            ...marcoDia.map((evento) => evento.titulo),
+                          ].join(", ")}
                           className={`grid aspect-square place-items-center rounded-full text-sm ${
-                            temAula
+                            temAula || temMarco
                               ? "bg-[var(--sesi-red)] font-semibold text-white"
                               : hoje
                                 ? "border border-[var(--sesi-black)] font-semibold text-[var(--sesi-black)]"
                                 : "text-[var(--sesi-black)]"
                           }`}
-                          title={temAula ? t("student:calendar.nextClasses") : undefined}
+                          title={temAula || temMarco ? [...(temAula ? [t("student:calendar.nextClasses")] : []), ...marcoDia.map((evento) => evento.titulo)].join(" · ") : undefined}
                         >
-                          {dia}
+                          <span>{dia}</span>
+                          {temMarco && <span className="sr-only">Curso: {marcoDia.map((evento) => evento.tipo).join(", ")}</span>}
                         </span>
                       )
                     })}
                   </div>
                 </div>
                 <div className="border-t border-[var(--sesi-gray)] pt-4 sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
-                  <p className="mb-3 text-sm font-bold text-[var(--sesi-black)]">{t("student:calendar.nextClasses")}</p>
-                  <ul className="flex flex-col gap-3">
-                    {aulas.map((aula, indice) => {
-                      const matricula = emAndamento[indice % Math.max(emAndamento.length, 1)]
+                  <p className="mb-3 text-sm font-bold text-[var(--sesi-black)]">Eventos do mês</p>
+                  {eventosCalendario.length > 0 ? <ul className="flex flex-col gap-3">
+                    {eventosCalendario.map((evento, indice) => {
                       return (
-                        <li key={aula.toISOString()} className="flex gap-3">
+                        <li key={`${evento.tipo}-${evento.data.toISOString()}-${indice}`} className="flex gap-3">
                           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[var(--radius-lg)] bg-[#F5F5F5] text-xs font-bold text-[var(--sesi-red)]">
-                            {aula.getDate().toString().padStart(2, "0")}/{ (aula.getMonth() + 1).toString().padStart(2, "0")}
+                            {evento.data.getDate().toString().padStart(2, "0")}/{(evento.data.getMonth() + 1).toString().padStart(2, "0")}
                           </span>
                           <div>
-                            <p className="text-sm font-semibold leading-tight text-[var(--sesi-black)]">
-                              {tituloDaAula(matricula) || t("student:calendar.nextClasses")}
-                            </p>
+                            <p className="text-sm font-semibold leading-tight text-[var(--sesi-black)]">{evento.titulo}</p>
                             <p className="text-xs text-[var(--sesi-muted)]">
-                              {aula.toLocaleTimeString(i18n.language, { hour: "2-digit", minute: "2-digit" })}
+                              {evento.tipo === "Aula"
+                                ? evento.data.toLocaleTimeString(i18n.language, { hour: "2-digit", minute: "2-digit" })
+                                : evento.tipo}
                             </p>
                           </div>
                         </li>
                       )
                     })}
-                  </ul>
+                  </ul> : <p className="text-sm text-[var(--sesi-muted)]">Nenhum evento neste mês.</p>}
                 </div>
               </div>
             </section>
@@ -470,7 +640,7 @@ export function AlunoPage() {
 
             <section className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white p-5">
               <h2 className="mb-4 text-lg font-bold text-[var(--sesi-black)]">{t("student:certificates.title")}</h2>
-              {perfil.certificados.length === 0 ? (
+              {perfil.certificados.length === 0 && !matriculas.some((matricula) => matricula.concluidoEm) ? (
                 <p className="text-sm text-[var(--sesi-muted)]">{t("student:certificates.empty")}</p>
               ) : (
                 <ul className="flex flex-col gap-4">
@@ -488,6 +658,20 @@ export function AlunoPage() {
                       </div>
                     </li>
                   ))}
+                  {matriculas.filter((matricula) => matricula.concluidoEm).map((matricula) => {
+                    const curso = porSlug.get(matricula.slug)
+                    return (
+                      <li key={`marco-${matricula.slug}`} className="flex gap-3 border-b border-[var(--sesi-gray)] pb-4 last:border-0 last:pb-0">
+                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--sesi-beige)] text-lg" aria-hidden="true">★</span>
+                        <div>
+                          <p className="text-sm font-semibold leading-tight text-[var(--sesi-black)]">{curso?.nomeBreve ?? matricula.slug}</p>
+                          <p className="text-xs text-[var(--sesi-muted)]">
+                            {t("student:certificates.hours", { count: curso?.cargaHoraria ?? 0 })} · {t("student:certificates.issued", { data: formatarData(matricula.concluidoEm ?? "", i18n.language) })}
+                          </p>
+                        </div>
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
             </section>
@@ -513,6 +697,12 @@ export function AlunoPage() {
                   className="mt-4 block w-full rounded-[var(--radius-lg)] bg-[var(--sesi-red)] px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-[var(--sesi-red-dark)]"
                 >
                   {t("student:admin.open")}
+                </Link>
+                <Link
+                  to="/admin/gestao"
+                  className="mt-2 block w-full rounded-[var(--radius-lg)] border border-[var(--sesi-red)] px-4 py-2.5 text-center text-sm font-semibold text-[var(--sesi-red)] transition hover:bg-[var(--sesi-red)] hover:text-white"
+                >
+                  Usuários, permissões e chamados
                 </Link>
               </section>
             )}

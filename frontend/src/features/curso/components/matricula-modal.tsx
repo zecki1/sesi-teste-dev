@@ -6,6 +6,7 @@ import type { CursoDetalheDto, TurmaDto } from "@/lib/api/catalogo"
 import { criarMatricula } from "@/lib/api/catalogo"
 import { useTurmas } from "@/hooks/use-catalogo"
 import { usePerfil } from "@/lib/auth/perfil"
+import { useBodyScrollLock } from "@/lib/ui/use-body-scroll-lock"
 
 interface MatriculaModalProps {
   curso: CursoDetalheDto
@@ -37,6 +38,7 @@ export function MatriculaModal({ curso, aberto, onFechar }: MatriculaModalProps)
   const dialogRef = useRef<HTMLDivElement>(null)
   const sucessoRef = useRef<HTMLAnchorElement>(null)
   const onFecharRef = useRef(onFechar)
+  useBodyScrollLock(aberto)
 
   useEffect(() => {
     if (sucesso) sucessoRef.current?.focus()
@@ -83,11 +85,8 @@ export function MatriculaModal({ curso, aberto, onFechar }: MatriculaModalProps)
     }
 
     document.addEventListener("keydown", aoTeclar)
-    const overflowAnterior = document.body.style.overflow
-    document.body.style.overflow = "hidden"
     return () => {
       document.removeEventListener("keydown", aoTeclar)
-      document.body.style.overflow = overflowAnterior
       focoAnterior?.focus()
     }
   }, [aberto])
@@ -131,7 +130,8 @@ export function MatriculaModal({ curso, aberto, onFechar }: MatriculaModalProps)
         role="dialog"
         aria-modal="true"
         aria-labelledby="matricula-titulo"
-        className="relative max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl sm:p-8"
+        data-lenis-prevent
+        className="relative max-h-[min(92dvh,92vh)] w-full max-w-2xl overflow-y-auto overscroll-contain rounded-2xl bg-white p-6 shadow-2xl sm:p-8"
       >
         <button
           ref={fecharRef}

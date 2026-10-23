@@ -36,4 +36,5 @@ export function aplicarNaRaiz(config: ConfigAcessibilidade) {
 
 export function salvarConfig(config: ConfigAcessibilidade) {
   window.localStorage.setItem(CHAVE_ACESSIBILIDADE, JSON.stringify(config))
+  window.dispatchEvent(new CustomEvent("sesi:acessibilidade-atualizada", { detail: config }))
 }

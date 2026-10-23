@@ -26,14 +26,31 @@ internal static class Mapeador
 
     public static CursoResumoDto ParaResumoDto(this Curso c) =>
         new(c.Id, c.NomeCompleto, c.NomeBreve, c.Slug, c.Descricao, c.CargaHoraria,
-            c.PublicoAlvo, c.ImagemUrl, c.DataDisponibilizacao, c.Destaque,
-            c.Categoria!.ParaDto(), c.Modalidade!.ParaDto(), c.Status!.ParaDto());
+            c.PublicoAlvo, c.ImagemUrl, c.DataDisponibilizacao, c.DataPublicacao,
+            c.DataLiberacaoMatricula, c.EtapaDesenvolvimento, c.Destaque,
+            c.Categoria!.ParaDto(), c.Modalidade!.ParaDto(), StatusOferta(c));
 
     public static CursoDetalheDto ParaDetalheDto(this Curso c) =>
         new(c.Id, c.NomeCompleto, c.NomeBreve, c.Slug, c.Descricao, c.CargaHoraria,
-            c.PublicoAlvo, c.ImagemUrl, c.DataDisponibilizacao, c.Destaque,
-            c.Categoria!.ParaDto(), c.Modalidade!.ParaDto(), c.Status!.ParaDto(),
+            c.PublicoAlvo, c.ImagemUrl, c.DataDisponibilizacao, c.DataPublicacao,
+            c.DataLiberacaoMatricula, c.EtapaDesenvolvimento, c.Destaque,
+            c.Categoria!.ParaDto(), c.Modalidade!.ParaDto(), StatusOferta(c),
             c.Modulos.OrderBy(m => m.Ordem).Select(ParaDto).ToList());
+
+    private static StatusCursoDto StatusOferta(Curso curso)
+    {
+        var status = curso.Status!.ParaDto();
+        var hoje = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (curso.EtapaDesenvolvimento != "Publicado" ||
+            curso.DataPublicacao is { } publicacao && publicacao > hoje ||
+            curso.DataLiberacaoMatricula is not { } liberacao)
+            return status;
+
+        if (liberacao > hoje) return status with { Nome = "Em breve", Slug = "em-breve" };
+        if (curso.DataDisponibilizacao is null || curso.DataDisponibilizacao > hoje)
+            return status with { Nome = "Inscrições abertas", Slug = "inscricoes-abertas" };
+        return status with { Nome = "Disponível", Slug = "disponivel" };
+    }
 
     public static TurmaDto ParaDto(this Turma t) =>
         new(t.Id, t.CursoId, t.Codigo, t.Modalidade!.ParaDto(), t.DataInicio, t.DataFim,

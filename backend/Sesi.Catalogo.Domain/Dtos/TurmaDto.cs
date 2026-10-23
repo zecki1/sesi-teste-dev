@@ -52,4 +52,7 @@ public record CursoSalvarRequest(
     string CategoriaSlug,
     string ModalidadeSlug,
     string StatusSlug,
-    IReadOnlyList<ModuloSalvarDto>? Modulos = null);
+    IReadOnlyList<ModuloSalvarDto>? Modulos = null,
+    string? EtapaDesenvolvimento = null,
+    DateOnly? DataPublicacao = null,
+    DateOnly? DataLiberacaoMatricula = null);

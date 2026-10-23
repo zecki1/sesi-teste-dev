@@ -1,9 +1,9 @@
 import { useState } from "react"
 import { Link } from "react-router-dom"
 import { Container } from "@/components/layout/container"
-import videoThumb from "@/assets/video-thumb.png"
 
 const VIDEO_ID = "UOALUskXHcY"
+const videoThumb = "/images/video-thumb.webp"
 
 export function CtaFinal() {
   const [playing, setPlaying] = useState(false)
@@ -49,6 +49,10 @@ export function CtaFinal() {
               <img
                 src={videoThumb}
                 alt="Apresentação dos cursos SESI Indústria"
+                width="1200"
+                height="675"
+                loading="lazy"
+                decoding="async"
                 className="h-full w-full object-cover"
               />
               <button

@@ -1,36 +1,79 @@
-import { Link, useParams } from "react-router-dom"
-import { useEffect, useState, type ReactNode } from "react"
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom"
+import { useEffect, useRef, useState } from "react"
 import { useCurso } from "@/hooks/use-catalogo"
 import { ApiError, API_URL } from "@/lib/api/catalogo"
 import { usePerfil } from "@/lib/auth/perfil"
+import { useScormAcessibilidade } from "@/features/scorm/use-scorm-acessibilidade"
 import { MainLayout } from "@/components/layout/main-layout"
 import { Container } from "@/components/layout/container"
 import { Button } from "@/components/ui/button"
-import { IconeCategoria, estiloBadgeCategoria } from "@/lib/ui/icones-categoria"
-import bannerPadrao from "@/assets/case/banner-ava.png"
-import logoWhite from "@/assets/logo-sesi-industria-white.svg"
+import { HeroCurso } from "@/features/curso/components/hero-curso"
+import { BeneficiosCurso } from "@/features/curso/components/beneficios-curso"
+import { SobreCurso } from "@/features/curso/components/sobre-curso"
+import { DepoimentosCurso } from "@/features/curso/components/depoimentos-curso"
+import { AjudaCurso } from "@/features/curso/components/ajuda-curso"
+import { FaixaMatricula } from "@/features/curso/components/faixa-matricula"
+import { MatriculaModal } from "@/features/curso/components/matricula-modal"
 import { configScormEfetiva } from "./scorm-config"
 import {
+  obterConfiguracaoPaginaScorm,
   obterPacoteScorm,
   obterProgressoScorm,
   urlPlayerScorm,
   type PacoteScormDto,
+  type ScormPaginaConfigDto,
 } from "./scorm-api"
-
-function Meta({ children }: { children: ReactNode }) {
-  return <li className="flex items-center gap-2 text-sm text-white/85">{children}</li>
-}
+import { gestaoLocalHabilitada, registrarMarcoCurso } from "@/lib/api/gestao"
 
 export function ScormCursoPage() {
   const { slug } = useParams<{ slug: string }>()
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
   const { data: curso, isLoading, isError, error } = useCurso(slug || "")
   const perfil = usePerfil()
   const [pacote, setPacote] = useState<PacoteScormDto | null>(null)
   const [carregandoPacote, setCarregandoPacote] = useState(true)
   const [erroPacote, setErroPacote] = useState("")
   const [erroProgresso, setErroProgresso] = useState("")
+  const [erroConfiguracao, setErroConfiguracao] = useState("")
+  const [configuracaoRemota, setConfiguracaoRemota] = useState<ScormPaginaConfigDto | null>(null)
   const [progresso, setProgresso] = useState(0)
   const [statusScorm, setStatusScorm] = useState("")
+  const [matriculaAberta, setMatriculaAberta] = useState(false)
+  const conclusaoRegistrada = useRef(false)
+  const emPlayer = pathname.endsWith("/scorm/player")
+  useScormAcessibilidade(Boolean(pacote && emPlayer), pacote?.id)
+
+  useEffect(() => {
+    conclusaoRegistrada.current = false
+  }, [slug, perfil?.email])
+
+  useEffect(() => {
+    if (!gestaoLocalHabilitada || !emPlayer || !slug || !perfil?.email) return
+    registrarMarcoCurso(slug, perfil.email, "inicio").catch((falha: unknown) => {
+      setErroProgresso(falha instanceof Error ? falha.message : "Não foi possível registrar o início do curso.")
+    })
+  }, [emPlayer, slug, perfil?.email])
+
+  useEffect(() => {
+    if (!slug || !curso) return
+    let ativo = true
+    setErroConfiguracao("")
+    obterConfiguracaoPaginaScorm(slug)
+      .then((salva) => {
+        if (ativo) setConfiguracaoRemota(salva)
+      })
+      .catch((falha: unknown) => {
+        if (ativo) {
+          setConfiguracaoRemota(null)
+          setErroConfiguracao(falha instanceof Error ? falha.message : "Não foi possível carregar a configuração da página SCORM.")
+        }
+      })
+
+    return () => {
+      ativo = false
+    }
+  }, [slug, curso])
 
   useEffect(() => {
     if (!slug) return
@@ -100,6 +143,38 @@ export function ScormCursoPage() {
     return () => window.removeEventListener("message", aoReceberMensagem)
   }, [])
 
+  useEffect(() => {
+    const statusConcluido = ["completed", "passed", "complete"].includes(statusScorm.toLowerCase())
+    if (
+      !gestaoLocalHabilitada ||
+      !emPlayer ||
+      !slug ||
+      !perfil?.email ||
+      conclusaoRegistrada.current ||
+      (progresso < 100 && !statusConcluido)
+    ) return
+
+    conclusaoRegistrada.current = true
+    registrarMarcoCurso(slug, perfil.email, "conclusao", progresso)
+      .then((marco) => {
+        const chaveAviso = `sesi.certificado.mostrado.${slug}::${perfil.email.toLowerCase()}`
+        if (window.localStorage.getItem(chaveAviso) || !marco.concluidoEm) return
+        window.localStorage.setItem(chaveAviso, "1")
+        window.dispatchEvent(new CustomEvent("sesi:curso-concluido", {
+          detail: {
+            slug,
+            titulo: curso?.nomeCompleto ?? slug,
+            aluno: `${perfil.nome} ${perfil.sobrenome}`.trim(),
+            concluidoEm: marco.concluidoEm,
+          },
+        }))
+      })
+      .catch((falha: unknown) => {
+        conclusaoRegistrada.current = false
+        setErroProgresso(falha instanceof Error ? falha.message : "Não foi possível registrar a conclusão do curso.")
+      })
+  }, [emPlayer, slug, perfil?.email, perfil?.nome, perfil?.sobrenome, progresso, statusScorm, curso?.nomeCompleto])
+
   if (isLoading) {
     return (
       <MainLayout>
@@ -123,7 +198,7 @@ export function ScormCursoPage() {
           <p className="max-w-xl text-[var(--sesi-muted)]">
             {naoEncontrado
               ? "O curso que você procura não existe ou saiu do catálogo."
-              : "Verifique sua conexão com a internet e tente novamente."}
+              : "A API não respondeu. Verifique se o serviço está em execução e tente novamente."}
           </p>
           <Link to="/catalogo">
             <Button variant="primary" className="mt-2">Voltar ao catálogo</Button>
@@ -133,261 +208,188 @@ export function ScormCursoPage() {
     )
   }
 
-  const config = configScormEfetiva(curso)
-  const banner = config.bannerUrl || bannerPadrao
+  const config = configScormEfetiva(curso, configuracaoRemota)
   const subtitulo = config.subtitulo || `${curso.categoria.nome} · ${curso.modalidade.nome} · Curso autoinstrucional`
   const versaoEfetiva = pacote?.versao ?? config.versao
   const urlPlayer = pacote ? urlPlayerScorm(pacote, perfil?.email ?? "anonimo") : config.urlLancamento
   const temPlayer = Boolean(urlPlayer)
 
-  const irParaConteudo = () => {
-    document.getElementById("conteudo-scorm")?.scrollIntoView({ behavior: "smooth", block: "start" })
+  const irParaConteudo = () => navigate(`/curso/${curso.slug}/scorm/player`)
+
+  if (emPlayer) {
+    return (
+      <MainLayout showFooter={false}>
+        <section className="flex min-h-[calc(100svh-72px)] flex-col">
+          <Container className="flex w-full items-center justify-between gap-4 border-b border-[var(--sesi-gray)] py-4">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--sesi-muted)]">Curso SCORM {versaoEfetiva}</p>
+              <h1 className="truncate text-lg font-bold text-[var(--sesi-black)] sm:text-xl">{config.titulo}</h1>
+            </div>
+            <div className="shrink-0 text-right">
+              <span className="block text-xs text-[var(--sesi-muted)]">Progresso</span>
+              <strong className="text-sm text-[var(--sesi-black)]">{progresso}%</strong>
+            </div>
+          </Container>
+
+          {temPlayer ? (
+            <iframe
+              data-player-scorm
+              src={urlPlayer}
+              title={`Conteúdo SCORM do curso ${curso.nomeBreve}`}
+              className="h-[calc(100svh-150px)] min-h-[420px] w-full border-0"
+              allow="fullscreen"
+            />
+          ) : carregandoPacote ? (
+            <div data-player-carregando className="grid min-h-[420px] flex-1 place-items-center px-6 py-10 text-sm text-[var(--sesi-muted)]">
+              Carregando player SCORM...
+            </div>
+          ) : (
+            <Container className="flex flex-1 flex-col items-center justify-center gap-4 py-12 text-center">
+              <p role={erroPacote ? "alert" : undefined} className={erroPacote ? "text-sm text-[var(--sesi-red)]" : "text-sm text-[var(--sesi-muted)]"}>
+                {erroPacote
+                  ? `Não foi possível carregar o pacote SCORM. ${erroPacote}`
+                  : "Nenhum pacote SCORM foi publicado para este curso."}
+              </p>
+              <Button type="button" variant="secondary" onClick={() => navigate(`/curso/${curso.slug}/scorm`)}>
+                Voltar aos detalhes do curso
+              </Button>
+            </Container>
+          )}
+        </section>
+      </MainLayout>
+    )
   }
 
   return (
     <MainLayout>
-      <section data-banner-scorm className="relative overflow-hidden bg-[var(--sesi-black)] py-14 text-white sm:py-20">
-        <img src={banner} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover opacity-35" />
-        <div aria-hidden="true" className="absolute inset-0 bg-[linear-gradient(90deg,rgba(12,12,13,0.95)_0%,rgba(12,12,13,0.75)_55%,rgba(12,12,13,0.35)_100%)]" />
+      <HeroCurso
+        curso={curso}
+        titulo={config.titulo}
+        subtitulo={subtitulo}
+        imagemUrl={config.imagemUrl || undefined}
+        imagemFundoUrl={config.bannerUrl || undefined}
+        cargaHoraria={config.cargaHoraria}
+        textoCta={config.botaoTexto}
+        aoClicarCta={irParaConteudo}
+        onMatricular={() => setMatriculaAberta(true)}
+        dataScorm
+      />
+      <BeneficiosCurso />
 
-        <Container className="relative grid gap-10 lg:grid-cols-12 lg:items-center">
-          <div className="flex flex-col gap-5 lg:col-span-7">
-            <img src={logoWhite} alt="SESI Indústria" className="h-8 w-auto" />
-            <span
-              style={estiloBadgeCategoria(curso.categoria.cor)}
-              className="flex w-fit items-center gap-2 rounded px-3 py-1.5 text-xs font-semibold uppercase tracking-wide"
-            >
-              <IconeCategoria slug={curso.categoria.slug} className="h-4 w-4 shrink-0" />
-              {curso.categoria.nome}
-            </span>
-            <h1 data-titulo-scorm className="font-['Open_Sans_Condensed',sans-serif] text-4xl font-bold leading-[1.05] sm:text-5xl">
-              {config.titulo}
-            </h1>
-            <p className="max-w-2xl text-base text-white/85">{subtitulo}</p>
-            <ul className="flex flex-wrap gap-x-6 gap-y-2">
-              <Meta>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
-                  <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                </svg>
-                Carga horária: <strong data-carga-scorm>{config.cargaHoraria}h</strong>
-              </Meta>
-              <Meta>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M4 7h16v12H4z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-                  <path d="M4 7l8-4 8 4" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-                </svg>
-                {curso.modalidade.nome}
-              </Meta>
-              <Meta>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M12 3l8 4v6c0 4.2-3.2 7.4-8 8.6C7.2 20.4 4 17.2 4 13V7l8-4z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-                  <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                Certificação SESI
-              </Meta>
-            </ul>
-            <div className="mt-2 flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={irParaConteudo}
-                className="inline-flex items-center gap-2 rounded-[var(--radius-lg)] bg-[var(--sesi-red)] px-6 py-3 text-base font-semibold text-white transition hover:bg-[var(--sesi-red-dark)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-              >
-                {config.botaoTexto}
-                <span aria-hidden="true">→</span>
-              </button>
-              <Link
-                to={`/curso/${curso.slug}`}
-                className="inline-flex items-center gap-2 rounded-[var(--radius-lg)] border border-white/40 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white hover:text-[var(--sesi-black)]"
-              >
-                Ver página do curso
-              </Link>
-            </div>
-          </div>
+      <section id="conteudo-scorm" className="scroll-mt-[88px] py-12 sm:py-16">
+        <Container className="grid gap-10 lg:grid-cols-12">
+          <div className="lg:col-span-8">
+            <h2 className="font-['Open_Sans_Condensed',sans-serif] text-3xl font-bold sm:text-4xl">Conteúdo do curso</h2>
+            <p className="mt-2 text-sm text-[var(--sesi-muted)]">
+              Pacote SCORM {versaoEfetiva}; seu progresso é salvo enquanto você realiza as aulas.
+            </p>
+            {erroConfiguracao && (
+              <p role="alert" className="mt-4 rounded-[var(--radius-lg)] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                Não foi possível consultar a configuração salva no servidor. Exibindo os dados disponíveis neste navegador. {erroConfiguracao}
+              </p>
+            )}
 
-          <div className="lg:col-span-5">
-            <div className="overflow-hidden rounded-[var(--radius-lg)] border border-white/15 bg-white/5 p-2 backdrop-blur-sm">
-              {config.imagemUrl ? (
-                <img
-                  data-imagem-scorm
-                  src={config.imagemUrl}
-                  alt={`Capa do curso ${curso.nomeBreve}`}
-                  className="aspect-[4/3] w-full rounded object-cover"
-                />
+            <div className="mt-5 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white">
+              {temPlayer ? (
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--sesi-gray)] px-4 py-2 text-xs text-[var(--sesi-muted)]">
+                    <span className="font-semibold uppercase tracking-wide">Progresso do aluno</span>
+                    <span className="flex items-center gap-3">
+                      {statusScorm && (
+                        <span data-status-scorm className="rounded bg-[var(--sesi-gray)] px-2 py-0.5 font-semibold text-[var(--sesi-black)]">
+                          {statusScorm}
+                        </span>
+                      )}
+                      <strong className="text-[var(--sesi-black)]">{progresso}%</strong>
+                    </span>
+                  </div>
+                  <div className="h-1 bg-[var(--sesi-gray)]">
+                    <div className="h-full bg-[var(--sesi-red)] transition-[width] duration-300" style={{ width: `${progresso}%` }} />
+                  </div>
+                  {erroPacote && <p role="alert" className="border-b border-[var(--sesi-gray)] px-4 py-2 text-sm text-[var(--sesi-red)]">{erroPacote}</p>}
+                  {erroProgresso && <p role="alert" className="border-b border-[var(--sesi-gray)] px-4 py-2 text-sm text-[var(--sesi-red)]">{erroProgresso}</p>}
+                  <div className="flex flex-col items-start gap-4 bg-[#F5F5F5] px-6 py-8 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h3 className="font-semibold text-[var(--sesi-black)]">Seu curso está pronto</h3>
+                      <p className="mt-1 text-sm text-[var(--sesi-muted)]">Continue de onde parou. Seu progresso é salvo durante as aulas.</p>
+                    </div>
+                    <Link
+                      to={`/curso/${curso.slug}/scorm/player`}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--sesi-red)] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[var(--sesi-red-dark)]"
+                    >
+                      {progresso > 0 ? "Continuar curso" : "Iniciar curso"}
+                      <span aria-hidden="true">→</span>
+                    </Link>
+                  </div>
+                </>
+              ) : carregandoPacote ? (
+                <div data-player-carregando className="grid min-h-[280px] place-items-center bg-[#F5F5F5] px-6 py-10 text-sm text-[var(--sesi-muted)]">
+                  Carregando player SCORM...
+                </div>
+              ) : erroPacote ? (
+                <div role="alert" className="bg-red-50 px-6 py-10 text-sm text-red-800">
+                  Não foi possível carregar o pacote SCORM. {erroPacote}
+                </div>
               ) : (
-                <div className="grid aspect-[4/3] w-full place-items-center rounded bg-white/10 text-sm text-white/70">
-                  Sem imagem configurada
+                <div data-player-demonstrativo className="flex flex-col items-center gap-4 bg-[#F5F5F5] px-6 py-14 text-center">
+                  <span aria-hidden="true" className="grid h-16 w-16 place-items-center rounded-full bg-[var(--sesi-red)]/10 text-[var(--sesi-red)]">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                      <rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.8" />
+                      <path d="M10 8l5 3-5 3V8z" fill="currentColor" />
+                      <path d="M8 21h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    </svg>
+                  </span>
+                  <h3 className="text-lg font-bold text-[var(--sesi-black)]">Player SCORM</h3>
+                  <p className="max-w-md text-sm text-[#4A4A4A]">
+                    {config.arquivo ? <>O pacote <strong className="text-[var(--sesi-black)]">{config.arquivo}</strong> está registrado no admin.</> : "Nenhum pacote SCORM publicado ainda."}{" "}
+                    Envie o <strong className="text-[var(--sesi-black)]">.zip</strong> no admin do curso para disponibilizar o conteúdo aqui.
+                  </p>
+                  <dl className="mt-2 grid gap-2 text-sm text-[var(--sesi-black)] sm:grid-cols-3">
+                    <div><dt className="text-xs uppercase tracking-wide text-[#4A4A4A]">Versão</dt><dd className="font-semibold">SCORM {versaoEfetiva}</dd></div>
+                    <div><dt className="text-xs uppercase tracking-wide text-[#4A4A4A]">Carga horária</dt><dd className="font-semibold">{config.cargaHoraria}h</dd></div>
+                    <div><dt className="text-xs uppercase tracking-wide text-[#4A4A4A]">Arquivo</dt><dd className="font-semibold">{config.arquivo || "não anexado"}</dd></div>
+                  </dl>
                 </div>
               )}
             </div>
           </div>
-        </Container>
-      </section>
 
-      <section id="conteudo-scorm" className="scroll-mt-[88px] py-12 sm:py-16">
-        <Container className="grid gap-10 lg:grid-cols-12">
-          <div className="flex flex-col gap-10 lg:col-span-8">
-            <div>
-              <h2 className="font-['Open_Sans_Condensed',sans-serif] text-2xl font-bold sm:text-3xl">Conteúdo do curso</h2>
-              <p className="mt-2 text-sm text-[var(--sesi-muted)]">
-                Este curso é entregue como pacote SCORM {versaoEfetiva} e mantém o mesmo padrão de página do catálogo.
-              </p>
-
-              <div className="mt-5 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white">
-                {temPlayer ? (
-                  <>
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--sesi-gray)] px-4 py-2 text-xs text-[var(--sesi-muted)]">
-                      <span className="font-semibold uppercase tracking-wide">Progresso do aluno</span>
-                      <span className="flex items-center gap-3">
-                        {statusScorm && (
-                          <span data-status-scorm className="rounded bg-[var(--sesi-gray)] px-2 py-0.5 font-semibold text-[var(--sesi-black)]">
-                            {statusScorm}
-                          </span>
-                        )}
-                        <strong className="text-[var(--sesi-black)]">{progresso}%</strong>
-                      </span>
-                    </div>
-                    <div className="h-1 bg-[var(--sesi-gray)]">
-                      <div className="h-full bg-[var(--sesi-red)] transition-[width] duration-300" style={{ width: `${progresso}%` }} />
-                    </div>
-                    {erroPacote && (
-                      <p role="alert" className="border-b border-[var(--sesi-gray)] px-4 py-2 text-sm text-[var(--sesi-red)]">
-                        {erroPacote}
-                      </p>
-                    )}
-                    {erroProgresso && (
-                      <p role="alert" className="border-b border-[var(--sesi-gray)] px-4 py-2 text-sm text-[var(--sesi-red)]">
-                        {erroProgresso}
-                      </p>
-                    )}
-                    <iframe
-                      data-player-scorm
-                      src={urlPlayer}
-                      title={`Conteúdo SCORM do curso ${curso.nomeBreve}`}
-                      className="h-[70vh] min-h-[420px] w-full border-0"
-                      allow="fullscreen"
-                    />
-                  </>
-                ) : carregandoPacote ? (
-                  <div data-player-carregando className="grid min-h-[280px] place-items-center bg-[#F5F5F5] px-6 py-10 text-sm text-[var(--sesi-muted)]">
-                    Carregando player SCORM...
-                  </div>
-                ) : erroPacote ? (
-                  <div role="alert" className="bg-red-50 px-6 py-10 text-sm text-red-800">
-                    Não foi possível carregar o pacote SCORM. {erroPacote}
-                  </div>
-                ) : (
-                  <div data-player-demonstrativo className="flex flex-col items-center gap-4 bg-[#F5F5F5] px-6 py-14 text-center">
-                    <span aria-hidden="true" className="grid h-16 w-16 place-items-center rounded-full bg-[var(--sesi-red)]/10 text-[var(--sesi-red)]">
-                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-                        <rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.8" />
-                        <path d="M10 8l5 3-5 3V8z" fill="currentColor" />
-                        <path d="M8 21h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                      </svg>
-                    </span>
-                    <h3 className="text-lg font-bold text-[var(--sesi-black)]">Player SCORM</h3>
-                    <p className="max-w-md text-sm text-[#4A4A4A]">
-                      {config.arquivo ? (
-                        <>
-                          O pacote <strong className="text-[var(--sesi-black)]">{config.arquivo}</strong> está registrado no admin.
-                        </>
-                      ) : (
-                        "Nenhum pacote SCORM publicado ainda."
-                      )}{" "}
-                      Envie o <strong className="text-[var(--sesi-black)]">.zip</strong> no admin do curso para que o backend extraia o
-                      conteúdo e o player o execute aqui.
-                    </p>
-                    <dl className="mt-2 grid gap-2 text-sm text-[var(--sesi-black)] sm:grid-cols-3">
-                      <div>
-                        <dt className="text-xs uppercase tracking-wide text-[#4A4A4A]">Versão</dt>
-                        <dd className="font-semibold">SCORM {versaoEfetiva}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-xs uppercase tracking-wide text-[#4A4A4A]">Carga horária</dt>
-                        <dd className="font-semibold">{config.cargaHoraria}h</dd>
-                      </div>
-                      <div>
-                        <dt className="text-xs uppercase tracking-wide text-[#4A4A4A]">Arquivo</dt>
-                        <dd className="font-semibold">{config.arquivo || "não anexado"}</dd>
-                      </div>
-                    </dl>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <h2 className="font-['Open_Sans_Condensed',sans-serif] text-2xl font-bold sm:text-3xl">Sobre o curso</h2>
-              <p data-descricao-scorm className="mt-3 whitespace-pre-line text-[var(--sesi-muted)]">
-                {config.descricao}
-              </p>
-            </div>
-
-            <div>
-              <h2 className="font-['Open_Sans_Condensed',sans-serif] text-2xl font-bold sm:text-3xl">Módulos</h2>
-              {curso.modulos.length > 0 ? (
-                <ol className="mt-4 flex flex-col gap-3">
-                  {curso.modulos.map((modulo, indice) => (
-                    <li key={modulo.id} className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white p-4">
-                      <p className="text-sm font-semibold text-[var(--sesi-black)]">
-                        {indice + 1}. {modulo.titulo}
-                      </p>
-                      {modulo.aulas.length > 0 && (
-                        <ul className="mt-2 flex flex-col gap-1 text-sm text-[var(--sesi-muted)]">
-                          {modulo.aulas.map((aula) => (
-                            <li key={aula.id}>• {aula.titulo}</li>
-                          ))}
-                        </ul>
-                      )}
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <p className="mt-3 text-sm text-[var(--sesi-muted)]">
-                  A estrutura de módulos é definida dentro do pacote SCORM.
-                </p>
-              )}
-            </div>
-          </div>
-
-          <aside className="flex flex-col gap-6 lg:col-span-4">
-            <div className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white p-6">
-              <h2 className="text-lg font-bold text-[var(--sesi-black)]">Informações do curso</h2>
-              <dl className="mt-4 flex flex-col gap-3 text-sm">
-                {[
-                  { rotulo: "Carga horária", valor: `${config.cargaHoraria} horas` },
-                  { rotulo: "Modalidade", valor: curso.modalidade.nome },
-                  { rotulo: "Categoria", valor: curso.categoria.nome },
-                  { rotulo: "Público-alvo", valor: curso.publicoAlvo || "Não informado" },
-                  { rotulo: "Formato", valor: `Pacote SCORM ${versaoEfetiva}` },
-                  { rotulo: "Certificação", valor: "SESI" },
-                ].map((item) => (
-                  <div key={item.rotulo} className="flex flex-col gap-0.5 border-b border-[var(--sesi-gray)] pb-2 last:border-0 last:pb-0">
-                    <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--sesi-muted)]">{item.rotulo}</dt>
-                    <dd className="text-[var(--sesi-black)]">{item.valor}</dd>
-                  </div>
-                ))}
-              </dl>
-              <Link
-                to={`/area-do-aluno/curso/${curso.slug}`}
-                className="mt-5 inline-flex w-full items-center justify-center rounded-[var(--radius-lg)] bg-[var(--sesi-black)] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
-              >
-                Abrir na área do aluno
-              </Link>
-            </div>
-
-            <div className="rounded-[var(--radius-lg)] bg-[var(--sesi-black)] p-6 text-white">
-              <h2 className="text-lg font-bold">Precisa de ajuda?</h2>
-              <p className="mt-2 text-sm text-white/75">
-                Fale com a equipe pedagógica para tirar dúvidas sobre o acesso ao pacote SCORM.
-              </p>
-              <a href="mailto:contato@sesindustria.com.br" className="mt-4 inline-block text-sm font-semibold text-[var(--sesi-beige)] underline-offset-4 hover:underline">
-                contato@sesindustria.com.br
-              </a>
-            </div>
+          <aside className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white p-6 lg:col-span-4">
+            <h2 className="text-lg font-bold text-[var(--sesi-black)]">Informações do curso</h2>
+            <dl className="mt-4 flex flex-col gap-3 text-sm">
+              {[
+                { rotulo: "Carga horária", valor: `${config.cargaHoraria} horas` },
+                { rotulo: "Modalidade", valor: curso.modalidade.nome },
+                { rotulo: "Categoria", valor: curso.categoria.nome },
+                { rotulo: "Público-alvo", valor: curso.publicoAlvo || "Não informado" },
+                { rotulo: "Formato", valor: `Pacote SCORM ${versaoEfetiva}` },
+                { rotulo: "Certificação", valor: "SESI" },
+              ].map((item) => (
+                <div key={item.rotulo} className="flex flex-col gap-0.5 border-b border-[var(--sesi-gray)] pb-2 last:border-0 last:pb-0">
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--sesi-muted)]">{item.rotulo}</dt>
+                  <dd className="text-[var(--sesi-black)]">{item.valor}</dd>
+                </div>
+              ))}
+            </dl>
+            <Link
+              to={`/area-do-aluno/curso/${curso.slug}`}
+              className="mt-5 inline-flex w-full items-center justify-center rounded-[var(--radius-lg)] bg-[var(--sesi-black)] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+            >
+              Abrir na área do aluno
+            </Link>
           </aside>
         </Container>
       </section>
+
+      <SobreCurso curso={curso} descricao={config.descricao} />
+      <DepoimentosCurso />
+      <AjudaCurso />
+      <FaixaMatricula
+        nomeCurso={curso.nomeCompleto}
+        onMatricular={() => setMatriculaAberta(true)}
+        matriculaEmBreve={curso.status.slug === "em-breve"}
+      />
+      <MatriculaModal curso={curso} aberto={matriculaAberta} onFechar={() => setMatriculaAberta(false)} />
     </MainLayout>
   )
 }

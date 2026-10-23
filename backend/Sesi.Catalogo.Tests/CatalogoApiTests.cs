@@ -21,6 +21,7 @@ public class CatalogoApiTests : IClassFixture<WebApplicationFactory<Program>>
         _factory = factory.WithWebHostBuilder(builder =>
         {
             builder.UseSetting("Scorm:Root", Path.Combine(Path.GetTempPath(), "sesi-scorm-testes", Guid.NewGuid().ToString("N")));
+            builder.UseSetting("Gestao:DiretorioDados", Path.Combine(Path.GetTempPath(), "sesi-gestao-testes", Guid.NewGuid().ToString("N")));
 
             builder.ConfigureServices(services =>
             {
@@ -88,6 +89,23 @@ public class CatalogoApiTests : IClassFixture<WebApplicationFactory<Program>>
         pagina.Should().NotBeNull();
         pagina!.Itens.Should().OnlyContain(c => c.Categoria.Slug == "tecnologia");
         pagina.Itens.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task Cursos_BuscaDeveIgnorarAcentos()
+    {
+        var client = _factory.CreateClient();
+        var semAcento = await client.GetFromJsonAsync<PaginaDto<CursoResumoDto>>(
+            $"/api/v1/cursos?busca={Uri.EscapeDataString("matematica")}");
+        var comAcento = await client.GetFromJsonAsync<PaginaDto<CursoResumoDto>>(
+            $"/api/v1/cursos?busca={Uri.EscapeDataString("matemática")}");
+
+        semAcento.Should().NotBeNull();
+        comAcento.Should().NotBeNull();
+        semAcento!.Total.Should().BeGreaterThan(0);
+        semAcento.Total.Should().Be(comAcento!.Total);
+        semAcento.Itens.Select(c => c.Slug).Should()
+            .BeEquivalentTo(comAcento.Itens.Select(c => c.Slug));
     }
 
     [Fact]
@@ -248,6 +266,105 @@ public class CatalogoApiTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     [Fact]
+    public async Task Curso_RascunhoFicaForaDoCatalogoEPublicadoRespeitaDatas()
+    {
+        var client = _factory.CreateClient();
+        var slug = $"curso-fluxo-{Guid.NewGuid():N}";
+        var hoje = DateOnly.FromDateTime(DateTime.UtcNow);
+        var request = new CursoSalvarRequest(
+            "Curso de Fluxo", "Curso Fluxo", slug,
+            "Curso para validar rascunho, publicação e abertura de matrícula.", 12,
+            "Alunos de teste", "/cursos/teste.svg", null, false,
+            "tecnologia", "ead", "disponivel");
+
+        var criadoResponse = await client.PostAsJsonAsync("/api/v1/cursos", request);
+        criadoResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var paginaRascunhos = await client.GetFromJsonAsync<PaginaDto<CursoResumoDto>>("/api/v1/cursos");
+        paginaRascunhos!.Itens.Should().NotContain(c => c.Slug == slug);
+        (await client.GetAsync($"/api/v1/cursos/{slug}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        var cursosAdmin = await client.GetFromJsonAsync<List<CursoResumoDto>>("/api/v1/gestao/cursos");
+        cursosAdmin.Should().Contain(c => c.Slug == slug && c.EtapaDesenvolvimento == "Rascunho");
+
+        var publicadoAgendado = request with
+        {
+            EtapaDesenvolvimento = "Publicado",
+            DataPublicacao = hoje.AddDays(1),
+            DataLiberacaoMatricula = hoje.AddDays(5),
+            DataDisponibilizacao = hoje.AddDays(10)
+        };
+        var agendar = await client.PutAsJsonAsync($"/api/v1/cursos/{slug}", publicadoAgendado);
+        agendar.StatusCode.Should().Be(HttpStatusCode.OK);
+        var cursosAgendados = await client.GetFromJsonAsync<PaginaDto<CursoResumoDto>>("/api/v1/cursos");
+        cursosAgendados!.Itens.Should().NotContain(c => c.Slug == slug);
+
+        var publicado = publicadoAgendado with { DataPublicacao = hoje.AddDays(-1) };
+        var atualizar = await client.PutAsJsonAsync($"/api/v1/cursos/{slug}", publicado);
+        atualizar.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var emBreve = await client.GetFromJsonAsync<PaginaDto<CursoResumoDto>>("/api/v1/cursos?status=em-breve");
+        emBreve!.Itens.Should().Contain(c =>
+            c.Slug == slug &&
+            c.EtapaDesenvolvimento == "Publicado" &&
+            c.Status.Slug == "em-breve");
+
+        var turmas = await client.GetFromJsonAsync<List<TurmaDto>>($"/api/v1/cursos/{slug}/turmas");
+        var matriculaAntesDaLiberacao = await client.PostAsJsonAsync("/api/v1/matriculas", new
+        {
+            cursoSlug = slug,
+            turmaId = turmas![0].Id,
+            usuarioId = "aluno-teste"
+        });
+        matriculaAntesDaLiberacao.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var liberar = publicado with { DataLiberacaoMatricula = hoje.AddDays(-1) };
+        var liberacao = await client.PutAsJsonAsync($"/api/v1/cursos/{slug}", liberar);
+        liberacao.StatusCode.Should().Be(HttpStatusCode.OK);
+        var abertas = await client.GetFromJsonAsync<PaginaDto<CursoResumoDto>>("/api/v1/cursos?status=inscricoes-abertas");
+        abertas!.Itens.Should().Contain(c => c.Slug == slug && c.Status.Slug == "inscricoes-abertas");
+
+        var matriculaAposLiberacao = await client.PostAsJsonAsync("/api/v1/matriculas", new
+        {
+            cursoSlug = slug,
+            turmaId = turmas[0].Id,
+            usuarioId = "aluno-teste"
+        });
+        matriculaAposLiberacao.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task ContaAluno_ExigeSenhaEApiNaoRetornaHash()
+    {
+        var client = _factory.CreateClient();
+        var email = $"aluno-{Guid.NewGuid():N}@exemplo.com";
+        var registro = await client.PostAsJsonAsync("/api/v1/gestao/usuarios/registro-com-senha", new
+        {
+            Nome = "Aluno Teste",
+            Email = email,
+            Senha = "SenhaSegura123"
+        });
+        registro.StatusCode.Should().Be(HttpStatusCode.OK);
+        var respostaRegistro = await registro.Content.ReadAsStringAsync();
+        respostaRegistro.Should().NotContain("PasswordHash");
+
+        var senhaIncorreta = await client.PostAsJsonAsync("/api/v1/gestao/usuarios/autenticar", new
+        {
+            Email = email,
+            Senha = "SenhaIncorreta123"
+        });
+        senhaIncorreta.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        var login = await client.PostAsJsonAsync("/api/v1/gestao/usuarios/autenticar", new
+        {
+            Email = email,
+            Senha = "SenhaSegura123"
+        });
+        login.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await login.Content.ReadAsStringAsync()).Should().NotContain("PasswordHash");
+    }
+
+    [Fact]
     public async Task Cors_DevePermitirOrigemVercel()
     {
         var client = _factory.CreateClient();
@@ -343,6 +460,10 @@ public class CatalogoApiTests : IClassFixture<WebApplicationFactory<Program>>
         var conteudo = await client.GetAsync(pacote.ConteudoUrl);
         conteudo.StatusCode.Should().Be(HttpStatusCode.OK);
         (await conteudo.Content.ReadAsStringAsync()).Should().Contain("conteudo scorm de teste");
+        var download = await client.GetAsync($"/api/v1/scorm/pacotes/{pacote.Id}/download");
+        download.StatusCode.Should().Be(HttpStatusCode.OK);
+        download.Content.Headers.ContentType?.MediaType.Should().Be("application/zip");
+        (await download.Content.ReadAsByteArrayAsync()).Should().Equal(memoria.ToArray());
 
         var primeiro = new SalvarProgressoScormRequest(
             slug, "aluno", "{\"pagina\":2}", "incomplete", "aula-2", null, 40, null);
@@ -367,11 +488,66 @@ public class CatalogoApiTests : IClassFixture<WebApplicationFactory<Program>>
         var checkpointLimpo = await client.GetFromJsonAsync<ProgressoScormDto>(
             $"/api/v1/scorm/progresso?cursoSlug={slug}&usuarioId=aluno");
         checkpointLimpo.Should().NotBeNull();
-        checkpointLimpo!.Percentual.Should().Be(40);
+        checkpointLimpo!.Percentual.Should().Be(0);
         checkpointLimpo.SuspendData.Should().BeNull();
         checkpointLimpo.LessonLocation.Should().BeNull();
         checkpointLimpo.LessonStatus.Should().BeNull();
         checkpointLimpo.CmiDataJson.Should().BeNull();
+
+        using var formularioSubstituto = new MultipartFormDataContent();
+        using var arquivoSubstituto = new ByteArrayContent(memoria.ToArray());
+        arquivoSubstituto.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
+        formularioSubstituto.Add(arquivoSubstituto, "arquivo", "curso-atualizado.zip");
+        formularioSubstituto.Add(new StringContent(slug), "cursoSlug");
+        formularioSubstituto.Add(new StringContent("1.2"), "versao");
+        var substituicao = await client.PostAsync("/api/v1/scorm/pacotes", formularioSubstituto);
+        substituicao.StatusCode.Should().Be(HttpStatusCode.OK);
+        var pacoteSubstituto = await substituicao.Content.ReadFromJsonAsync<ScormPacoteDto>();
+        pacoteSubstituto.Should().NotBeNull();
+        pacoteSubstituto!.Id.Should().NotBe(pacote.Id);
+        (await client.GetAsync($"/api/v1/scorm/pacotes/{pacote.Id}/download")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await client.GetFromJsonAsync<List<ScormPacoteDto>>("/api/v1/scorm/pacotes"))
+            .Should().ContainSingle(item => item.CursoSlug == slug);
+    }
+
+    [Fact]
+    public async Task ScormConfiguracoes_LimiteEPaginaDevemPersistirNoBackend()
+    {
+        var client = _factory.CreateClient();
+        (await client.GetFromJsonAsync<ScormConfiguracaoDto>("/api/v1/scorm/configuracoes"))!
+            .LimiteUploadMb.Should().Be(100);
+
+        var limite = await client.PutAsJsonAsync(
+            "/api/v1/scorm/configuracoes",
+            new AtualizarLimiteScormRequest(50));
+        limite.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await client.GetFromJsonAsync<ScormConfiguracaoDto>("/api/v1/scorm/configuracoes"))!
+            .LimiteUploadMb.Should().Be(50);
+
+        var limiteInvalido = await client.PutAsJsonAsync(
+            "/api/v1/scorm/configuracoes",
+            new AtualizarLimiteScormRequest(25));
+        limiteInvalido.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        (await client.PutAsJsonAsync(
+            "/api/v1/scorm/configuracoes",
+            new AtualizarLimiteScormRequest(20))).StatusCode.Should().Be(HttpStatusCode.OK);
+        using var formularioGrande = new MultipartFormDataContent();
+        using var arquivoGrande = new ByteArrayContent(new byte[20 * 1024 * 1024 + 1]);
+        formularioGrande.Add(arquivoGrande, "arquivo", "acima-do-limite.zip");
+        formularioGrande.Add(new StringContent("curso-grande"), "cursoSlug");
+        var uploadAcimaDoLimite = await client.PostAsync("/api/v1/scorm/pacotes", formularioGrande);
+        uploadAcimaDoLimite.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await uploadAcimaDoLimite.Content.ReadAsStringAsync()).Should().Contain("limite configurado de 20 MB");
+
+        var slug = $"pagina-scorm-{Guid.NewGuid():N}";
+        var pagina = new ScormPaginaConfigDto(
+            "Curso SCORM", "Subtítulo", "Sobre", "", "/capa.webp", 10, "Iniciar curso");
+        (await client.GetAsync($"/api/v1/scorm/paginas/{slug}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        var salva = await client.PutAsJsonAsync($"/api/v1/scorm/paginas/{slug}", pagina);
+        salva.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await client.GetFromJsonAsync<ScormPaginaConfigDto>($"/api/v1/scorm/paginas/{slug}"))
+            .Should().BeEquivalentTo(pagina);
     }
 
     [Fact]

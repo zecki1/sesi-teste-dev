@@ -2,7 +2,7 @@ import { useState } from "react"
 import { Link } from "react-router-dom"
 import { MainLayout } from "@/components/layout/main-layout"
 import { Container } from "@/components/layout/container"
-import heroImage from "@/assets/hero-image.png"
+const heroImage = "/images/hero-image.webp"
 
 const videos = [
   { id: "JwELVGH-5YU", titulo: "Novo Centro Cultural SESI Itaquera" },

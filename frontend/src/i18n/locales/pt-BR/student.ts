@@ -11,6 +11,8 @@ export default {
     email: 'E-mail',
     emailPlaceholder: 'seu@email.com',
     continue: 'Continuar',
+    noAccount: 'Ainda não tem conta?',
+    createAccountLink: 'Criar conta',
     or: 'ou',
     microsoft: 'Continuar com Microsoft',
     google: 'Continuar com Gmail',

@@ -47,11 +47,14 @@ obj/
 *.db
 *.db-shm
 *.db-wal
+/backend/Sesi.Catalogo.Api/App_Data/
 
 # Test coverage
 coverage/
 test-results/
 playwright-report/
+/.lhci/
+/frontend/.lighthouseci/
 
 # Misc
 *.tmp

@@ -10,6 +10,9 @@ public interface ICatalogoRepositorio
     /// <summary>Lista cursos paginados com filtros, junto das facetas.</summary>
     Task<PaginaDto<CursoResumoDto>> ListarCursosAsync(CursoFiltro filtro, CancellationToken ct = default);
 
+    /// <summary>Lista cursos de qualquer etapa para a tela administrativa local.</summary>
+    Task<IReadOnlyList<CursoResumoDto>> ListarCursosAdministracaoAsync(CancellationToken ct = default);
+
     /// <summary>Obtém o detalhe de um curso pelo slug (com módulos e aulas).</summary>
     Task<CursoDetalheDto?> ObterCursoPorSlugAsync(string slug, CancellationToken ct = default);
 

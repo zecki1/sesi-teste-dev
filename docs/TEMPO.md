@@ -1,19 +1,20 @@
 # Registro de Tempo
 
-Registro aproximado do esforço dedicado ao teste, montado a partir dos checkpoints de memória e do relato do autor. Não é uma medição automática de cronômetro.
+Registro aproximado do esforço total do projeto, montado a partir dos checkpoints de memória e do relato do autor. Não é uma medição automática e não separa horas do autor das horas de interação com ferramentas.
 
 ## Resumo
 
 | Item | Valor |
 |---|---|
 | Início | 21/10/2026, 19:45 |
-| Último checkpoint | 23/10/2026, 00:20 |
-| Janela total | ~28 h 35 min |
+| Primeiro uso do assistente Copilot nesta rodada | 23/10/2026, ~09:17 |
+| Última atualização do registro | 23/10/2026, 14:54 |
+| Janela total | ~43 h 09 min |
 | Pausa informada pelo autor | 4 h entre 21/10 e 22/10 |
-| Tempo efetivo estimado | ~24 h 35 min |
-| Tempo com checkpoints registrados | ~16 h 20 min |
+| Tempo efetivo estimado | ~25 h 36 min |
+| Tempo com checkpoints registrados | ~17 h 21 min |
 
-> A diferença entre o tempo efetivo estimado e os checkpoints corresponde a períodos de trabalho sem registro de memória. O valor de ~24 h é uma estimativa baseada no relato do autor, não uma soma exata de horas.
+> A diferença entre o tempo efetivo estimado e os checkpoints corresponde a períodos de trabalho sem registro de memória. O valor é uma estimativa baseada no relato do autor, não uma soma exata de horas.
 
 ## Checkpoints
 
@@ -31,9 +32,20 @@ Registro aproximado do esforço dedicado ao teste, montado a partir dos checkpoi
 | 22/10 | 22:55–23:15 | FAQs numeradas, CTA flutuante, trava do login, CTA da home, capas WebP, ícones dos cards e sliders full-bleed |
 | 22/10–23/10 | 23:15–00:00 | Revisão fiel ao Figma: badges por categoria, drag dos sliders, footer/depoimentos uppercase, faixa sem uppercase, accordion fechado, AVA com progresso branco/logo/status e testes/docs finais |
 | 23/10 | 00:00–00:20 | Correção de clique x arrasto nos sliders, página configurável de curso SCORM, reescrita do USO_DE_IA, testes e docs |
+| 23/10 | 09:17–10:00 | Upload e substituição de pacotes SCORM, limite configurável persistido, página padronizada, validação final e documentação |
+| 23/10 | 10:00–10:18 | Remoção do commit acidental de `main` para branch de feature sem novo commit; cadastro visível, player SCORM separado, otimização de imagens, correção do preload e inicialização/verificação da API local |
+| 23/10 | 10:18–11:24 | Continuação do apoio assistido: análise do progresso SCORM, visibilidade do curso no catálogo, indicadores do admin, percentual de upload e revisão da forma de registrar o uso de IA |
+| 23/10 | 13:25:34–13:31:56 | Validação dos requisitos do case: inspeção da API e dos dados, execução dos E2E de catálogo e verificação da publicação |
+| 23/10 | 13:31:56–13:35:13 | Escopo adicional solicitado durante a validação: testes automatizados do skeleton/erro, busca sem acento e registro separado da janela adicional |
+| 23/10 | 14:37:24–14:54:21 | Retomada da validação: Lighthouse CI com CORS permitido (12 medições), ajuste dos E2E para aguardar a decodificação das capas, regeneração das oito capturas e documentação dos resultados |
 
 ## Observações
 
-- O tempo inclui implementação, revisão visual, testes, correções e documentação.
+- O tempo estimado se refere ao trabalho total do projeto — implementação, revisão visual, testes, correções e documentação — e não deve ser atribuído integralmente ao assistente de IA.
 - A pausa de 4 h foi informada pelo autor; os intervalos entre checkpoints não representam necessariamente pausa.
-- O registro será atualizado se houver novas rodadas de revisão ou ajustes antes do commit.
+- O autor conduziu o projeto e é responsável pelas decisões, pelo escopo e pela revisão. O assistente Copilot foi utilizado como apoio a planejamento, sugestões, análise, validação e testes; a janela entre 09:17 e 11:24 é o período observado de interação, não tempo efetivo de codificação nem medida de autoria da IA.
+- Em algumas solicitações específicas, o assistente preparou alterações pontuais nos arquivos para revisão. Isso não significa que tenha produzido sozinho o projeto ou que essas mudanças estejam aprovadas.
+- O commit acidental foi criado às 10:01:45 antes da revisão do autor e removido de `main`; não houve novo commit.
+- A API local respondeu a verificações anteriores de health, catálogo, facetas, matrículas, configuração SCORM e CORS, e foi detectado um pacote ativo. Em verificação posterior, a API local estava indisponível. Builds anteriores foram validadas, mas as alterações mais recentes aguardam revisão e não foram buildadas/testadas novamente, conforme orientação do autor.
+- Para a validação iniciada em 23/10 às 13:25:34, a janela observável foi de aproximadamente 9 min 39 s até 13:35:13. A solicitação dos itens adicionais chegou às 13:31:56, enquanto a validação anterior ainda estava em andamento; portanto, a janela adicional de aproximadamente 3 min 17 s está contida na janela total e não deve ser somada a ela. Esses intervalos registram tempo de interação, não o tempo ativo individual do autor nem esforço de implementação medido. Para contabilizar o tempo pessoal do autor com precisão, registrar separadamente início/fim informados por ele; não inferir esse dado a partir do tempo de resposta da IA.
+- A retomada de 14:37:24 a 14:54:21 registra uma janela observável de interação de aproximadamente 17 min. Ela inclui espera por ferramentas e auditorias; não representa tempo ativo do autor nem deve ser somada ao tempo efetivo estimado sem apontamento pessoal.

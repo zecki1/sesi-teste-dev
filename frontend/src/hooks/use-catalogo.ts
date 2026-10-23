@@ -21,7 +21,9 @@ export function useCurso(slug: string) {
     queryFn: () => obterCurso(slug),
     enabled: !!slug,
     // 404 é definitivo: não faz sentido repetir a requisição.
-    retry: (tentativas, erro) => !(erro instanceof ApiError && erro.status === 404) && tentativas < 3,
+    retry: import.meta.env.DEV
+      ? false
+      : (tentativas, erro) => !(erro instanceof ApiError && erro.status === 404) && tentativas < 3,
   })
 }
 

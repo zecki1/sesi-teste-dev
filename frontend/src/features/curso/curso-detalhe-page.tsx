@@ -51,7 +51,11 @@ export function CursoDetalhePage() {
       <SobreCurso curso={curso} />
       <DepoimentosCurso />
       <AjudaCurso />
-      <FaixaMatricula nomeCurso={curso.nomeCompleto} onMatricular={() => setMatriculaAberta(true)} />
+      <FaixaMatricula
+        nomeCurso={curso.nomeCompleto}
+        onMatricular={() => setMatriculaAberta(true)}
+        matriculaEmBreve={curso.status.slug === "em-breve"}
+      />
       <MatriculaModal curso={curso} aberto={matriculaAberta} onFechar={() => setMatriculaAberta(false)} />
     </MainLayout>
   )

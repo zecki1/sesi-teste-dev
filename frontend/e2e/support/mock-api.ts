@@ -4,25 +4,43 @@ import facetasFixture from "../fixtures/facetas.json" with { type: "json" }
 import detalheFixture from "../fixtures/curso-detalhe.json" with { type: "json" }
 import turmasFixture from "../fixtures/turmas.json" with { type: "json" }
 
+const normalizarBusca = (texto: string) =>
+  texto.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase()
+
 /**
  * Intercepta as chamadas da API para os testes E2E rodarem sem back-end.
  * O filtro é aplicado sobre o mesmo JSON capturado da API real.
  */
 export async function mockApi(page: Page) {
+  await page.route("**/api/v1/gestao/cursos", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(
+        cursosFixture.itens.map((curso) => ({
+          ...curso,
+          dataPublicacao: null,
+          dataLiberacaoMatricula: null,
+          etapaDesenvolvimento: "Publicado",
+        })),
+      ),
+    }),
+  )
+
   await page.route("**/api/v1/facetas", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(facetasFixture) }),
   )
 
   await page.route("**/api/v1/cursos?*", async (route) => {
     const url = new URL(route.request().url())
-    const busca = (url.searchParams.get("busca") || "").toLowerCase()
+    const busca = normalizarBusca(url.searchParams.get("busca") || "")
     const categoria = url.searchParams.get("categoria") || ""
     const modalidade = url.searchParams.get("modalidade") || ""
     const status = url.searchParams.get("status") || ""
     const destaque = url.searchParams.get("destaque") || ""
 
     const itens = cursosFixture.itens.filter((curso) => {
-      const alvo = `${curso.nomeCompleto} ${curso.nomeBreve} ${curso.descricao}`.toLowerCase()
+      const alvo = normalizarBusca(`${curso.nomeCompleto} ${curso.nomeBreve} ${curso.descricao}`)
       return (
         (!busca || alvo.includes(busca)) &&
         (!categoria || curso.categoria.slug === categoria) &&
@@ -94,4 +112,39 @@ export async function mockApi(page: Page) {
   await page.route("**/api/v1/scorm/pacotes/*", (route) =>
     route.fulfill({ status: 404, contentType: "application/problem+json", body: JSON.stringify({ status: 404 }) }),
   )
+
+  await page.route("**/api/v1/scorm/pacotes", async (route) => {
+    if (route.request().method() === "POST") {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "pacote-e2e",
+          cursoSlug: "curso-e2e",
+          nomeArquivo: "curso-e2e.zip",
+          tamanho: 1024,
+          versao: "1.2",
+          entryFile: "index.html",
+          criadoEm: new Date().toISOString(),
+          conteudoUrl: "/scorm/pacote-e2e/index.html",
+          lancamentoUrl: "/api/v1/scorm/pacotes/pacote-e2e/launch",
+        }),
+      })
+    }
+    return route.fulfill({ status: 200, contentType: "application/json", body: "[]" })
+  })
+
+  await page.route("**/api/v1/scorm/configuracoes", async (route) => {
+    if (route.request().method() === "PUT") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: route.request().postData() ?? "{}" })
+    }
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ limiteUploadMb: 100 }) })
+  })
+
+  await page.route("**/api/v1/scorm/paginas/*", async (route) => {
+    if (route.request().method() === "PUT") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: route.request().postData() ?? "{}" })
+    }
+    return route.fulfill({ status: 404, contentType: "application/problem+json", body: JSON.stringify({ status: 404 }) })
+  })
 }

@@ -10,12 +10,47 @@ function formatarData(data?: string) {
   return `${dia}/${mes}/${ano}`
 }
 
-export function HeroCurso({ curso, onMatricular }: { curso: CursoDetalheDto; onMatricular: () => void }) {
+interface HeroCursoProps {
+  curso: CursoDetalheDto
+  onMatricular: () => void
+  titulo?: string
+  subtitulo?: string
+  imagemUrl?: string
+  imagemFundoUrl?: string
+  cargaHoraria?: number
+  textoCta?: string
+  aoClicarCta?: () => void
+  dataScorm?: boolean
+}
+
+export function HeroCurso({
+  curso,
+  onMatricular,
+  titulo,
+  subtitulo,
+  imagemUrl,
+  imagemFundoUrl,
+  cargaHoraria = curso.cargaHoraria,
+  textoCta = "Matricule-se",
+  aoClicarCta,
+  dataScorm = false,
+}: HeroCursoProps) {
   const inicio = formatarData(curso.dataDisponibilizacao)
+  const cta = aoClicarCta ?? onMatricular
+  const matriculaEmBreve = curso.status.slug === "em-breve"
 
   return (
-    <section className="py-12 sm:py-16">
-      <Container className="grid items-center gap-10 lg:grid-cols-12 lg:gap-12">
+    <section
+      data-banner-scorm={dataScorm ? "" : undefined}
+      className={`relative py-12 sm:py-16 ${imagemFundoUrl ? "isolate overflow-hidden bg-[var(--sesi-black)] text-white" : ""}`}
+    >
+      {imagemFundoUrl && (
+        <>
+          <img src={imagemFundoUrl} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover opacity-25" />
+          <div aria-hidden="true" className="absolute inset-0 bg-[linear-gradient(90deg,rgba(12,12,13,0.92)_0%,rgba(12,12,13,0.76)_55%,rgba(12,12,13,0.45)_100%)]" />
+        </>
+      )}
+      <Container className="relative grid items-center gap-10 lg:grid-cols-12 lg:gap-12">
         <div data-aos="fade-up" className="flex flex-col gap-6 lg:col-span-6">
           <span
             style={estiloBadgeCategoria(curso.categoria.cor)}
@@ -26,10 +61,28 @@ export function HeroCurso({ curso, onMatricular }: { curso: CursoDetalheDto; onM
           </span>
 
           <h1 className="font-['Open_Sans_Condensed',sans-serif] text-4xl font-bold leading-[1.05] sm:text-5xl">
-            {curso.nomeCompleto}
+            {titulo || curso.nomeCompleto}
           </h1>
+          {subtitulo && <p className={imagemFundoUrl ? "text-white/85" : "text-[var(--sesi-muted)]"}>{subtitulo}</p>}
 
-          <ul className="flex flex-col gap-3 text-[var(--sesi-muted)]">
+          <ul className={`flex flex-col gap-3 ${imagemFundoUrl ? "text-white/85" : "text-[var(--sesi-muted)]"}`}>
+            {dataScorm && (
+              <li className="flex items-center gap-3">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="shrink-0">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+                <span>
+                  Carga horária: <strong data-carga-scorm="" className={imagemFundoUrl ? "text-white" : "text-[var(--sesi-black)]"}>{cargaHoraria}h</strong>
+                </span>
+              </li>
+            )}
+            <li className="flex items-center gap-3">
+              <span className="grid h-5 w-5 shrink-0 place-items-center text-xs font-bold" aria-hidden="true">◎</span>
+              <span>
+                Modalidade: <strong className={imagemFundoUrl ? "text-white" : "text-[var(--sesi-black)]"}>{curso.modalidade.nome}</strong>
+              </span>
+            </li>
             {inicio && (
               <li className="flex items-center gap-3">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="shrink-0">
@@ -37,7 +90,7 @@ export function HeroCurso({ curso, onMatricular }: { curso: CursoDetalheDto; onM
                   <path d="M8 3v4M16 3v4M3 10h18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                 </svg>
                 <span>
-                  Início do curso: <strong className="text-[var(--sesi-black)]">{inicio}</strong>
+                  Início do curso: <strong className={imagemFundoUrl ? "text-white" : "text-[var(--sesi-black)]"}>{inicio}</strong>
                 </span>
               </li>
             )}
@@ -52,20 +105,39 @@ export function HeroCurso({ curso, onMatricular }: { curso: CursoDetalheDto; onM
                 <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               <span>
-                Certificação: <strong className="text-[var(--sesi-black)]">SESI</strong>
+                Certificação: <strong className={imagemFundoUrl ? "text-white" : "text-[var(--sesi-black)]"}>SESI</strong>
               </span>
             </li>
           </ul>
 
           <div data-cta-principal className="flex flex-wrap items-center gap-3">
-            <Button type="button" onClick={onMatricular} withArrow className="rounded-lg">
-              Matricule-se
+            <Button
+              type="button"
+              onClick={cta}
+              disabled={matriculaEmBreve}
+              withArrow={!matriculaEmBreve}
+              className="rounded-lg"
+            >
+              {matriculaEmBreve ? "Matrículas em breve" : textoCta}
             </Button>
           </div>
         </div>
 
         <div data-aos="fade-up" data-aos-delay="120" className="lg:col-span-6">
-          <VideoCurso titulo={curso.nomeBreve} />
+          {imagemUrl ? (
+            <img
+              data-imagem-scorm={dataScorm ? "" : undefined}
+              src={imagemUrl}
+              alt={`Capa do curso ${curso.nomeBreve}`}
+              width="1200"
+              height="675"
+              fetchPriority="high"
+              decoding="async"
+              className="aspect-video w-full rounded-[var(--radius-lg)] object-cover"
+            />
+          ) : (
+            <VideoCurso titulo={curso.nomeBreve} />
+          )}
         </div>
       </Container>
     </section>

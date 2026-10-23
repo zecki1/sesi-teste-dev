@@ -12,6 +12,7 @@ import {
 } from "@/lib/auth/perfil"
 import { aplicarIdioma } from "@/lib/i18n/idioma"
 import { CHAVE_ACESSIBILIDADE, aplicarNaRaiz, lerConfig, salvarConfig } from "@/lib/a11y/config"
+import { useBodyScrollLock } from "@/lib/ui/use-body-scroll-lock"
 
 const IDIOMAS: { id: Idioma; rotulo: string; curto: string }[] = [
   { id: "pt-BR", rotulo: "Português", curto: "PT" },
@@ -32,12 +33,34 @@ export function AccessibilityMenu() {
   const [open, setOpen] = useState(false)
   const [config, setConfig] = useState<ConfigAcessibilidade>(() => lerConfig())
   const [offsetCookies, setOffsetCookies] = useState(0)
+  const [botoesVisiveis, setBotoesVisiveis] = useState(true)
+  const botoesRef = useRef<HTMLDivElement>(null)
+  const timerOcultarRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const idioma: Idioma = i18n.language === "en-US" || i18n.language === "es-ES" ? i18n.language : "pt-BR"
   const fecharRef = useRef<HTMLButtonElement>(null)
   const asideRef = useRef<HTMLElement>(null)
+  useBodyScrollLock(open)
 
   // Sobe os botões fixos quando o banner de cookies está aberto.
   useEffect(() => assinarAlturaBannerCookie(setOffsetCookies), [])
+
+  useEffect(() => {
+    const programarOcultacao = () => {
+      if (timerOcultarRef.current) clearTimeout(timerOcultarRef.current)
+      if (botoesRef.current?.matches(":hover") || botoesRef.current?.contains(document.activeElement)) return
+      timerOcultarRef.current = setTimeout(() => setBotoesVisiveis(false), 5000)
+    }
+    const aoRolar = () => {
+      setBotoesVisiveis(true)
+      programarOcultacao()
+    }
+    window.addEventListener("scroll", aoRolar, { passive: true })
+    programarOcultacao()
+    return () => {
+      window.removeEventListener("scroll", aoRolar)
+      if (timerOcultarRef.current) clearTimeout(timerOcultarRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     aplicarNaRaiz(config)
@@ -85,27 +108,7 @@ export function AccessibilityMenu() {
 
     document.addEventListener("keydown", aoTeclar)
     const raiz = document.documentElement
-    const corpo = document.body
-    const overflowAnterior = corpo.style.overflow
-    const overflowRaizAnterior = raiz.style.overflow
-    const paddingDireitaAnterior = corpo.style.paddingRight
-    const posicaoAnterior = corpo.style.position
-    const topoAnterior = corpo.style.top
-    const esquerdaAnterior = corpo.style.left
-    const direitaAnterior = corpo.style.right
-    const larguraAnterior = corpo.style.width
-    const rolagemAnterior = window.scrollY
-    const larguraBarra = window.innerWidth - raiz.clientWidth
-    corpo.style.position = "fixed"
-    corpo.style.top = `-${rolagemAnterior}px`
-    corpo.style.left = "0"
-    corpo.style.right = "0"
-    corpo.style.width = "100%"
-    corpo.style.overflow = "hidden"
-    raiz.style.overflow = "hidden"
-    if (larguraBarra > 0) corpo.style.paddingRight = `${larguraBarra}px`
     raiz.setAttribute("data-a11y-aberto", "true")
-    window.dispatchEvent(new Event("sesi:travar-scroll"))
     const widgetsVlibras = document.querySelectorAll<HTMLElement>(
       "[vw], [vw-access-button], [vw-plugin-wrapper], #vlibras-access-wrapper",
     )
@@ -114,17 +117,7 @@ export function AccessibilityMenu() {
     })
     return () => {
       document.removeEventListener("keydown", aoTeclar)
-      corpo.style.position = posicaoAnterior
-      corpo.style.top = topoAnterior
-      corpo.style.left = esquerdaAnterior
-      corpo.style.right = direitaAnterior
-      corpo.style.width = larguraAnterior
-      corpo.style.overflow = overflowAnterior
-      corpo.style.paddingRight = paddingDireitaAnterior
-      raiz.style.overflow = overflowRaizAnterior
       raiz.removeAttribute("data-a11y-aberto")
-      window.scrollTo(0, rolagemAnterior)
-      window.dispatchEvent(new Event("sesi:liberar-scroll"))
       widgetsVlibras.forEach((widget) => {
         widget.style.display = ""
       })
@@ -169,21 +162,79 @@ export function AccessibilityMenu() {
         </defs>
       </svg>
 
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label={t("a11y:open")}
-        aria-expanded={open}
-        aria-controls="barra-acessibilidade"
-        className="fixed left-5 z-[9999] grid h-12 w-12 place-items-center rounded-full bg-[var(--sesi-black)] text-white shadow-lg transition hover:bg-[var(--sesi-red)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-        style={{ bottom: `${80 + offsetCookies}px` }}
+      <div
+        ref={botoesRef}
+        onPointerEnter={() => {
+          if (timerOcultarRef.current) clearTimeout(timerOcultarRef.current)
+          setBotoesVisiveis(true)
+        }}
+        onPointerLeave={() => {
+          timerOcultarRef.current = setTimeout(() => setBotoesVisiveis(false), 5000)
+        }}
+        onFocus={() => {
+          if (timerOcultarRef.current) clearTimeout(timerOcultarRef.current)
+          setBotoesVisiveis(true)
+        }}
+        onBlur={(evento) => {
+          if (!evento.currentTarget.contains(evento.relatedTarget as Node | null)) {
+            timerOcultarRef.current = setTimeout(() => setBotoesVisiveis(false), 5000)
+          }
+        }}
+        className={`pointer-events-none fixed left-4 z-[9999] flex flex-col gap-3 transition-all duration-300 ${
+          botoesVisiveis
+            ? "translate-x-0 opacity-100"
+            : "pointer-events-none -translate-x-[calc(100%+1rem)] opacity-0"
+        }`}
+        style={{ bottom: `calc(1rem + ${offsetCookies}px)` }}
       >
-        <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-          <circle cx="12" cy="4.5" r="2" fill="currentColor" stroke="none" />
-          <path d="M4.5 8.5c2.6.8 5 1.2 7.5 1.2s4.9-.4 7.5-1.2" strokeLinecap="round" />
-          <path d="M12 9.7v5.2m0 0-2.8 5.6m2.8-5.6 2.8 5.6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label={t("a11y:open")}
+          title={t("a11y:open")}
+          aria-expanded={open}
+          aria-controls="barra-acessibilidade"
+          className="pointer-events-auto grid h-12 w-12 place-items-center rounded-full border-2 border-white bg-[var(--sesi-black)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.35)] ring-1 ring-black/20 transition hover:scale-105 hover:bg-[var(--sesi-red)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        >
+          <svg viewBox="0 0 24 24" className="h-6 w-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+            <circle cx="12" cy="4.5" r="2" fill="currentColor" stroke="none" />
+            <path d="M4.5 8.5c2.6.8 5 1.2 7.5 1.2s4.9-.4 7.5-1.2" strokeLinecap="round" />
+            <path d="M12 9.7v5.2m0 0-2.8 5.6m2.8-5.6 2.8 5.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new Event("sesi:abrir-ajuda"))}
+          aria-label="Ajuda ao aluno"
+          title="Ajuda ao aluno"
+          className="pointer-events-auto grid h-12 w-12 place-items-center rounded-full border-2 border-white bg-[var(--sesi-red)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.35)] ring-1 ring-black/20 transition hover:scale-105 hover:bg-[var(--sesi-red-dark)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sesi-red)]"
+        >
+          <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M9.5 9a2.6 2.6 0 1 1 4.7 1.5c-.8 1-2.2 1.2-2.2 2.8m0 3.2h.01" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
+      {!botoesVisiveis && (
+        <button
+          type="button"
+          aria-label="Mostrar botões de acessibilidade e ajuda"
+          title="Mostrar acessibilidade e ajuda"
+          onPointerEnter={() => {
+            setBotoesVisiveis(true)
+            timerOcultarRef.current = setTimeout(() => setBotoesVisiveis(false), 5000)
+          }}
+          onTouchStart={() => {
+            setBotoesVisiveis(true)
+            timerOcultarRef.current = setTimeout(() => setBotoesVisiveis(false), 5000)
+          }}
+          onFocus={() => setBotoesVisiveis(true)}
+          className="fixed left-0 z-[9999] grid h-16 w-5 place-items-center rounded-r-md border border-l-0 border-white/50 bg-[var(--sesi-black)]/65 text-xs text-white shadow-md"
+          style={{ bottom: `calc(1rem + ${offsetCookies}px)` }}
+        >
+          <span aria-hidden="true">›</span>
+        </button>
+      )}
 
       {open && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
@@ -195,7 +246,7 @@ export function AccessibilityMenu() {
             aria-modal="true"
             aria-labelledby="acessibilidade-titulo"
             data-lenis-prevent
-            className="relative flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+            className="relative flex max-h-[min(90dvh,90vh)] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
           >
             <header className="flex shrink-0 items-center justify-between border-b border-[var(--sesi-gray)] px-6 py-5">
               <div>

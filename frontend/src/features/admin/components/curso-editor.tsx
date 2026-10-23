@@ -1,7 +1,7 @@
-import { FormEvent, useState, type ReactNode } from "react"
+import { FormEvent, useEffect, useState, type ReactNode } from "react"
 import type { FacetasDto } from "@/lib/api/catalogo"
 import { configScormPadrao, type ScormPaginaConfig } from "@/features/scorm/scorm-config"
-import { enviarPacoteScorm } from "@/features/scorm/scorm-api"
+import { obterPacoteScorm, urlDownloadScorm, type PacoteScormDto } from "@/features/scorm/scorm-api"
 import {
   gerarSlug,
   novoId,
@@ -17,7 +17,9 @@ interface CursoEditorProps {
   curso: CursoAdmin
   facetas?: FacetasDto
   salvando?: boolean
-  onSalvar: (curso: CursoAdmin) => void
+  progressoUploadScorm?: number | null
+  limitePacoteMb?: number
+  onSalvar: (curso: CursoAdmin, arquivoPacote?: File) => void
   onCancelar: () => void
 }
 
@@ -42,13 +44,45 @@ function Campo({ titulo, children, largura = "" }: { titulo: string; children: R
   )
 }
 
-export function CursoEditor({ curso, facetas, salvando = false, onSalvar, onCancelar }: CursoEditorProps) {
+export function CursoEditor({
+  curso,
+  facetas,
+  salvando = false,
+  progressoUploadScorm = null,
+  limitePacoteMb = 100,
+  onSalvar,
+  onCancelar,
+}: CursoEditorProps) {
   const [draft, setDraft] = useState<CursoAdmin>(curso)
   const [erro, setErro] = useState("")
   const [slugTocado, setSlugTocado] = useState(curso.origem === "api" || Boolean(curso.slug))
   const [arquivoPacote, setArquivoPacote] = useState<File | null>(null)
-  const [enviandoPacote, setEnviandoPacote] = useState(false)
-  const [statusPacote, setStatusPacote] = useState("")
+  const [pacoteAtual, setPacoteAtual] = useState<PacoteScormDto | null>(null)
+  const [carregandoPacoteAtual, setCarregandoPacoteAtual] = useState(false)
+
+  useEffect(() => {
+    if (draft.tipo !== "scorm" || !draft.slug) {
+      setPacoteAtual(null)
+      return
+    }
+
+    let ativo = true
+    setCarregandoPacoteAtual(true)
+    obterPacoteScorm(draft.slug)
+      .then((pacote) => {
+        if (ativo) setPacoteAtual(pacote)
+      })
+      .catch((falha: unknown) => {
+        if (ativo) setErro(falha instanceof Error ? falha.message : "Não foi possível consultar o pacote SCORM.")
+      })
+      .finally(() => {
+        if (ativo) setCarregandoPacoteAtual(false)
+      })
+
+    return () => {
+      ativo = false
+    }
+  }, [draft.tipo, draft.slug])
 
   const alterar = <C extends keyof CursoAdmin>(chave: C, valor: CursoAdmin[C]) => {
     setDraft((atual) => ({ ...atual, [chave]: valor }))
@@ -144,27 +178,20 @@ export function CursoEditor({ curso, facetas, salvando = false, onSalvar, onCanc
       setErro("Informe a descrição e uma carga horária maior que zero.")
       return
     }
-    if (draft.tipo === "scorm" && !draft.scorm) {
+    if (draft.tipo === "scorm" && !arquivoPacote && !pacoteAtual) {
       setErro("Anexe o pacote SCORM (.zip) para continuar.")
+      return
+    }
+    if (
+      draft.dataPublicacao &&
+      draft.dataLiberacaoMatricula &&
+      draft.dataLiberacaoMatricula < draft.dataPublicacao
+    ) {
+      setErro("A liberação de matrícula não pode anteceder a data de publicação.")
       return
     }
     setErro("")
     const slugFinal = gerarSlug(draft.slug || draft.nomeBreve)
-
-    if (draft.tipo === "scorm" && arquivoPacote) {
-      setEnviandoPacote(true)
-      setStatusPacote("Enviando e extraindo o pacote...")
-      try {
-        const pacote = await enviarPacoteScorm(slugFinal, arquivoPacote, draft.scorm?.versao ?? "1.2")
-        setStatusPacote(`Pacote publicado: ${pacote.nomeArquivo} · entrada ${pacote.entryFile}.`)
-      } catch (falha) {
-        setStatusPacote("")
-        setErro(falha instanceof Error ? falha.message : "Falha ao enviar o pacote SCORM.")
-        setEnviandoPacote(false)
-        return
-      }
-      setEnviandoPacote(false)
-    }
 
     onSalvar({
       ...draft,
@@ -172,7 +199,7 @@ export function CursoEditor({ curso, facetas, salvando = false, onSalvar, onCanc
       nomeCompleto: draft.nomeCompleto.trim(),
       slug: slugFinal,
       criadoEm: draft.criadoEm || new Date().toISOString(),
-    })
+    }, draft.tipo === "scorm" ? arquivoPacote ?? undefined : undefined)
   }
 
   return (
@@ -193,10 +220,10 @@ export function CursoEditor({ curso, facetas, salvando = false, onSalvar, onCanc
         </div>
         <button
           type="submit"
-          disabled={salvando || enviandoPacote}
+          disabled={salvando || carregandoPacoteAtual}
           className="rounded-[var(--radius-lg)] bg-[var(--sesi-red)] px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--sesi-red-dark)] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {enviandoPacote ? "Enviando pacote..." : salvando ? "Salvando..." : "Salvar curso"}
+          {salvando ? "Salvando..." : "Salvar curso"}
         </button>
       </div>
 
@@ -294,6 +321,23 @@ export function CursoEditor({ curso, facetas, salvando = false, onSalvar, onCanc
               ))}
             </select>
           </Campo>
+          <Campo titulo="Etapa interna do curso">
+            <select
+              value={draft.etapaDesenvolvimento}
+              onChange={(evento) =>
+                alterar("etapaDesenvolvimento", evento.target.value as CursoAdmin["etapaDesenvolvimento"])
+              }
+              className={campo}
+              required
+            >
+              <option value="Rascunho">Rascunho</option>
+              <option value="Homologado">Homologado</option>
+              <option value="Publicado">Publicado</option>
+            </select>
+            <span className="text-xs text-[var(--sesi-muted)]">
+              Rascunhos e cursos em homologação não aparecem no catálogo. Publicar libera a visibilidade conforme as datas.
+            </span>
+          </Campo>
           <Campo titulo="Carga horária (horas)">
             <input
               type="number"
@@ -312,6 +356,22 @@ export function CursoEditor({ curso, facetas, salvando = false, onSalvar, onCanc
               type="date"
               value={draft.dataDisponibilizacao ?? ""}
               onChange={(evento) => alterar("dataDisponibilizacao", evento.target.value)}
+              className={campo}
+            />
+          </Campo>
+          <Campo titulo="Data de publicação">
+            <input
+              type="date"
+              value={draft.dataPublicacao ?? ""}
+              onChange={(evento) => alterar("dataPublicacao", evento.target.value)}
+              className={campo}
+            />
+          </Campo>
+          <Campo titulo="Liberação das matrículas">
+            <input
+              type="date"
+              value={draft.dataLiberacaoMatricula ?? ""}
+              onChange={(evento) => alterar("dataLiberacaoMatricula", evento.target.value)}
               className={campo}
             />
           </Campo>
@@ -463,25 +523,79 @@ export function CursoEditor({ curso, facetas, salvando = false, onSalvar, onCanc
         <section className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white p-5">
           <h3 className="text-lg font-bold text-[var(--sesi-black)]">Pacote SCORM</h3>
           <p className="mb-4 text-xs text-[var(--sesi-muted)]">
-            Envie o .zip exportado do seu editor. O backend extrai o pacote, localiza o imsmanifest.xml e publica o conteúdo no player SCORM.
+            Envie um .zip SCORM 1.2 ou 2004. O limite atual é {limitePacoteMb} MB. Cada curso mantém um pacote ativo; o pacote publicado só é substituído depois que o novo arquivo for validado.
           </p>
+          {carregandoPacoteAtual ? (
+            <p className="mb-4 text-sm text-[var(--sesi-muted)]">Consultando pacote publicado...</p>
+          ) : pacoteAtual ? (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-[#F5F5F5] p-4">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--sesi-muted)]">Pacote ativo</p>
+                <p className="truncate text-sm font-semibold text-[var(--sesi-black)]">{pacoteAtual.nomeArquivo}</p>
+                <p className="text-xs text-[var(--sesi-muted)]">
+                  {(pacoteAtual.tamanho / (1024 * 1024)).toFixed(1)} MB · SCORM {pacoteAtual.versao}
+                </p>
+              </div>
+              <a
+                href={urlDownloadScorm(pacoteAtual)}
+                download={pacoteAtual.nomeArquivo}
+                className="rounded-[var(--radius-lg)] border border-[var(--sesi-black)] px-3 py-2 text-xs font-semibold transition hover:bg-[var(--sesi-black)] hover:text-white"
+              >
+                Baixar pacote
+              </a>
+            </div>
+          ) : (
+            <p className="mb-4 rounded-[var(--radius-lg)] bg-[#F5F5F5] px-4 py-3 text-sm text-[var(--sesi-muted)]">
+              Ainda não há pacote publicado para este curso.
+            </p>
+          )}
           <input
             type="file"
             accept=".zip,application/zip"
             onChange={(evento) => {
               const arquivo = evento.target.files?.[0]
               if (!arquivo) return
+              if (arquivo.size > limitePacoteMb * 1024 * 1024) {
+                setErro(`O arquivo excede o limite atual de ${limitePacoteMb} MB.`)
+                evento.target.value = ""
+                setArquivoPacote(null)
+                return
+              }
+              setErro("")
               setArquivoPacote(arquivo)
-              setStatusPacote("")
               alterarScorm({ arquivo: arquivo.name, tamanho: arquivo.size, versao: draft.scorm?.versao ?? "1.2" })
             }}
             aria-label="Arquivo SCORM"
             className="block w-full cursor-pointer rounded-[var(--radius-lg)] border border-dashed border-[var(--sesi-gray)] p-4 text-sm file:mr-4 file:rounded-[var(--radius-lg)] file:border-0 file:bg-[var(--sesi-black)] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
           />
-          {statusPacote && (
-            <p data-status-pacote className="mt-2 text-xs font-semibold text-green-700">
-              {statusPacote}
+          {arquivoPacote && (
+            <p className="mt-2 text-xs font-semibold text-[var(--sesi-black)]">
+              {pacoteAtual ? "Será publicado como substituição após a validação: " : "Pronto para enviar: "}
+              {arquivoPacote.name} · {(arquivoPacote.size / (1024 * 1024)).toFixed(1)} MB
             </p>
+          )}
+          {progressoUploadScorm !== null && (
+            <div className="mt-4 rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white p-4" role="status" aria-live="polite">
+              <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                <span className="font-semibold text-[var(--sesi-black)]">
+                  {progressoUploadScorm < 100 ? "Fazendo upload do pacote SCORM" : "Upload concluído. Processando pacote..."}
+                </span>
+                <span className="font-bold tabular-nums text-[var(--sesi-red)]">{progressoUploadScorm}%</span>
+              </div>
+              <div
+                className="h-2.5 overflow-hidden rounded-full bg-[#F1F1F1]"
+                role="progressbar"
+                aria-label="Progresso do upload do pacote SCORM"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progressoUploadScorm}
+              >
+                <div
+                  className="h-full rounded-full bg-[var(--sesi-red)] transition-[width] duration-200"
+                  style={{ width: `${progressoUploadScorm}%` }}
+                />
+              </div>
+            </div>
           )}
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <Campo titulo="Versão do SCORM">
@@ -496,8 +610,12 @@ export function CursoEditor({ curso, facetas, salvando = false, onSalvar, onCanc
             </Campo>
             {draft.scorm && (
               <div className="flex flex-col justify-end rounded-[var(--radius-lg)] bg-[#F5F5F5] px-4 py-2 text-sm">
-                <span className="font-semibold text-[var(--sesi-black)]">{draft.scorm.arquivo}</span>
-                <span className="text-xs text-[var(--sesi-muted)]">{(draft.scorm.tamanho / 1024).toFixed(1)} KB</span>
+                <span className="font-semibold text-[var(--sesi-black)]">{pacoteAtual?.nomeArquivo ?? draft.scorm.arquivo}</span>
+                <span className="text-xs text-[var(--sesi-muted)]">
+                  {pacoteAtual
+                    ? `${(pacoteAtual.tamanho / (1024 * 1024)).toFixed(1)} MB`
+                    : `${(draft.scorm.tamanho / 1024).toFixed(1)} KB`}
+                </span>
               </div>
             )}
           </div>
@@ -509,8 +627,7 @@ export function CursoEditor({ curso, facetas, salvando = false, onSalvar, onCanc
           <div>
             <h3 className="text-lg font-bold text-[var(--sesi-black)]">Página do curso SCORM</h3>
             <p className="mt-1 max-w-2xl text-xs text-[var(--sesi-muted)]">
-              Configura o banner, a imagem, os textos, os títulos e a carga horária da página pública. Os valores ficam
-              salvos neste navegador; em branco, a página usa os dados do catálogo.
+              Configure os textos e as imagens da página pública. As alterações são persistidas pela API e compartilhadas entre os visitantes.
             </p>
           </div>
           {draft.slug && (
@@ -612,10 +729,10 @@ export function CursoEditor({ curso, facetas, salvando = false, onSalvar, onCanc
         </button>
         <button
           type="submit"
-          disabled={salvando || enviandoPacote}
+          disabled={salvando}
           className="rounded-[var(--radius-lg)] bg-[var(--sesi-red)] px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--sesi-red-dark)] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {enviandoPacote ? "Enviando pacote..." : salvando ? "Salvando..." : "Salvar curso"}
+          {salvando ? "Salvando..." : "Salvar curso"}
         </button>
       </div>
     </form>

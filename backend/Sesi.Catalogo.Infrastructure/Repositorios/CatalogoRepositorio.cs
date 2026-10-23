@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
+using System.Text;
 using Sesi.Catalogo.Domain.Abstractions;
 using Sesi.Catalogo.Domain.Dtos;
 using Sesi.Catalogo.Domain.Entities;
@@ -21,21 +23,47 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
             > 48 => 48,
             _ => filtro.Tamanho
         };
+        var hoje = DateOnly.FromDateTime(DateTime.UtcNow);
 
         var query = db.Cursos
             .AsNoTracking()
             .Include(c => c.Categoria)
             .Include(c => c.Modalidade)
             .Include(c => c.Status)
-            .Where(c => c.Ativo);
+            .Where(c => c.Ativo &&
+                c.EtapaDesenvolvimento == "Publicado" &&
+                (c.DataPublicacao == null || c.DataPublicacao <= hoje));
 
         if (!string.IsNullOrWhiteSpace(filtro.Busca))
         {
-            var termo = filtro.Busca.Trim().ToLower();
+            var termo = NormalizarTermoBusca(filtro.Busca);
             query = query.Where(c =>
-                c.NomeCompleto.ToLower().Contains(termo) ||
-                c.NomeBreve.ToLower().Contains(termo) ||
-                c.Descricao.ToLower().Contains(termo));
+                (c.NomeCompleto + " " + c.NomeBreve + " " + c.Descricao)
+                    .Replace("Á", "a").Replace("á", "a")
+                    .Replace("À", "a").Replace("à", "a")
+                    .Replace("Â", "a").Replace("â", "a")
+                    .Replace("Ã", "a").Replace("ã", "a")
+                    .Replace("Ä", "a").Replace("ä", "a")
+                    .Replace("É", "e").Replace("é", "e")
+                    .Replace("È", "e").Replace("è", "e")
+                    .Replace("Ê", "e").Replace("ê", "e")
+                    .Replace("Ë", "e").Replace("ë", "e")
+                    .Replace("Í", "i").Replace("í", "i")
+                    .Replace("Ì", "i").Replace("ì", "i")
+                    .Replace("Î", "i").Replace("î", "i")
+                    .Replace("Ï", "i").Replace("ï", "i")
+                    .Replace("Ó", "o").Replace("ó", "o")
+                    .Replace("Ò", "o").Replace("ò", "o")
+                    .Replace("Ô", "o").Replace("ô", "o")
+                    .Replace("Õ", "o").Replace("õ", "o")
+                    .Replace("Ö", "o").Replace("ö", "o")
+                    .Replace("Ú", "u").Replace("ú", "u")
+                    .Replace("Ù", "u").Replace("ù", "u")
+                    .Replace("Û", "u").Replace("û", "u")
+                    .Replace("Ü", "u").Replace("ü", "u")
+                    .Replace("Ç", "c").Replace("ç", "c")
+                    .ToLower()
+                    .Contains(termo));
         }
 
         if (!string.IsNullOrWhiteSpace(filtro.Categoria))
@@ -45,7 +73,22 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
             query = query.Where(c => c.Modalidade!.Slug == filtro.Modalidade);
 
         if (!string.IsNullOrWhiteSpace(filtro.Status))
-            query = query.Where(c => c.Status!.Slug == filtro.Status);
+        {
+            var statusFiltro = filtro.Status;
+            query = query.Where(c =>
+                c.DataLiberacaoMatricula == null
+                    ? c.Status!.Slug == statusFiltro
+                    : statusFiltro == "em-breve"
+                        ? c.DataLiberacaoMatricula > hoje
+                        : statusFiltro == "inscricoes-abertas"
+                            ? c.DataLiberacaoMatricula <= hoje &&
+                              (c.DataDisponibilizacao == null || c.DataDisponibilizacao > hoje)
+                            : statusFiltro == "disponivel"
+                                ? c.DataLiberacaoMatricula <= hoje &&
+                                  c.DataDisponibilizacao != null &&
+                                  c.DataDisponibilizacao <= hoje
+                                : c.Status!.Slug == statusFiltro);
+        }
 
         if (filtro.Destaque is true)
             query = query.Where(c => c.Destaque);
@@ -76,7 +119,44 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
             total, pagina, tamanho, facetas);
     }
 
+    private static string NormalizarTermoBusca(string texto) =>
+        string.Concat(texto.Trim().Normalize(NormalizationForm.FormD)
+            .Where(caractere => CharUnicodeInfo.GetUnicodeCategory(caractere) != UnicodeCategory.NonSpacingMark))
+            .ToLowerInvariant();
+
+    public async Task<IReadOnlyList<CursoResumoDto>> ListarCursosAdministracaoAsync(CancellationToken ct = default)
+    {
+        var cursos = await db.Cursos
+            .AsNoTracking()
+            .Include(c => c.Categoria)
+            .Include(c => c.Modalidade)
+            .Include(c => c.Status)
+            .Where(c => c.Ativo)
+            .OrderBy(c => c.NomeBreve)
+            .ToListAsync(ct);
+
+        return cursos.Select(Mapeador.ParaResumoDto).ToList();
+    }
+
     public async Task<CursoDetalheDto?> ObterCursoPorSlugAsync(string slug, CancellationToken ct = default)
+    {
+        var hoje = DateOnly.FromDateTime(DateTime.UtcNow);
+        var curso = await db.Cursos
+            .AsNoTracking()
+            .Include(c => c.Categoria)
+            .Include(c => c.Modalidade)
+            .Include(c => c.Status)
+            .Include(c => c.Modulos).ThenInclude(m => m.Aulas)
+            .FirstOrDefaultAsync(c =>
+                c.Slug == slug &&
+                c.Ativo &&
+                c.EtapaDesenvolvimento == "Publicado" &&
+                (c.DataPublicacao == null || c.DataPublicacao <= hoje), ct);
+
+        return curso?.ParaDetalheDto();
+    }
+
+    private async Task<CursoDetalheDto?> ObterCursoSemFiltroDePublicacaoAsync(string slug, CancellationToken ct)
     {
         var curso = await db.Cursos
             .AsNoTracking()
@@ -111,10 +191,15 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
 
     public async Task<ProgressoCursoDto?> ObterProgressoAsync(string slug, string? usuarioId, CancellationToken ct = default)
     {
+        var hoje = DateOnly.FromDateTime(DateTime.UtcNow);
         var curso = await db.Cursos
             .AsNoTracking()
             .Include(c => c.Modulos).ThenInclude(m => m.Aulas)
-            .FirstOrDefaultAsync(c => c.Slug == slug && c.Ativo, ct);
+            .FirstOrDefaultAsync(c =>
+                c.Slug == slug &&
+                c.Ativo &&
+                c.EtapaDesenvolvimento == "Publicado" &&
+                (c.DataPublicacao == null || c.DataPublicacao <= hoje), ct);
 
         if (curso is null)
             return null;
@@ -170,7 +255,11 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
             .AsNoTracking()
             .Include(t => t.Modalidade)
             .Include(t => t.Matriculas)
-            .Where(t => t.Curso!.Slug == slug && t.Curso.Ativo && t.Ativa &&
+            .Where(t => t.Curso!.Slug == slug &&
+                        t.Curso.Ativo &&
+                        t.Curso.EtapaDesenvolvimento == "Publicado" &&
+                        (t.Curso.DataPublicacao == null || t.Curso.DataPublicacao <= hoje) &&
+                        t.Ativa &&
                         (t.DataFim == null || t.DataFim >= hoje))
             .OrderBy(t => t.DataInicio)
             .ThenBy(t => t.HorarioInicio)
@@ -196,13 +285,21 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
             .FirstOrDefaultAsync(c => c.Slug == request.CursoSlug && c.Ativo, ct)
             ?? throw new InvalidOperationException("Curso não encontrado.");
 
+        var hoje = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (curso.EtapaDesenvolvimento != "Publicado" ||
+            curso.DataPublicacao is { } publicacao && publicacao > hoje)
+            throw new InvalidOperationException("Este curso ainda não está publicado.");
+        if (curso.DataLiberacaoMatricula is { } liberacao && liberacao > hoje)
+            throw new InvalidOperationException("As matrículas deste curso ainda não foram liberadas.");
+        if (curso.Status!.Slug == "em-breve")
+            throw new InvalidOperationException("As matrículas deste curso ainda não foram liberadas.");
+
         var turma = await db.Turmas
             .Include(t => t.Modalidade)
             .Include(t => t.Matriculas)
             .FirstOrDefaultAsync(t => t.Id == request.TurmaId && t.CursoId == curso.Id && t.Ativa, ct)
             ?? throw new InvalidOperationException("Turma não encontrada para este curso.");
 
-        var hoje = DateOnly.FromDateTime(DateTime.UtcNow);
         if (turma.DataFim is not null && turma.DataFim < hoje)
             throw new InvalidOperationException("Esta turma já foi encerrada.");
 
@@ -264,7 +361,10 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
 
     public async Task<CursoDetalheDto> CriarCursoAsync(CursoSalvarRequest request, CancellationToken ct = default)
     {
-        var normalizado = NormalizarCurso(request);
+        var normalizado = NormalizarCurso(request) with
+        {
+            EtapaDesenvolvimento = request.EtapaDesenvolvimento ?? "Rascunho"
+        };
         var (categoria, modalidade, status) = await ValidarCursoAsync(normalizado, null, ct);
 
         var curso = new Curso
@@ -277,6 +377,9 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
             PublicoAlvo = normalizado.PublicoAlvo?.Trim() ?? string.Empty,
             ImagemUrl = normalizado.ImagemUrl?.Trim() ?? string.Empty,
             DataDisponibilizacao = normalizado.DataDisponibilizacao,
+            DataPublicacao = normalizado.DataPublicacao,
+            DataLiberacaoMatricula = normalizado.DataLiberacaoMatricula,
+            EtapaDesenvolvimento = normalizado.EtapaDesenvolvimento,
             Destaque = normalizado.Destaque,
             Ativo = true,
             Categoria = categoria,
@@ -293,7 +396,7 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
         await CriarTurmasPadraoAsync(curso, modalidade, ct);
         await db.SaveChangesAsync(ct);
 
-        return await ObterCursoPorSlugAsync(curso.Slug, ct)
+        return await ObterCursoSemFiltroDePublicacaoAsync(curso.Slug, ct)
             ?? throw new InvalidOperationException("Curso criado, mas não foi possível carregá-lo.");
     }
 
@@ -306,7 +409,10 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
         if (curso is null)
             return null;
 
-        var normalizado = NormalizarCurso(request);
+        var normalizado = NormalizarCurso(request) with
+        {
+            EtapaDesenvolvimento = request.EtapaDesenvolvimento ?? curso.EtapaDesenvolvimento
+        };
         var (categoria, modalidade, status) = await ValidarCursoAsync(normalizado, curso.Id, ct);
 
         curso.NomeCompleto = normalizado.NomeCompleto.Trim();
@@ -317,6 +423,9 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
         curso.PublicoAlvo = normalizado.PublicoAlvo?.Trim() ?? string.Empty;
         curso.ImagemUrl = normalizado.ImagemUrl?.Trim() ?? string.Empty;
         curso.DataDisponibilizacao = normalizado.DataDisponibilizacao;
+        curso.DataPublicacao = normalizado.DataPublicacao;
+        curso.DataLiberacaoMatricula = normalizado.DataLiberacaoMatricula;
+        curso.EtapaDesenvolvimento = normalizado.EtapaDesenvolvimento;
         curso.Destaque = normalizado.Destaque;
         curso.Categoria = categoria;
         curso.Modalidade = modalidade;
@@ -330,7 +439,7 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
         }
 
         await db.SaveChangesAsync(ct);
-        return await ObterCursoPorSlugAsync(curso.Slug, ct);
+        return await ObterCursoSemFiltroDePublicacaoAsync(curso.Slug, ct);
     }
 
     public async Task<bool> ExcluirCursoAsync(string slug, CancellationToken ct = default)
@@ -444,6 +553,12 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
             throw new InvalidOperationException("Descrição é obrigatória.");
         if (request.CargaHoraria <= 0)
             throw new InvalidOperationException("Carga horária deve ser maior que zero.");
+        if (request.EtapaDesenvolvimento is not ("Rascunho" or "Homologado" or "Publicado"))
+            throw new InvalidOperationException("Etapa de desenvolvimento inválida.");
+        if (request.DataLiberacaoMatricula is not null &&
+            request.DataPublicacao is not null &&
+            request.DataLiberacaoMatricula < request.DataPublicacao)
+            throw new InvalidOperationException("A liberação de matrícula não pode anteceder a data de publicação.");
 
         var slugEmUso = await db.Cursos.AnyAsync(
             c => c.Slug == request.Slug && c.Ativo && c.Id != (ignorarCursoId ?? 0), ct);

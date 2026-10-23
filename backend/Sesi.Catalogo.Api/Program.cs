@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.FileProviders;
+using Sesi.Catalogo.Api.Dev;
+using Sesi.Catalogo.Api.Gestao;
 using Sesi.Catalogo.Api.Scorm;
 using Sesi.Catalogo.Domain.Abstractions;
 using Sesi.Catalogo.Domain.Dtos;
@@ -13,12 +15,19 @@ var builder = WebApplication.CreateBuilder(args);
 // Configuração
 builder.Services.AdicionarInfraestrutura(builder.Configuration);
 
-// Pacotes SCORM: o zip pode passar do limite padrão de 30 MB do Kestrel.
+// Reserva espaço para os metadados multipart além do limite configurável de 200 MB.
 builder.WebHost.ConfigureKestrel(opcoes =>
-    opcoes.Limits.MaxRequestBodySize = 100 * 1024 * 1024);
+    opcoes.Limits.MaxRequestBodySize = 205 * 1024 * 1024);
 builder.Services.Configure<FormOptions>(opcoes =>
-    opcoes.MultipartBodyLengthLimit = 100 * 1024 * 1024);
+    opcoes.MultipartBodyLengthLimit = 205 * 1024 * 1024);
 builder.Services.AddSingleton<ScormArmazenamento>();
+builder.Services.AddSingleton<GestaoArmazenamento>();
+builder.Services.AddHttpClient<ResendEmailSender>(cliente => cliente.Timeout = TimeSpan.FromSeconds(10));
+if (builder.Environment.IsDevelopment() &&
+    !string.Equals(Environment.GetEnvironmentVariable("SESI_DEV_COORDINATOR"), "1", StringComparison.Ordinal))
+{
+    builder.Services.AddHostedService<FrontendDevServer>();
+}
 
 // CORS
 // WithOrigins não aceita curingas, por isso a comparação é feita manualmente
@@ -117,6 +126,311 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok", timestamp = DateTime
 // V1 endpoints
 var v1 = app.MapGroup("/api/v1").WithTags("Catálogo");
 
+v1.MapPost("/chamados", async (
+    [FromBody] CriarChamadoRequest request,
+    GestaoArmazenamento armazenamento,
+    ResendEmailSender emailSender,
+    CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Nome) || request.Nome.Length > 120)
+        return Results.BadRequest(new { erro = "Informe seu nome, com até 120 caracteres." });
+    if (!ResendEmailSender.EmailValido(request.Email) || request.Email.Length > 254)
+        return Results.BadRequest(new { erro = "Informe um e-mail válido." });
+    if (request.Categoria is not ("Acesso" or "Curso" or "Conteúdo" or "Certificado" or "Outro"))
+        return Results.BadRequest(new { erro = "Selecione uma categoria válida para o chamado." });
+    if (string.IsNullOrWhiteSpace(request.Descricao) || request.Descricao.Trim().Length < 10 ||
+        request.Descricao.Length > 4000)
+        return Results.BadRequest(new { erro = "Descreva o problema com 10 a 4000 caracteres." });
+    if (request.Pagina is null || request.Pagina.Length > 500)
+        return Results.BadRequest(new { erro = "O endereço da página informado é muito longo." });
+    var capturaTela = request.CapturaTela;
+    if (!string.IsNullOrWhiteSpace(capturaTela))
+    {
+        const string prefixoCaptura = "data:image/jpeg;base64,";
+        if (!capturaTela.StartsWith(prefixoCaptura, StringComparison.Ordinal) ||
+            capturaTela.Length > 5_600_000)
+            return Results.BadRequest(new { erro = "A captura deve ser uma imagem JPEG de até 4 MB." });
+
+        try
+        {
+            var bytes = Convert.FromBase64String(capturaTela[prefixoCaptura.Length..]);
+            if (bytes.Length > 4 * 1024 * 1024 ||
+                bytes.Length < 3 ||
+                bytes[0] != 0xFF ||
+                bytes[1] != 0xD8 ||
+                bytes[2] != 0xFF)
+                return Results.BadRequest(new { erro = "A captura deve ser uma imagem JPEG de até 4 MB." });
+        }
+        catch (FormatException)
+        {
+            return Results.BadRequest(new { erro = "A captura de tela está em um formato inválido." });
+        }
+    }
+
+    var chamado = await armazenamento.CriarChamadoAsync(request, ct);
+    var envio = await emailSender.EnviarChamadoAsync(chamado, ct);
+    return Results.Created($"/api/v1/chamados/{chamado.Id}", new
+    {
+        chamado,
+        envio.SuporteEnviado,
+        envio.AlunoEnviado,
+        envio.Erro
+    });
+})
+.WithName("CriarChamadoSuporte")
+.WithSummary("Registra um chamado e tenta notificar o suporte e o aluno")
+.Produces(StatusCodes.Status201Created)
+.Produces(StatusCodes.Status400BadRequest);
+
+if (app.Environment.IsDevelopment())
+{
+    var gestao = v1.MapGroup("/gestao").WithTags("Gestão local (sem autenticação real)");
+
+    gestao.MapGet("/cursos", async (ICatalogoRepositorio repo, CancellationToken ct) =>
+        Results.Ok(await repo.ListarCursosAdministracaoAsync(ct)))
+    .WithName("ListarCursosAdministracao")
+    .WithSummary("Lista cursos ativos em qualquer etapa de desenvolvimento para o admin local")
+    .Produces<IReadOnlyList<CursoResumoDto>>(StatusCodes.Status200OK);
+
+    gestao.MapPost("/usuarios/registro", async (
+        [FromBody] RegistrarAlunoRequest request,
+        GestaoArmazenamento armazenamento,
+        CancellationToken ct) =>
+    {
+        if (string.IsNullOrWhiteSpace(request.Nome) || request.Nome.Length > 120)
+            return Results.BadRequest(new { erro = "Informe um nome válido, com até 120 caracteres." });
+        if (!ResendEmailSender.EmailValido(request.Email) || request.Email.Length > 254)
+            return Results.BadRequest(new { erro = "Informe um e-mail válido." });
+        if (!request.Email.Equals("admin@sesindustria.com.br", StringComparison.OrdinalIgnoreCase) &&
+            !request.Email.Equals("aluno@teste.com", StringComparison.OrdinalIgnoreCase))
+            return Results.BadRequest(new { erro = "O cadastro sem senha está reservado às contas de demonstração." });
+
+        var usuario = await armazenamento.RegistrarAlunoAsync(request.Nome, request.Email, ct);
+        return Results.Ok(usuario);
+    })
+    .WithName("RegistrarAlunoGestao")
+    .WithSummary("Registra um aluno sem permitir que o cliente escolha o papel")
+    .Produces<UsuarioGestaoDto>(StatusCodes.Status200OK)
+    .Produces(StatusCodes.Status400BadRequest);
+
+    gestao.MapPost("/usuarios/registro-com-senha", async (
+        [FromBody] CriarContaAlunoRequest request,
+        GestaoArmazenamento armazenamento,
+        CancellationToken ct) =>
+    {
+        if (string.IsNullOrWhiteSpace(request.Nome) || request.Nome.Length > 120)
+            return Results.BadRequest(new { erro = "Informe um nome válido, com até 120 caracteres." });
+        if (!ResendEmailSender.EmailValido(request.Email) || request.Email.Length > 254)
+            return Results.BadRequest(new { erro = "Informe um e-mail válido." });
+        if (request.Senha.Length is < 8 or > 128)
+            return Results.BadRequest(new { erro = "A senha deve ter entre 8 e 128 caracteres." });
+        if (request.Email.Equals("admin@sesindustria.com.br", StringComparison.OrdinalIgnoreCase) ||
+            request.Email.Equals("aluno@teste.com", StringComparison.OrdinalIgnoreCase))
+            return Results.BadRequest(new { erro = "As contas de demonstração continuam sem senha." });
+
+        try
+        {
+            var usuario = await armazenamento.CriarContaAlunoAsync(request.Nome, request.Email, request.Senha, ct);
+            return Results.Ok(usuario);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.Conflict(new { erro = ex.Message });
+        }
+    })
+    .WithName("CriarContaAlunoComSenha")
+    .WithSummary("Cria uma conta de aluno com senha armazenada em hash")
+    .Produces<UsuarioGestaoDto>(StatusCodes.Status200OK)
+    .Produces(StatusCodes.Status400BadRequest)
+    .Produces(StatusCodes.Status409Conflict);
+
+    gestao.MapPost("/usuarios/autenticar", async (
+        [FromBody] AutenticarAlunoRequest request,
+        GestaoArmazenamento armazenamento,
+        CancellationToken ct) =>
+    {
+        if (!ResendEmailSender.EmailValido(request.Email) || request.Email.Length > 254 ||
+            string.IsNullOrEmpty(request.Senha) || request.Senha.Length > 128)
+            return Results.BadRequest(new { erro = "Informe um e-mail e uma senha válidos." });
+
+        var usuario = await armazenamento.AutenticarAlunoAsync(request.Email, request.Senha, ct);
+        return usuario is null
+            ? Results.Json(new { erro = "E-mail ou senha inválidos." }, statusCode: StatusCodes.Status401Unauthorized)
+            : Results.Ok(usuario);
+    })
+    .WithName("AutenticarAluno")
+    .WithSummary("Valida a senha de uma conta de aluno local")
+    .Produces<UsuarioGestaoDto>(StatusCodes.Status200OK)
+    .Produces(StatusCodes.Status400BadRequest)
+    .Produces(StatusCodes.Status401Unauthorized);
+
+    gestao.MapGet("/usuarios/perfil", async (
+        [FromQuery] string email,
+        GestaoArmazenamento armazenamento,
+        CancellationToken ct) =>
+    {
+        if (!ResendEmailSender.EmailValido(email))
+            return Results.BadRequest(new { erro = "Informe um e-mail válido." });
+        var usuario = await armazenamento.ObterUsuarioPorEmailAsync(email, ct);
+        return usuario is null ? Results.NotFound() : Results.Ok(usuario);
+    })
+    .WithName("ObterUsuarioGestaoPorEmail");
+
+    gestao.MapGet("/usuarios", async (GestaoArmazenamento armazenamento, CancellationToken ct) =>
+        Results.Ok(await armazenamento.ListarUsuariosAsync(ct)))
+        .WithName("ListarUsuariosGestao");
+
+    gestao.MapPost("/usuarios", async (
+        [FromBody] SalvarUsuarioGestaoRequest request,
+        GestaoArmazenamento armazenamento,
+        CancellationToken ct) =>
+    {
+        if (string.IsNullOrWhiteSpace(request.Nome) || request.Nome.Length > 120)
+            return Results.BadRequest(new { erro = "Informe um nome válido, com até 120 caracteres." });
+        if (!ResendEmailSender.EmailValido(request.Email) || request.Email.Length > 254)
+            return Results.BadRequest(new { erro = "Informe um e-mail válido." });
+        if (!GestaoArmazenamento.Papeis.Contains(request.Papel, StringComparer.Ordinal))
+            return Results.BadRequest(new { erro = "Selecione um papel válido." });
+
+        try
+        {
+            return Results.Created("/api/v1/gestao/usuarios", await armazenamento.SalvarUsuarioAsync(request, null, ct));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ErroValidacao(ex);
+        }
+    })
+    .WithName("CriarUsuarioGestao");
+
+    gestao.MapPut("/usuarios/{id}", async (
+        string id,
+        [FromBody] SalvarUsuarioGestaoRequest request,
+        GestaoArmazenamento armazenamento,
+        CancellationToken ct) =>
+    {
+        if (string.IsNullOrWhiteSpace(request.Nome) || request.Nome.Length > 120)
+            return Results.BadRequest(new { erro = "Informe um nome válido, com até 120 caracteres." });
+        if (!ResendEmailSender.EmailValido(request.Email) || request.Email.Length > 254)
+            return Results.BadRequest(new { erro = "Informe um e-mail válido." });
+        if (!GestaoArmazenamento.Papeis.Contains(request.Papel, StringComparer.Ordinal))
+            return Results.BadRequest(new { erro = "Selecione um papel válido." });
+
+        try
+        {
+            return Results.Ok(await armazenamento.SalvarUsuarioAsync(request, id, ct));
+        }
+        catch (KeyNotFoundException)
+        {
+            return Results.NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ErroValidacao(ex);
+        }
+    })
+    .WithName("AtualizarUsuarioGestao");
+
+    gestao.MapDelete("/usuarios/{id}", async (string id, GestaoArmazenamento armazenamento, CancellationToken ct) =>
+    {
+        try
+        {
+            return await armazenamento.ExcluirUsuarioAsync(id, ct) ? Results.NoContent() : Results.NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ErroValidacao(ex);
+        }
+    })
+    .WithName("ExcluirUsuarioGestao");
+
+    gestao.MapGet("/permissoes", async (GestaoArmazenamento armazenamento, CancellationToken ct) =>
+        Results.Ok(await armazenamento.ObterPermissoesAsync(ct)))
+        .WithName("ObterPermissoesGestao");
+
+    gestao.MapPut("/permissoes", async (
+        [FromBody] IReadOnlyList<PermissaoPapelDto>? permissoes,
+        GestaoArmazenamento armazenamento,
+        CancellationToken ct) =>
+    {
+        if (permissoes is null ||
+            permissoes.Count != GestaoArmazenamento.Papeis.Length ||
+            permissoes.Select(p => p.Papel).Distinct(StringComparer.Ordinal).Count() != GestaoArmazenamento.Papeis.Length ||
+            !GestaoArmazenamento.Papeis.All(papel => permissoes.Any(p => p.Papel == papel)))
+            return Results.BadRequest(new { erro = "Envie uma permissão para cada um dos oito papéis." });
+
+        var convidado = permissoes.Single(p => p.Papel == "Convidado");
+        if (convidado.Criar || convidado.Editar || convidado.Excluir)
+            return Results.BadRequest(new { erro = "O papel Convidado só pode visualizar conteúdo público." });
+
+        await armazenamento.SalvarPermissoesAsync(permissoes, ct);
+        return Results.Ok(permissoes);
+    })
+    .WithName("SalvarPermissoesGestao");
+
+    gestao.MapGet("/chamados", async (GestaoArmazenamento armazenamento, CancellationToken ct) =>
+        Results.Ok(await armazenamento.ListarChamadosAsync(null, ct)))
+        .WithName("ListarChamadosGestao");
+
+    gestao.MapPut("/chamados/{id}", async (
+        string id,
+        [FromBody] AtualizarChamadoRequest request,
+        GestaoArmazenamento armazenamento,
+        CancellationToken ct) =>
+    {
+        if (request.Status is not ("Aberto" or "Em atendimento" or "Resolvido"))
+            return Results.BadRequest(new { erro = "Selecione um status válido para o chamado." });
+        var atualizado = await armazenamento.AtualizarChamadoAsync(id, request, ct);
+        return atualizado is null ? Results.NotFound() : Results.Ok(atualizado);
+    })
+    .WithName("AtualizarChamadoGestao");
+
+    gestao.MapGet("/marcos", async (
+        [FromQuery] string usuarioId,
+        GestaoArmazenamento armazenamento,
+        CancellationToken ct) =>
+    {
+        if (string.IsNullOrWhiteSpace(usuarioId))
+            return Results.BadRequest(new { erro = "usuarioId é obrigatório." });
+        return Results.Ok(await armazenamento.ObterMarcosCursoAsync(usuarioId, ct));
+    })
+    .WithName("ListarMarcosCurso");
+
+    gestao.MapPost("/marcos", async (
+        [FromBody] AtualizarMarcoCursoRequest request,
+        ICatalogoRepositorio repo,
+        GestaoArmazenamento armazenamento,
+        ScormArmazenamento scorm,
+        CancellationToken ct) =>
+    {
+        if (string.IsNullOrWhiteSpace(request.CursoSlug) || string.IsNullOrWhiteSpace(request.UsuarioId))
+            return Results.BadRequest(new { erro = "Curso e usuário são obrigatórios para registrar um marco." });
+        if (request.Marco is not ("inicio" or "conclusao"))
+            return Results.BadRequest(new { erro = "Marco deve ser 'inicio' ou 'conclusao'." });
+        if (request.Percentual is < 0 or > 100)
+            return Results.BadRequest(new { erro = "O percentual do curso deve estar entre 0 e 100." });
+
+        var curso = await repo.ObterCursoPorSlugAsync(request.CursoSlug, ct);
+        if (curso is null) return Results.NotFound(new { erro = "Curso não encontrado." });
+        if (request.Marco == "conclusao")
+        {
+            var pacote = await scorm.ObterPorCursoAsync(request.CursoSlug, ct);
+            var progresso = pacote is null
+                ? null
+                : await scorm.ObterProgressoAsync(request.CursoSlug, request.UsuarioId, ct);
+            var percentual = pacote is null ? request.Percentual : progresso?.Percentual ?? 0;
+            var status = progresso?.LessonStatus?.ToLowerInvariant();
+            var concluido = status is "completed" or "passed" or "complete" ||
+                            (status != "failed" && percentual >= 100);
+            if (!concluido)
+                return Results.BadRequest(new { erro = "O conteúdo do curso ainda não foi concluído." });
+        }
+
+        return Results.Ok(await armazenamento.RegistrarMarcoCursoAsync(request, ct));
+    })
+    .WithName("RegistrarMarcoCurso");
+}
+
 v1.MapGet("/facetas", async (ICatalogoRepositorio repo, CancellationToken ct) =>
 {
     var facetas = await repo.ObterFacetasAsync(ct);
@@ -167,7 +481,7 @@ v1.MapPost("/cursos", async ([FromBody] CursoSalvarRequest request, ICatalogoRep
     }
 })
 .WithName("CriarCurso")
-.WithSummary("Cria um curso no catálogo")
+.WithSummary("Cria um curso e define sua etapa de desenvolvimento e oferta")
 .Produces<CursoDetalheDto>(StatusCodes.Status201Created)
 .Produces(StatusCodes.Status400BadRequest);
 
@@ -269,6 +583,75 @@ v1.MapGet("/sessoes-scorm", async ([FromQuery] string sessaoId, ICatalogoReposit
 .Produces(StatusCodes.Status404NotFound);
 
 // SCORM: upload do pacote, player e progresso persistente
+v1.MapGet("/scorm/configuracoes", async (ScormArmazenamento armazenamento, CancellationToken ct) =>
+{
+    var configuracao = await armazenamento.ObterConfiguracaoAsync(ct);
+    return Results.Ok(configuracao);
+})
+.WithName("ObterConfiguracaoScorm")
+.WithSummary("Obtém o limite configurado para pacotes SCORM")
+.Produces<ScormConfiguracaoDto>(StatusCodes.Status200OK);
+
+v1.MapPut("/scorm/configuracoes", async (
+    [FromBody] AtualizarLimiteScormRequest? request,
+    ScormArmazenamento armazenamento,
+    CancellationToken ct) =>
+{
+    if (request is null)
+        return Results.BadRequest(new { erro = "Informe o limite de upload SCORM." });
+
+    try
+    {
+        var configuracao = await armazenamento.AtualizarConfiguracaoAsync(request, ct);
+        return Results.Ok(configuracao);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return ErroValidacao(ex);
+    }
+})
+.WithName("AtualizarConfiguracaoScorm")
+.WithSummary("Atualiza o limite de upload SCORM (20, 50, 80, 100 ou 200 MB)")
+.Produces<ScormConfiguracaoDto>(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status400BadRequest);
+
+v1.MapGet("/scorm/paginas/{cursoSlug}", async (
+    string cursoSlug,
+    ScormArmazenamento armazenamento,
+    CancellationToken ct) =>
+{
+    var configuracao = await armazenamento.ObterConfiguracaoPaginaAsync(cursoSlug, ct);
+    return configuracao is null ? Results.NotFound() : Results.Ok(configuracao);
+})
+.WithName("ObterConfiguracaoPaginaScorm")
+.WithSummary("Obtém a configuração persistida da página pública SCORM")
+.Produces<ScormPaginaConfigDto>(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status404NotFound);
+
+v1.MapPut("/scorm/paginas/{cursoSlug}", async (
+    string cursoSlug,
+    [FromBody] ScormPaginaConfigDto? configuracao,
+    ScormArmazenamento armazenamento,
+    CancellationToken ct) =>
+{
+    if (configuracao is null)
+        return Results.BadRequest(new { erro = "Informe os dados da página SCORM." });
+
+    try
+    {
+        var salva = await armazenamento.SalvarConfiguracaoPaginaAsync(cursoSlug, configuracao, ct);
+        return Results.Ok(salva);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return ErroValidacao(ex);
+    }
+})
+.WithName("SalvarConfiguracaoPaginaScorm")
+.WithSummary("Salva a configuração pública da página SCORM")
+.Produces<ScormPaginaConfigDto>(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status400BadRequest);
+
 v1.MapPost("/scorm/pacotes", async (HttpRequest request, ScormArmazenamento armazenamento, CancellationToken ct) =>
 {
     if (!request.HasFormContentType)
@@ -318,16 +701,41 @@ v1.MapGet("/scorm/pacotes/{cursoSlug}", async (string cursoSlug, ScormArmazename
 .Produces<ScormPacoteDto>(StatusCodes.Status200OK)
 .Produces(StatusCodes.Status404NotFound);
 
+v1.MapGet("/scorm/pacotes", async (ScormArmazenamento armazenamento, CancellationToken ct) =>
+    Results.Ok(await armazenamento.ListarPacotesAsync(ct)))
+.WithName("ListarPacotesScorm")
+.WithSummary("Lista os pacotes SCORM ativos para identificação dos cursos no admin")
+.Produces<IReadOnlyList<ScormPacoteDto>>(StatusCodes.Status200OK);
+
 v1.MapGet("/scorm/pacotes/{id}/launch", async (string id, string? usuarioId, ScormArmazenamento armazenamento, CancellationToken ct) =>
 {
     var pacote = await armazenamento.ObterPorIdAsync(id, ct);
     if (pacote is null) return Results.NotFound();
 
     var aluno = string.IsNullOrWhiteSpace(usuarioId) ? "anonimo" : usuarioId.Trim();
-    return Results.Content(ScormWrapper.GerarHtml(pacote, aluno), "text/html; charset=utf-8");
+    var totalAulas = await armazenamento.ObterQuantidadeAulasAsync(pacote, ct);
+    return Results.Content(ScormWrapper.GerarHtml(pacote, aluno, totalAulas), "text/html; charset=utf-8");
 })
 .WithName("AbrirPlayerScorm")
 .WithSummary("Player SCORM com API 1.2/2004 e retomada de progresso");
+
+v1.MapGet("/scorm/pacotes/{id}/download", async (
+    string id,
+    ScormArmazenamento armazenamento,
+    CancellationToken ct) =>
+{
+    var caminho = await armazenamento.ObterCaminhoDownloadAsync(id, ct);
+    if (caminho is null) return Results.NotFound();
+
+    var pacote = await armazenamento.ObterPorIdAsync(id, ct);
+    return pacote is null
+        ? Results.NotFound()
+        : Results.File(caminho, "application/zip", Path.GetFileName(pacote.NomeArquivo), enableRangeProcessing: true);
+})
+.WithName("BaixarPacoteScorm")
+.WithSummary("Baixa o ZIP original do pacote SCORM ativo")
+.Produces(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status404NotFound);
 
 v1.MapDelete("/scorm/pacotes/{cursoSlug}", async (string cursoSlug, ScormArmazenamento armazenamento, CancellationToken ct) =>
 {
@@ -348,13 +756,15 @@ v1.MapGet("/scorm/progresso", async (
     if (string.IsNullOrWhiteSpace(cursoSlug) || string.IsNullOrWhiteSpace(usuarioId))
         return Results.BadRequest(new { erro = "cursoSlug e usuarioId são obrigatórios." });
 
-    var progresso = await armazenamento.ObterProgressoAsync(cursoSlug, usuarioId, ct);
-    return progresso is null ? Results.NotFound() : Results.Ok(progresso);
+    var pacote = await armazenamento.ObterPorCursoAsync(cursoSlug, ct);
+    var totalAulas = pacote is null ? 0 : await armazenamento.ObterQuantidadeAulasAsync(pacote, ct);
+    var progresso = await armazenamento.ObterProgressoAsync(cursoSlug, usuarioId, ct, totalAulas);
+    return progresso is null ? Results.NoContent() : Results.Ok(progresso);
 })
 .WithName("ObterProgressoScorm")
 .WithSummary("Recupera o progresso SCORM de um aluno")
 .Produces<ProgressoScormDto>(StatusCodes.Status200OK)
-.Produces(StatusCodes.Status404NotFound);
+.Produces(StatusCodes.Status204NoContent);
 
 v1.MapPost("/scorm/progresso", async (
     [FromBody] SalvarProgressoScormRequest request,

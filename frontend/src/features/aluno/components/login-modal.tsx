@@ -6,9 +6,20 @@ import {
   atualizarPerfil,
   criarConta,
   entrar,
+  papelDeGestao,
+  salvarPerfil,
   type PerfilAluno,
+  type Papel,
 } from "@/lib/auth/perfil"
 import { idiomaAtual } from "@/lib/i18n/idioma"
+import {
+  autenticarAlunoGestao,
+  gestaoLocalHabilitada,
+  obterUsuarioGestaoPorEmail,
+  registrarAlunoComSenhaGestao,
+  registrarAlunoGestao,
+} from "@/lib/api/gestao"
+import { useBodyScrollLock } from "@/lib/ui/use-body-scroll-lock"
 
 interface LoginModalProps {
   aberto: boolean
@@ -35,7 +46,11 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
   const [sobrenome, setSobrenome] = useState("")
   const [telefone, setTelefone] = useState("")
   const [dataNascimento, setDataNascimento] = useState("")
+  const [senha, setSenha] = useState("")
+  const [confirmarSenha, setConfirmarSenha] = useState("")
   const [erro, setErro] = useState("")
+  const [carregando, setCarregando] = useState(false)
+  useBodyScrollLock(aberto)
 
   useEffect(() => {
     if (!aberto) return
@@ -44,41 +59,8 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
     }
     document.addEventListener("keydown", aoTeclar)
 
-    const raiz = document.documentElement
-    const corpo = document.body
-    const overflowAnterior = corpo.style.overflow
-    const overflowRaizAnterior = raiz.style.overflow
-    const paddingDireitaAnterior = corpo.style.paddingRight
-    const posicaoAnterior = corpo.style.position
-    const topoAnterior = corpo.style.top
-    const esquerdaAnterior = corpo.style.left
-    const direitaAnterior = corpo.style.right
-    const larguraAnterior = corpo.style.width
-    const rolagemAnterior = window.scrollY
-    const larguraBarra = window.innerWidth - raiz.clientWidth
-
-    corpo.style.position = "fixed"
-    corpo.style.top = `-${rolagemAnterior}px`
-    corpo.style.left = "0"
-    corpo.style.right = "0"
-    corpo.style.width = "100%"
-    corpo.style.overflow = "hidden"
-    raiz.style.overflow = "hidden"
-    if (larguraBarra > 0) corpo.style.paddingRight = `${larguraBarra}px`
-    window.dispatchEvent(new Event("sesi:travar-scroll"))
-
     return () => {
       document.removeEventListener("keydown", aoTeclar)
-      corpo.style.position = posicaoAnterior
-      corpo.style.top = topoAnterior
-      corpo.style.left = esquerdaAnterior
-      corpo.style.right = direitaAnterior
-      corpo.style.width = larguraAnterior
-      corpo.style.overflow = overflowAnterior
-      corpo.style.paddingRight = paddingDireitaAnterior
-      raiz.style.overflow = overflowRaizAnterior
-      window.scrollTo(0, rolagemAnterior)
-      window.dispatchEvent(new Event("sesi:liberar-scroll"))
     }
   }, [aberto, onFechar])
 
@@ -86,6 +68,8 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
     if (!aberto) {
       setEtapa("email")
       setErro("")
+      setSenha("")
+      setConfirmarSenha("")
     }
   }, [aberto])
 
@@ -96,9 +80,48 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
     onEntrou(perfil)
   }
 
-  const entrarComEmail = (valor: string) => {
-    const perfil = entrar(valor)
-    concluir(perfil)
+  const entrarComEmail = async (valor: string) => {
+    if (carregando) return
+    setCarregando(true)
+    setErro("")
+    try {
+      const normalizado = valor.trim().toLowerCase()
+      const contaDemo = normalizado === EMAIL_ADMIN || normalizado === EMAIL_TESTE
+      if (!contaDemo && !gestaoLocalHabilitada) {
+        setErro("O login com senha está disponível apenas com a API local. A autenticação de produção ainda não está configurada.")
+        return
+      }
+
+      if (gestaoLocalHabilitada) {
+        const registrado = contaDemo
+          ? (await obterUsuarioGestaoPorEmail(normalizado)) ?? await registrarAlunoGestao(normalizado.split("@")[0], normalizado)
+          : senha
+            ? await autenticarAlunoGestao(normalizado, senha)
+            : null
+        if (!registrado) {
+          setErro("Informe a senha da conta. Se ainda não cadastrou uma, use Criar conta.")
+          return
+        }
+        if (!registrado.ativo) {
+          setErro("Esta conta está inativa. Entre em contato com o suporte.")
+          return
+        }
+        const perfil = entrar(normalizado, papelDeGestao(registrado.papel))
+        const [nome, ...sobrenome] = registrado.nome.trim().split(/\s+/)
+        const nomeCompleto = registrado.nome.trim()
+        const perfilAtualizado = nomeCompleto
+          ? { ...perfil, nome: nome || perfil.nome, sobrenome: sobrenome.join(" ") }
+          : perfil
+        salvarPerfil(perfilAtualizado)
+        concluir(perfilAtualizado)
+      } else {
+        concluir(entrar(normalizado))
+      }
+    } catch (falha) {
+      setErro(falha instanceof Error ? falha.message : "Não foi possível consultar sua conta na API local.")
+    } finally {
+      setCarregando(false)
+    }
   }
 
   const aoContinuar = (evento: FormEvent) => {
@@ -109,29 +132,73 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
       return
     }
     setErro("")
-    if (normalizado === EMAIL_ADMIN || normalizado.endsWith("@sesi.com.br")) {
-      entrarComEmail(normalizado)
+    if (normalizado !== EMAIL_ADMIN && normalizado !== EMAIL_TESTE && !senha) {
+      setErro("Informe sua senha para continuar.")
       return
     }
-    setEmail(normalizado)
+    void entrarComEmail(normalizado)
+  }
+
+  const aoIniciarCadastro = () => {
+    setErro("")
+    setSenha("")
+    setConfirmarSenha("")
     setEtapa("cadastro")
   }
 
-  const aoCriarConta = (evento: FormEvent) => {
+  const aoCriarConta = async (evento: FormEvent) => {
     evento.preventDefault()
+    if (!EMAIL_VALIDO.test(email.trim().toLowerCase())) {
+      setErro(t("student:login.invalidEmail"))
+      return
+    }
     if (!nome.trim() || !sobrenome.trim() || !telefone.trim() || !dataNascimento) {
       setErro(t("student:login.required"))
       return
     }
+    if (senha.length < 8 || senha.length > 128) {
+      setErro("A senha deve ter entre 8 e 128 caracteres.")
+      return
+    }
+    if (senha !== confirmarSenha) {
+      setErro("As senhas não conferem.")
+      return
+    }
+    if (email.trim().toLowerCase() === EMAIL_ADMIN || email.trim().toLowerCase() === EMAIL_TESTE) {
+      setErro("As contas de demonstração entram sem senha e não precisam de cadastro.")
+      return
+    }
+    if (!gestaoLocalHabilitada) {
+      setErro("O cadastro com senha está disponível apenas com a API local. A autenticação de produção ainda não está configurada.")
+      return
+    }
     setErro("")
-    const perfil = criarConta({
-      nome: nome.trim(),
-      sobrenome: sobrenome.trim(),
-      email: email.trim().toLowerCase(),
-      telefone: telefone.trim(),
-      dataNascimento,
-    })
-    concluir(perfil)
+    setCarregando(true)
+    try {
+      let papel: Papel | undefined
+      const usuario = await registrarAlunoComSenhaGestao(
+        `${nome.trim()} ${sobrenome.trim()}`,
+        email.trim().toLowerCase(),
+        senha,
+      )
+      if (!usuario.ativo) {
+        setErro("Esta conta está inativa. Entre em contato com o suporte.")
+        return
+      }
+      papel = papelDeGestao(usuario.papel)
+      const perfil = criarConta({
+        nome: nome.trim(),
+        sobrenome: sobrenome.trim(),
+        email: email.trim().toLowerCase(),
+        telefone: telefone.trim(),
+        dataNascimento,
+      }, papel)
+      concluir(perfil)
+    } catch (falha) {
+      setErro(falha instanceof Error ? falha.message : "Não foi possível registrar sua conta na API.")
+    } finally {
+      setCarregando(false)
+    }
   }
 
   return (
@@ -142,7 +209,7 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
         aria-modal="true"
         aria-labelledby="login-titulo"
         data-lenis-prevent
-        className="relative max-h-[92vh] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl bg-white p-6 shadow-2xl sm:p-8"
+        className="relative max-h-[min(92dvh,92vh)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl bg-white p-6 shadow-2xl sm:p-8"
       >
         <button
           type="button"
@@ -182,15 +249,39 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
                 aria-invalid={Boolean(erro)}
                 aria-describedby={erro ? "login-erro" : undefined}
               />
+              <label htmlFor="login-senha" className="mt-1 text-sm font-semibold text-[var(--sesi-black)]">
+                Senha <span className="font-normal text-[var(--sesi-muted)]">(não exigida nas contas de demonstração)</span>
+              </label>
+              <input
+                id="login-senha"
+                type="password"
+                autoComplete="current-password"
+                value={senha}
+                onChange={(evento) => setSenha(evento.target.value)}
+                placeholder="Sua senha"
+                className={campo}
+                aria-invalid={Boolean(erro)}
+                aria-describedby={erro ? "login-erro" : undefined}
+              />
               {erro && (
                 <p id="login-erro" role="alert" className="text-sm font-medium text-[var(--sesi-red)]">
                   {erro}
                 </p>
               )}
-              <button type="submit" className={botaoPrimario}>
-                {t("student:login.continue")}
+              <button type="submit" disabled={carregando} className={botaoPrimario}>
+                {carregando ? "Consultando..." : t("student:login.continue")}
               </button>
             </form>
+            <p className="mt-4 text-center text-sm text-[var(--sesi-muted)]">
+              {t("student:login.noAccount")}{" "}
+              <button
+                type="button"
+                className="font-semibold text-[var(--sesi-red)] hover:underline"
+                onClick={aoIniciarCadastro}
+              >
+                {t("student:login.createAccountLink")}
+              </button>
+            </p>
 
             <div className="my-5 flex items-center gap-3">
               <span className="h-px flex-1 bg-[var(--sesi-gray)]" />
@@ -201,7 +292,7 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
             </div>
 
             <div className="flex flex-col gap-2">
-              <button type="button" className={botaoSocial} onClick={() => entrarComEmail("aluno.microsoft@exemplo.com")}>
+              <button type="button" disabled={carregando} className={botaoSocial} onClick={() => setErro("O login com Microsoft ainda não está configurado.")}>
                 <span className="grid h-5 w-5 grid-cols-2 gap-0.5" aria-hidden="true">
                   <span className="bg-[#f25022]" />
                   <span className="bg-[#7fba00]" />
@@ -210,7 +301,7 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
                 </span>
                 {t("student:login.microsoft")}
               </button>
-              <button type="button" className={botaoSocial} onClick={() => entrarComEmail("aluno.gmail@exemplo.com")}>
+              <button type="button" disabled={carregando} className={botaoSocial} onClick={() => setErro("O login com Google ainda não está configurado.")}>
                 <span aria-hidden="true" className="text-base font-bold text-[#4285f4]">
                   G
                 </span>
@@ -222,14 +313,14 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
               <button
                 type="button"
                 className="text-left font-semibold text-[var(--sesi-red)] hover:underline"
-                onClick={() => entrarComEmail(EMAIL_TESTE)}
+                onClick={() => void entrarComEmail(EMAIL_TESTE)}
               >
                 {t("student:login.testAccount")}
               </button>
               <button
                 type="button"
                 className="text-left text-[var(--sesi-muted)] hover:underline"
-                onClick={() => entrarComEmail(EMAIL_ADMIN)}
+                onClick={() => void entrarComEmail(EMAIL_ADMIN)}
               >
                 {t("student:login.adminAccount")}
               </button>
@@ -284,7 +375,47 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
                 <label htmlFor="cadastro-email" className="text-sm font-semibold">
                   {t("student:login.email")}
                 </label>
-                <input id="cadastro-email" type="email" value={email} readOnly className={`${campo} bg-[#F5F5F5]`} />
+                <input
+                  id="cadastro-email"
+                  type="email"
+                  value={email}
+                  onChange={(evento) => setEmail(evento.target.value)}
+                  className={campo}
+                  required
+                  aria-invalid={Boolean(erro)}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="cadastro-senha" className="text-sm font-semibold">
+                  Senha (mínimo 8 caracteres)
+                </label>
+                <input
+                  id="cadastro-senha"
+                  type="password"
+                  autoComplete="new-password"
+                  value={senha}
+                  onChange={(evento) => setSenha(evento.target.value)}
+                  className={campo}
+                  required
+                  minLength={8}
+                  maxLength={128}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="cadastro-confirmar-senha" className="text-sm font-semibold">
+                  Confirmar senha
+                </label>
+                <input
+                  id="cadastro-confirmar-senha"
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmarSenha}
+                  onChange={(evento) => setConfirmarSenha(evento.target.value)}
+                  className={campo}
+                  required
+                  minLength={8}
+                  maxLength={128}
+                />
               </div>
 
               {erro && (
@@ -293,8 +424,8 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
                 </p>
               )}
 
-              <button type="submit" className={`${botaoPrimario} sm:col-span-2`}>
-                {t("student:login.createAccount")}
+              <button type="submit" disabled={carregando} className={`${botaoPrimario} sm:col-span-2`}>
+                {carregando ? "Criando conta..." : t("student:login.createAccount")}
               </button>
             </form>
           </>

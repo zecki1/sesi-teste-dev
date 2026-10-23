@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 
 export type Idioma = "pt-BR" | "en-US" | "es-ES"
-export type Papel = "aluno" | "admin"
+export type Papel = "aluno" | "admin" | "suporte" | "monitor" | "tutor" | "gestor" | "editor" | "convidado"
 export type FiltroDaltonismo = "none" | "protanopia" | "deuteranopia" | "tritanopia" | "monocromia"
 export type TamanhoFonte = "small" | "normal" | "large" | "xlarge"
 export type Tema = "claro" | "escuro"
@@ -25,6 +25,8 @@ export interface Matricula {
   slug: string
   progresso: number
   matriculadoEm: string
+  iniciadoEm?: string
+  concluidoEm?: string
   proximaAula: string
   concluido: boolean
 }
@@ -58,28 +60,45 @@ export const ACESSIBILIDADE_PADRAO: ConfigAcessibilidade = {
 
 export function ehEmailAdmin(email: string) {
   const normalizado = email.trim().toLowerCase()
-  return normalizado === EMAIL_ADMIN || normalizado.endsWith("@sesi.com.br")
+  return normalizado === EMAIL_ADMIN
+}
+
+export function papelDeGestao(papel: string): Papel {
+  const papeis: Record<string, Papel> = {
+    Aluno: "aluno",
+    Suporte: "suporte",
+    Monitor: "monitor",
+    Tutor: "tutor",
+    Administrador: "admin",
+    Gestor: "gestor",
+    Editor: "editor",
+    Convidado: "convidado",
+  }
+  return papeis[papel] ?? "aluno"
 }
 
 function perfilDemo(email: string, papel: Papel): PerfilAluno {
   const admin = papel === "admin"
+  const demo = email === EMAIL_TESTE
+  const alunoDemo = papel === "aluno" && demo
+  const nomeDeEmail = email.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (letra) => letra.toUpperCase())
 
   return {
-    nome: admin ? "Admin" : "Ana",
-    sobrenome: admin ? "SESI" : "Souza",
+    nome: admin ? "Admin" : demo ? "Ana" : nomeDeEmail || "Aluno",
+    sobrenome: admin ? "SESI" : demo ? "Souza" : "",
     email,
     telefone: "(11) 99999-0000",
     dataNascimento: "1994-05-18",
     idioma: "pt-BR",
     papel,
     acessibilidade: { ...ACESSIBILIDADE_PADRAO },
-    certificados: admin
+    certificados: !alunoDemo
       ? []
       : [
           { id: "cert-1", curso: "Prevenção e Combate a Incêndios", cargaHoraria: 16, concluidoEm: "2025-11-20" },
           { id: "cert-2", curso: "Liderança e Comunicação Organizacional", cargaHoraria: 24, concluidoEm: "2026-01-12" },
         ],
-    matriculas: admin
+    matriculas: !alunoDemo
       ? []
       : [
           {
@@ -142,22 +161,26 @@ export function sair() {
   notificar()
 }
 
-export function entrar(email: string): PerfilAluno {
+export function entrar(email: string, papelPersistido?: Papel): PerfilAluno {
   const normalizado = email.trim().toLowerCase()
   const existente = lerPerfil()
+  const papel = papelPersistido ?? (ehEmailAdmin(normalizado) ? "admin" : "aluno")
   const perfil =
     existente && existente.email.toLowerCase() === normalizado
-      ? existente
-      : perfilDemo(normalizado, ehEmailAdmin(normalizado) ? "admin" : "aluno")
+      ? { ...existente, papel }
+      : perfilDemo(normalizado, papel)
 
   salvarPerfil(perfil)
   return perfil
 }
 
-export function criarConta(dados: Pick<PerfilAluno, "nome" | "sobrenome" | "email" | "telefone" | "dataNascimento">): PerfilAluno {
+export function criarConta(
+  dados: Pick<PerfilAluno, "nome" | "sobrenome" | "email" | "telefone" | "dataNascimento">,
+  papelPersistido?: Papel,
+): PerfilAluno {
   const email = dados.email.trim().toLowerCase()
   const perfil: PerfilAluno = {
-    ...perfilDemo(email, ehEmailAdmin(email) ? "admin" : "aluno"),
+    ...perfilDemo(email, papelPersistido ?? (ehEmailAdmin(email) ? "admin" : "aluno")),
     ...dados,
     email,
     certificados: [],

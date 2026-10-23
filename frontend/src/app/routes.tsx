@@ -6,6 +6,7 @@ import { ScormCursoPage } from '@/features/scorm/scorm-curso-page'
 import { AlunoPage } from '@/features/aluno/aluno-page'
 import { AvaPage } from '@/features/ava/ava-page'
 import { AdminCursosPage } from '@/features/admin/admin-cursos-page'
+import { AdminGestaoPage } from '@/features/admin/admin-gestao-page'
 import { SobrePage } from '@/features/sobre/sobre-page'
 import { NotFoundPage } from '@/features/not-found/not-found-page'
 
@@ -15,10 +16,12 @@ export function Routes() {
       <Route path="/" element={<Home />} />
       <Route path="/catalogo" element={<CatalogoPage />} />
       <Route path="/curso/:slug" element={<CursoDetalhePage />} />
+      <Route path="/curso/:slug/scorm/player" element={<ScormCursoPage />} />
       <Route path="/curso/:slug/scorm" element={<ScormCursoPage />} />
       <Route path="/area-do-aluno" element={<AlunoPage />} />
       <Route path="/area-do-aluno/curso/:slug" element={<AvaPage />} />
       <Route path="/admin/cursos" element={<AdminCursosPage />} />
+      <Route path="/admin/gestao" element={<AdminGestaoPage />} />
       <Route path="/sobre" element={<SobrePage />} />
       <Route path="*" element={<NotFoundPage />} />
     </RouterRoutes>

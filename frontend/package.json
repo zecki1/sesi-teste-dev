@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
@@ -13,14 +13,18 @@
     "test:coverage": "vitest --coverage",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
-    "e2e:a11y": "playwright test --project=a11y"
+    "e2e:a11y": "playwright test --project=a11y",
+    "e2e:screenshots": "playwright test e2e/screenshots.spec.ts --project=chromium",
+    "perf:lighthouse": "lhci autorun --config=./lighthouserc.cjs"
   },
   "dependencies": {
+    "@fontsource/opendyslexic": "^5.3.0",
     "@tanstack/react-query": "^5.104.5",
     "aos": "^2.3.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "gsap": "^3.15.0",
+    "html-to-image": "^1.11.13",
     "i18next": "^26.5.4",
     "i18next-browser-languagedetector": "^8.2.1",
     "lenis": "^1.3.27",
@@ -33,6 +37,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
+    "@lhci/cli": "^0.15.1",
     "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/jest-dom": "^7.0.1",

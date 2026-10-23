@@ -15,7 +15,7 @@ import { imagemDoCurso } from "@/lib/ui/imagens-cursos"
 import { useSliderArrastavel } from "@/hooks/use-slider-arrastavel"
 
 export function Home() {
-  const { data } = useCursos({ destaque: "true", tamanho: 12 })
+  const { data, isLoading } = useCursos({ destaque: "true", tamanho: 12 })
   const [categoria, setCategoria] = useState("")
 
   const cursos = (data?.itens ?? []).filter((curso) => !categoria || curso.categoria.slug === categoria)
@@ -70,6 +70,21 @@ export function Home() {
           data-arrastando={arrastando}
           className="slider-bleed mt-5 flex snap-x snap-mandatory gap-6 overflow-x-auto pb-4 pt-3 [overflow-anchor:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
+            {isLoading &&
+              Array.from({ length: 4 }, (_, indice) => (
+                <div
+                  key={`curso-skeleton-${indice}`}
+                  aria-hidden="true"
+                  className="slider-card relative flex aspect-[4/5] shrink-0 animate-pulse snap-start flex-col justify-between overflow-hidden rounded-[var(--radius-lg)] bg-[#F1F1F1] p-6"
+                >
+                  <span className="h-7 w-28 rounded-full bg-[#E2E2E2]" />
+                  <div className="flex flex-col gap-3">
+                    <span className="h-7 w-full rounded bg-[#E2E2E2]" />
+                    <span className="h-4 w-4/5 rounded bg-[#E2E2E2]" />
+                    <span className="h-4 w-2/3 rounded bg-[#E2E2E2]" />
+                  </div>
+                </div>
+              ))}
             {cursos.map((curso) => {
               return (
                 <Link
@@ -95,7 +110,7 @@ export function Home() {
                   <div className="relative z-10 flex h-full flex-col justify-between p-6">
                     <span
                       style={estiloBadgeCategoria(curso.categoria.cor)}
-                      className="flex w-fit items-center gap-2 rounded-[var(--radius-pill)] px-3 py-1 text-sm font-semibold uppercase tracking-wide"
+                      className="flex w-fit items-center gap-2 rounded px-3 py-1 text-sm font-semibold uppercase tracking-wide"
                     >
                       <IconeCategoria slug={curso.categoria.slug} className="h-4 w-4 shrink-0" />
                       {curso.categoria.nome}

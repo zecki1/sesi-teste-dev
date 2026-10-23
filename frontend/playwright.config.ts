@@ -14,10 +14,12 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      testIgnore: /a11y\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'a11y',
+      testMatch: /a11y\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
     },
   ],

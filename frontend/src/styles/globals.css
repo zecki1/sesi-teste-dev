@@ -26,3 +26,125 @@ body {
   outline: 2px solid var(--sesi-red);
   outline-offset: 2px;
 }
+
+/* Entrada do player de vídeo: aparece da direita para a esquerda com fade. */
+@keyframes media-reveal {
+  from {
+    opacity: 0;
+    transform: translateX(18%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.media-reveal {
+  animation: media-reveal 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .media-reveal {
+    animation: none;
+  }
+}
+
+/* Faixa de matrícula: o nome do curso corre em loop da direita para a esquerda. */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee {
+    animation: none;
+  }
+}
+
+/* Destaque do card sob o mouse/teclado no carrossel de cursos. */
+.card-lift {
+  transition:
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 300ms ease;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .card-lift:hover,
+  .card-lift:focus-visible {
+    transform: translateY(-6px) scale(1.015);
+    box-shadow: 0 18px 40px rgb(0 0 0 / 0.22);
+    z-index: 1;
+  }
+}
+
+/*
+ * Trilhos full-bleed: o slider ocupa a largura da página, mas o primeiro card
+ * começa alinhado ao gutter do Container. No desktop, cabem 4 cards e uma
+ * fração do 5º, como no Figma.
+ */
+.slider-bleed {
+  padding-left: 1rem;
+  padding-right: 1rem;
+  scroll-padding-left: 1rem;
+  cursor: grab;
+}
+
+.slider-bleed[data-arrastando="true"] {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.slider-bleed[data-arrastando="true"] .slider-card {
+  transform: scale(0.985);
+  transition-duration: 120ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slider-bleed[data-arrastando="true"] .slider-card {
+    transform: none;
+  }
+}
+
+.slider-card {
+  width: 85%;
+}
+
+@media (min-width: 640px) {
+  .slider-bleed {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+    scroll-padding-left: 1.5rem;
+  }
+
+  .slider-card {
+    width: calc((100vw - 3rem - 1.5rem) / 2.15);
+  }
+}
+
+@media (min-width: 1024px) {
+  .slider-bleed {
+    padding-left: max(2rem, calc((100vw - 1280px) / 2 + 2rem));
+    padding-right: 0;
+    scroll-padding-left: max(2rem, calc((100vw - 1280px) / 2 + 2rem));
+  }
+
+  /* 3 cards + fração do 4º em telas médias. */
+  .slider-card {
+    width: calc((100vw - max(2rem, calc((100vw - 1280px) / 2 + 2rem)) - 4.5rem) / 3.25);
+  }
+}
+
+@media (min-width: 1280px) {
+  /* 4 cards + fração do 5º a partir da largura do container. */
+  .slider-card {
+    width: calc((100vw - max(2rem, calc((100vw - 1280px) / 2 + 2rem)) - 6rem) / 4.25);
+  }
+}

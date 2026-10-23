@@ -4,6 +4,8 @@ import { MainLayout } from "@/components/layout/main-layout"
 import { Container } from "@/components/layout/container"
 import { Button } from "@/components/ui/button"
 import { useCursos, useFacetas } from "@/hooks/use-catalogo"
+import { IconeCategoria, estiloBadgeCategoria } from "@/lib/ui/icones-categoria"
+import { imagemDoCurso } from "@/lib/ui/imagens-cursos"
 
 export function CatalogoPage() {
   const [busca, setBusca] = useState("")
@@ -36,7 +38,7 @@ export function CatalogoPage() {
 
       <section className="py-10">
         <Container className="flex flex-col gap-8">
-          <div className="flex flex-col gap-4 rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] p-4 shadow-[var(--shadow-card)] md:flex-row md:flex-wrap md:items-end">
+          <div className="flex flex-col gap-4 rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] p-4 md:flex-row md:flex-wrap md:items-end">
             <div className="flex min-w-[240px] flex-1 flex-col gap-2">
               <label htmlFor="busca" className="text-sm font-semibold">Pesquisar pelo nome</label>
               <input id="busca" value={busca} onChange={(e) => { setBusca(e.target.value); setPagina(1) }} placeholder="Digite o nome do curso" className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] px-4 py-2" />
@@ -67,9 +69,11 @@ export function CatalogoPage() {
             )}
           </div>
 
-          <div className="flex items-center justify-between">
-            <p className="text-[var(--sesi-muted)]">{isLoading ? "Carregando..." : data ? `${data.total} resultado(s) encontrado(s)` : "0 resultado(s)"}</p>
-          </div>
+          {!isLoading && (
+            <div className="flex items-center justify-between">
+              <p className="text-[var(--sesi-muted)]">{data ? `${data.total} resultado(s) encontrado(s)` : "0 resultado(s)"}</p>
+            </div>
+          )}
 
           {isLoading && (
             <div className="flex items-center justify-center py-12">
@@ -92,24 +96,51 @@ export function CatalogoPage() {
 
           {!isLoading && !isError && data && data.itens.length > 0 && (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {data.itens.map((curso) => (
-              <Link key={curso.slug} to={`/curso/${curso.slug}`} className="flex flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] shadow-[var(--shadow-card)] transition-shadow hover:shadow-md">
-                <div className="h-48 bg-[linear-gradient(135deg,var(--sesi-red)_0%,#7f1d1d_100%)]" />
-                <div className="flex flex-1 flex-col gap-3 p-6">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="w-fit rounded-[var(--radius-pill)] bg-[var(--sesi-beige)] px-3 py-1 text-sm">{curso.categoria.nome}</span>
-                    <span className="w-fit rounded-[var(--radius-pill)] border border-[var(--sesi-gray)] px-3 py-1 text-sm">{curso.modalidade.nome}</span>
-                    <span className="w-fit rounded-[var(--radius-pill)] border border-[var(--sesi-gray)] px-3 py-1 text-sm">{curso.status.nome}</span>
+            {data.itens.map((curso) => {
+              return (
+                <Link
+                  key={curso.slug}
+                  to={`/curso/${curso.slug}`}
+                  className="group relative flex aspect-[4/5] flex-col overflow-hidden rounded-[var(--radius-lg)] bg-[var(--sesi-black)] "
+                >
+                  <img
+                    data-capa
+                    src={imagemDoCurso(curso)}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                  <div
+                    aria-hidden="true"
+                    className="absolute inset-0 bg-[linear-gradient(to_top,var(--sesi-red)_0%,rgba(227,5,19,0.9)_30%,rgba(227,5,19,0.45)_62%,rgba(227,5,19,0)_88%)]"
+                  />
+                  <div className="relative z-10 flex h-full flex-col justify-between gap-6 p-6">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <span
+                        style={estiloBadgeCategoria(curso.categoria.cor)}
+                        className="flex w-fit items-center gap-2 rounded-[var(--radius-pill)] px-3 py-1 text-sm font-semibold uppercase tracking-wide"
+                      >
+                        <IconeCategoria slug={curso.categoria.slug} className="h-4 w-4 shrink-0" />
+                        {curso.categoria.nome}
+                      </span>
+                      <span className="w-fit rounded-[var(--radius-pill)] bg-[var(--sesi-black)]/70 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+                        {curso.status.nome}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-2 text-white">
+                      <h3 className="line-clamp-3 font-['Open_Sans_Condensed',sans-serif] text-2xl font-bold leading-tight">
+                        {curso.nomeCompleto}
+                      </h3>
+                      <p className="line-clamp-2 text-sm">{curso.descricao}</p>
+                      <p className="mt-1 text-xs font-semibold uppercase tracking-wide">
+                        {curso.cargaHoraria}h · {curso.modalidade.nome}
+                      </p>
+                    </div>
                   </div>
-                  <h3 className="text-xl font-semibold">{curso.nomeCompleto}</h3>
-                  <p className="line-clamp-3 text-[var(--sesi-muted)]">{curso.descricao}</p>
-                  <div className="mt-auto flex items-center justify-between text-sm text-[var(--sesi-muted)]">
-                    <span>Carga horária: {curso.cargaHoraria}h</span>
-                    <span>Público-alvo: {curso.publicoAlvo.split(' ')[0]}...</span>
-                  </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              )
+            })}
           </div>
           )}
 

@@ -35,6 +35,15 @@ internal static class Mapeador
             c.Categoria!.ParaDto(), c.Modalidade!.ParaDto(), c.Status!.ParaDto(),
             c.Modulos.OrderBy(m => m.Ordem).Select(ParaDto).ToList());
 
+    public static TurmaDto ParaDto(this Turma t) =>
+        new(t.Id, t.CursoId, t.Codigo, t.Modalidade!.ParaDto(), t.DataInicio, t.DataFim,
+            t.DiasSemana, t.HorarioInicio.ToString("HH:mm"), t.HorarioFim.ToString("HH:mm"),
+            t.Vagas, t.Matriculas.Count, t.Ativa);
+
+    public static MatriculaDto ParaDto(this Matricula m) =>
+        new(m.Id, m.UsuarioId, m.DataMatricula, m.Status, m.Progresso, m.Concluido,
+            m.Curso!.ParaResumoDto(), m.Turma!.ParaDto());
+
     public static string ParaStatusNome(this StatusSessao status) => status switch
     {
         StatusSessao.Concluido => "concluido",

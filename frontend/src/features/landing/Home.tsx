@@ -1,50 +1,161 @@
+import { useLayoutEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { Container } from "@/components/layout/container"
-import { Button } from "@/components/ui/button"
 import { MainLayout } from "@/components/layout/main-layout"
 import { CookieBanner } from "@/components/cookie-banner"
 import { Hero } from "./components/hero"
 import { Impact } from "./components/impact"
-import { Differentials } from "./components/differentials"
 import { Testimonials } from "./components/testimonials"
 import { CtaFinal } from "./components/cta-final"
+import { Button } from "@/components/ui/button"
 import { useCursos } from "@/hooks/use-catalogo"
+import { ArrowLeft, ArrowRight } from "@/components/ui/arrow-icons"
+import { IconeCategoria, estiloBadgeCategoria } from "@/lib/ui/icones-categoria"
+import { imagemDoCurso } from "@/lib/ui/imagens-cursos"
+import { useSliderArrastavel } from "@/hooks/use-slider-arrastavel"
 
 export function Home() {
-  const { data } = useCursos({ tamanho: 6 })
+  const { data } = useCursos({ destaque: "true", tamanho: 12 })
+  const [categoria, setCategoria] = useState("")
+
+  const cursos = (data?.itens ?? []).filter((curso) => !categoria || curso.categoria.slug === categoria)
+
+  // Só as categorias que têm cursos em destaque aparecem no filtro da landing.
+  const categorias = Array.from(
+    new Map((data?.itens ?? []).map((curso) => [curso.categoria.slug, curso.categoria])).values(),
+  )
+
+  const { ref: trackRef, arrastando } = useSliderArrastavel<HTMLDivElement>()
+
+  // A cada troca de filtro (e quando os cursos chegam da API) volta ao primeiro card.
+  // useLayoutEffect evita o "pulo" causado pela inserção dos cards antes do card final.
+  useLayoutEffect(() => {
+    trackRef.current?.scrollTo({ left: 0 })
+  }, [categoria, data])
+
+  const scrollByCard = (direction: 1 | -1) => {
+    const track = trackRef.current
+    if (!track) return
+    const card = track.querySelector<HTMLElement>("[data-card]")
+    const step = card ? card.offsetWidth + 24 : track.clientWidth
+    track.scrollBy({ left: direction * step, behavior: "smooth" })
+  }
 
   return (
     <MainLayout>
       <Hero />
-      <section id="cursos" className="py-16">
-        <Container className="flex flex-col gap-8">
+      <section id="cursos" className="scroll-mt-[88px] py-16">
+        <Container>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="font-['Open_Sans_Condensed',sans-serif] text-3xl font-bold sm:text-4xl">Principais cursos</h2>
-            <select className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] px-4 py-2">
-              <option>Todos os cursos</option>
+            <h2 data-aos="fade-up" className="font-['Open_Sans_Condensed',sans-serif] text-3xl font-bold sm:text-4xl">Principais cursos</h2>
+            <select
+              aria-label="Filtrar cursos por categoria"
+              value={categoria}
+              onChange={(evento) => setCategoria(evento.target.value)}
+              className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] px-4 py-2"
+            >
+              <option value="">Todos os cursos</option>
+              {categorias.map((item) => (
+                <option key={item.slug} value={item.slug}>{item.nome}</option>
+              ))}
             </select>
           </div>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {(data?.itens || []).slice(0, 6).map((curso) => (
-              <Link key={curso.slug} to={`/curso/${curso.slug}`} className="flex flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] shadow-[var(--shadow-card)] transition-shadow hover:shadow-md">
-                <div className="h-48 bg-[linear-gradient(135deg,var(--sesi-red)_0%,#7f1d1d_100%)]" />
-                <div className="flex flex-1 flex-col gap-3 p-6">
-                  <span className="w-fit rounded-[var(--radius-pill)] bg-[var(--sesi-beige)] px-3 py-1 text-sm">{curso.categoria.nome}</span>
-                  <h3 className="text-xl font-semibold">{curso.nomeCompleto}</h3>
-                  <p className="line-clamp-3 text-[var(--sesi-muted)]">{curso.descricao}</p>
-                </div>
-              </Link>
-            ))}
-          </div>
-          <div className="flex justify-center">
-            <Link to="/catalogo">
-              <Button variant="primary">Ver todos os cursos</Button>
+        </Container>
+        <div
+          ref={trackRef}
+          tabIndex={0}
+          data-aos="fade-up"
+          role="region"
+          aria-label="Principais cursos"
+          data-arrastando={arrastando}
+          className="slider-bleed mt-5 flex snap-x snap-mandatory gap-6 overflow-x-auto pb-4 pt-3 [overflow-anchor:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+            {cursos.map((curso) => {
+              return (
+                <Link
+                  key={curso.slug}
+                  data-card
+                  to={`/curso/${curso.slug}`}
+                  draggable={false}
+                  className="slider-card card-lift group relative flex aspect-[4/5] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-lg)] bg-[var(--sesi-black)]"
+                >
+                  <img
+                    data-capa
+                    src={imagemDoCurso(curso)}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    draggable={false}
+                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                  <div
+                    aria-hidden="true"
+                    className="absolute inset-0 bg-[linear-gradient(to_top,var(--sesi-red)_0%,rgba(227,5,19,0.9)_30%,rgba(227,5,19,0.45)_62%,rgba(227,5,19,0)_88%)]"
+                  />
+                  <div className="relative z-10 flex h-full flex-col justify-between p-6">
+                    <span
+                      style={estiloBadgeCategoria(curso.categoria.cor)}
+                      className="flex w-fit items-center gap-2 rounded-[var(--radius-pill)] px-3 py-1 text-sm font-semibold uppercase tracking-wide"
+                    >
+                      <IconeCategoria slug={curso.categoria.slug} className="h-4 w-4 shrink-0" />
+                      {curso.categoria.nome}
+                    </span>
+                    <div className="flex flex-col gap-2 text-white">
+                      <h3 className="line-clamp-3 font-['Open_Sans_Condensed',sans-serif] text-2xl font-bold leading-tight">
+                        {curso.nomeCompleto}
+                      </h3>
+                      <p className="line-clamp-2 text-sm text-white">{curso.descricao}</p>
+                      <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-white">
+                        {curso.cargaHoraria}h · {curso.modalidade.nome}
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+              )
+            })}
+
+            <Link
+              to="/catalogo"
+              data-card
+              draggable={false}
+              className="slider-card card-lift group relative flex aspect-[4/5] shrink-0 snap-start flex-col justify-between overflow-hidden rounded-[var(--radius-lg)] bg-[var(--sesi-black)] p-6 text-white"
+            >
+              <span aria-hidden="true" className="absolute -right-12 -top-12 h-48 w-48 rounded-full bg-[var(--sesi-red)] opacity-25 blur-2xl" />
+              <ArrowRight className="h-12 w-12 text-[var(--sesi-beige)] transition-transform duration-300 group-hover:translate-x-1" />
+              <div className="relative flex flex-col gap-3">
+                <p className="font-['Open_Sans_Condensed',sans-serif] text-4xl font-bold uppercase leading-[0.95]">
+                  Todos os cursos
+                </p>
+                <span className="text-sm text-white">Explorar o catálogo completo</span>
+              </div>
             </Link>
+        </div>
+
+        <Container className="mt-8 flex items-center justify-between gap-4">
+          <Link to="/catalogo">
+            <Button variant="secondary" className="rounded-lg border-[var(--sesi-black)]">Ver todos os cursos</Button>
+          </Link>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => scrollByCard(-1)}
+              aria-label="Cursos anteriores"
+              className="text-[var(--sesi-black)] transition-opacity hover:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sesi-black)]"
+            >
+              <ArrowLeft />
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollByCard(1)}
+              aria-label="Próximos cursos"
+              className="text-[var(--sesi-black)] transition-opacity hover:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sesi-black)]"
+            >
+              <ArrowRight />
+            </button>
           </div>
         </Container>
       </section>
       <Impact />
-      <Differentials />
       <Testimonials />
       <CtaFinal />
       <CookieBanner />

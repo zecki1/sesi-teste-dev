@@ -419,6 +419,8 @@ export function AvaPage() {
     setMostrarRetomada(false)
   }
 
+  const modoScorm = Boolean(pacoteScorm)
+
   return (
     <div className="grid min-h-screen grid-cols-1 bg-[var(--sesi-white)] lg:grid-cols-12">
       {mostrarRetomada && (
@@ -467,6 +469,7 @@ export function AvaPage() {
         </div>
       )}
 
+      {!modoScorm && (
       <aside className="flex flex-col border-r border-[var(--sesi-gray)] lg:sticky lg:top-0 lg:col-span-2 lg:h-screen lg:overflow-y-auto">
         <div className="bg-[var(--sesi-black)] px-5 py-6 text-white">
           <SesiMark />
@@ -577,20 +580,19 @@ export function AvaPage() {
           </Link>
         </div>
       </aside>
+      )}
 
-      <main className="lg:col-span-10">
+      <main className={modoScorm ? "lg:col-span-12" : "lg:col-span-10"}>
         <Container className="py-6 lg:py-8">
           {pacoteScorm ? (
             <>
-              <div data-banner-ava className="relative overflow-hidden rounded-lg">
-                <img src={bannerAva} alt="" className="h-[140px] w-full object-cover sm:h-[220px] lg:h-[320px]" />
-                <img
-                  src={logoWhite}
-                  alt="SESI Indústria"
-                  className="absolute left-4 top-4 z-10 h-8 w-auto drop-shadow-md sm:left-6 sm:top-6 sm:h-10"
-                />
-              </div>
-              <section className="mt-8 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white">
+              <Link
+                to="/area-do-aluno"
+                className="mb-5 inline-flex text-xs font-semibold text-[var(--sesi-muted)] underline-offset-4 transition hover:text-[var(--sesi-black)] hover:underline"
+              >
+                ← {t("backToArea")}
+              </Link>
+              <section className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--sesi-gray)] px-4 py-3">
                   <div>
                     <h2 className="font-semibold text-[var(--sesi-black)]">Conteúdo original do curso</h2>

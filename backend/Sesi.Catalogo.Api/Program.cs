@@ -12,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Sesi.Catalogo.Api.Dev;
 using Sesi.Catalogo.Api.Gestao;
+using Sesi.Catalogo.Api.Middleware;
 using Sesi.Catalogo.Api.Scorm;
 using Sesi.Catalogo.Domain.Abstractions;
 using Sesi.Catalogo.Domain.Dtos;
@@ -36,6 +37,9 @@ if (builder.Environment.IsDevelopment() &&
 {
     builder.Services.AddHostedService<FrontendDevServer>();
 }
+
+// Inicialização do banco em background (não bloqueia a subida do Kestrel).
+builder.Services.AddHostedService<Sesi.Catalogo.Api.Infra.InicializacaoBancoHostedService>();
 
 // CORS
 // Development pode incluir previews; em produção a lista deve usar origens exatas.
@@ -129,9 +133,7 @@ builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
-// Inicialização assíncrona do banco em background
-builder.Services.AddHostedService<Sesi.Catalogo.Api.Infra.InicializacaoBancoHostedService>();
-// Removido await bloqueante - executado via HostedService
+// Inicialização do banco em background (não bloqueia a subida do Kestrel).
 
 // Pipeline
 app.UseExceptionHandler();
@@ -160,6 +162,7 @@ app.UseSwaggerUI(c =>
 });
 
 app.UseCors();
+app.UseMiddleware<IdiomaMiddleware>();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -231,7 +234,8 @@ v1.MapPost("/chamados", async (
 
 var gestao = v1.MapGroup("/gestao").WithTags("Gestão");
 if (!app.Environment.IsDevelopment())
-    // Autorização aplicada por endpoint para não bloquear rotas anônimas (ex.: login admin)
+    // Login e cadastro continuam anônimos via .AllowAnonymous() nos próprios endpoints.
+    gestao.RequireAuthorization("Administrador");
 
 gestao.MapPost("/sessao", async (
     [FromBody] AutenticarAlunoRequest request,
@@ -506,12 +510,25 @@ gestao.MapGet("/cursos", async (ICatalogoRepositorio repo, CancellationToken ct)
         string id,
         [FromBody] AtualizarChamadoRequest request,
         GestaoArmazenamento armazenamento,
+        ResendEmailSender emailSender,
         CancellationToken ct) =>
     {
         if (request.Status is not ("Aberto" or "Em atendimento" or "Resolvido"))
             return Results.BadRequest(new { erro = "Selecione um status válido para o chamado." });
         var atualizado = await armazenamento.AtualizarChamadoAsync(id, request, ct);
-        return atualizado is null ? Results.NotFound() : Results.Ok(atualizado);
+        if (atualizado is null) return Results.NotFound();
+
+        // A comunicação com o aluno é disparada pelo Resend, registrando status e resposta.
+        var envio = request.NotificarAluno
+            ? await emailSender.EnviarAtualizacaoChamadoAsync(atualizado, ct)
+            : new ResultadoEnvioChamado(false, false, null);
+
+        return Results.Ok(new
+        {
+            chamado = atualizado,
+            envio.AlunoEnviado,
+            envio.Erro
+        });
     })
     .WithName("AtualizarChamadoGestao");
 
@@ -560,17 +577,22 @@ gestao.MapGet("/cursos", async (ICatalogoRepositorio repo, CancellationToken ct)
     })
     .WithName("RegistrarMarcoCurso");
 
-v1.MapGet("/facetas", async (ICatalogoRepositorio repo, CancellationToken ct) =>
+v1.MapGet("/facetas", async (HttpContext contexto, ICatalogoRepositorio repo, CancellationToken ct) =>
 {
-    var facetas = await repo.ObterFacetasAsync((string?)null, ct);
+    var idioma = contexto.Items[IdiomaMiddleware.Chave]?.ToString();
+    var facetas = await repo.ObterFacetasAsync(idioma, ct);
     return Results.Ok(facetas);
 })
 .WithName("ObterFacetas")
 .WithSummary("Facetas disponíveis para filtros")
 .Produces<FacetasDto>(StatusCodes.Status200OK);
 
-v1.MapGet("/cursos", async ([AsParameters] CursoFiltro filtro, ICatalogoRepositorio repo, CancellationToken ct) =>
+v1.MapGet("/cursos", async ([AsParameters] CursoFiltro filtro, HttpContext contexto, ICatalogoRepositorio repo, CancellationToken ct) =>
 {
+    // O idioma pode vir explícito na query; caso contrário, usa o resolvido pelo middleware.
+    if (string.IsNullOrWhiteSpace(filtro.Idioma))
+        filtro = filtro with { Idioma = contexto.Items[IdiomaMiddleware.Chave]?.ToString() };
+
     var resultado = await repo.ListarCursosAsync(filtro, ct);
     return Results.Ok(resultado);
 })
@@ -578,9 +600,10 @@ v1.MapGet("/cursos", async ([AsParameters] CursoFiltro filtro, ICatalogoReposito
 .WithSummary("Lista cursos paginados com filtros e facetas")
 .Produces<PaginaDto<CursoResumoDto>>(StatusCodes.Status200OK);
 
-v1.MapGet("/cursos/{slug}", async (string slug, ICatalogoRepositorio repo, CancellationToken ct) =>
+v1.MapGet("/cursos/{slug}", async (string slug, HttpContext contexto, ICatalogoRepositorio repo, CancellationToken ct) =>
 {
-    var curso = await repo.ObterCursoPorSlugAsync(slug, (string?)null, ct);
+    var idioma = contexto.Items[IdiomaMiddleware.Chave]?.ToString();
+    var curso = await repo.ObterCursoPorSlugAsync(slug, idioma, ct);
     return curso is null ? Results.NotFound() : Results.Ok(curso);
 })
 .WithName("ObterCursoPorSlug")
@@ -645,6 +668,80 @@ adminV1.MapDelete("/cursos/{slug}", async (string slug, ICatalogoRepositorio rep
 .WithSummary("Desativa um curso do catálogo")
 .Produces(StatusCodes.Status204NoContent)
 .Produces(StatusCodes.Status404NotFound);
+
+adminV1.MapGet("/cursos/{slug}/perguntas", async (string slug, ICatalogoRepositorio repo, CancellationToken ct) =>
+{
+    var perguntas = await repo.ListarPerguntasAsync(slug, ct);
+    return Results.Ok(perguntas);
+})
+.WithName("ListarPerguntasDoCurso")
+.WithSummary("Perguntas frequentes do curso nos três idiomas (gestão)")
+.Produces<IReadOnlyList<PerguntaAdminDto>>(StatusCodes.Status200OK);
+
+adminV1.MapPut("/cursos/{slug}/perguntas", async (string slug, [FromBody] SalvarPerguntasRequest request, ICatalogoRepositorio repo, CancellationToken ct) =>
+{
+    var perguntas = await repo.SalvarPerguntasAsync(slug, request.Perguntas, ct);
+    return perguntas is null ? Results.NotFound() : Results.Ok(perguntas);
+})
+.WithName("SalvarPerguntasDoCurso")
+.WithSummary("Substitui as perguntas frequentes do curso nos três idiomas")
+.Produces<IReadOnlyList<PerguntaAdminDto>>(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status404NotFound);
+
+v1.MapPost("/avaliacoes", async (
+    [FromBody] CriarAvaliacaoRequest request,
+    HttpContext contexto,
+    ICatalogoRepositorio repo,
+    CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(request.UsuarioId) || request.UsuarioId.Length > 200)
+        return Results.BadRequest(new { erro = "Entre na sua conta para avaliar o curso." });
+    if (string.IsNullOrWhiteSpace(request.CursoSlug))
+        return Results.BadRequest(new { erro = "Informe o curso que está sendo avaliado." });
+    if (string.IsNullOrWhiteSpace(request.Nome) || request.Nome.Trim().Length < 2 || request.Nome.Length > 120)
+        return Results.BadRequest(new { erro = "Informe seu nome, com até 120 caracteres." });
+
+    var notas = new[]
+    {
+        request.Nota,
+        request.NotaPlataforma,
+        request.NotaCurso,
+        request.NotaAvaliacao,
+        request.NotaAcessibilidade
+    };
+    if (notas.Any(n => n is < 1 or > 5))
+        return Results.BadRequest(new { erro = "As notas da pesquisa devem estar entre 1 e 5." });
+    if (request.Depoimento is { Length: > 2000 })
+        return Results.BadRequest(new { erro = "O depoimento deve ter até 2000 caracteres." });
+    if (request.Sugestao is { Length: > 2000 })
+        return Results.BadRequest(new { erro = "A sugestão deve ter até 2000 caracteres." });
+
+    var idioma = request.Idioma ?? contexto.Items[IdiomaMiddleware.Chave]?.ToString();
+    var avaliacao = await repo.SalvarAvaliacaoAsync(request with { Idioma = idioma }, ct);
+    return avaliacao is null
+        ? Results.NotFound(new { erro = "Curso não encontrado." })
+        : Results.Ok(avaliacao);
+})
+.WithName("CriarAvaliacaoCurso")
+.WithSummary("Registra ou atualiza a avaliação do aluno e a pesquisa de satisfação")
+.Produces<AvaliacaoDto>(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status400BadRequest)
+.Produces(StatusCodes.Status404NotFound);
+
+v1.MapGet("/avaliacoes", async (
+    string? cursoSlug,
+    int? limite,
+    HttpContext contexto,
+    ICatalogoRepositorio repo,
+    CancellationToken ct) =>
+{
+    var idioma = contexto.Items[IdiomaMiddleware.Chave]?.ToString();
+    var avaliacoes = await repo.ListarAvaliacoesAsync(cursoSlug, limite ?? 20, idioma, ct);
+    return Results.Ok(avaliacoes);
+})
+.WithName("ListarAvaliacoes")
+.WithSummary("Lista as avaliações publicadas (todos os cursos ou de um curso)")
+.Produces<IReadOnlyList<AvaliacaoDto>>(StatusCodes.Status200OK);
 
 v1.MapGet("/cursos/{slug}/progresso", async (string slug, [FromHeader(Name = "X-Usuario-Id")] string? usuarioId, ICatalogoRepositorio repo, CancellationToken ct) =>
 {

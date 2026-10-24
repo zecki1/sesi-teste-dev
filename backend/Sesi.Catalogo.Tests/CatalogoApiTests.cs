@@ -582,7 +582,8 @@ public class CatalogoApiTests : IClassFixture<WebApplicationFactory<Program>>
 
         var slug = $"pagina-scorm-{Guid.NewGuid():N}";
         var pagina = new ScormPaginaConfigDto(
-            "Curso SCORM", "Subtítulo", "Sobre", "", "/capa.webp", 10, "Iniciar curso");
+            "Curso SCORM", "Subtítulo", "Sobre", "", "/capa.webp", 10, "Iniciar curso",
+            ["pt-BR", "en-US"], "pt-BR");
         (await client.GetAsync($"/api/v1/scorm/paginas/{slug}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
         (await client.GetAsync($"/api/v1/scorm/pacotes/{slug}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
         var salva = await client.PutAsJsonAsync($"/api/v1/scorm/paginas/{slug}", pagina);
@@ -612,5 +613,61 @@ public class CatalogoApiTests : IClassFixture<WebApplicationFactory<Program>>
 
         var resposta = await client.PostAsync("/api/v1/scorm/pacotes", formulario);
         resposta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task AvaliacaoCurso_DeveRegistrarAtualizarEExibirNoDetalhe()
+    {
+        var client = _factory.CreateClient();
+        const string slug = "processo-seletivo-desenvolvedor-de-sistemas-i";
+        const string usuario = "aluno-avaliacao@teste.com";
+
+        var request = new CriarAvaliacaoRequest(
+            slug, usuario, "Aluno Teste", 5, "Curso muito bom.",
+            4, 5, 4, 5, "Senti falta de exercícios extras.", "pt-BR");
+
+        var resposta = await client.PostAsJsonAsync("/api/v1/avaliacoes", request);
+        resposta.StatusCode.Should().Be(HttpStatusCode.OK, await resposta.Content.ReadAsStringAsync());
+        var criada = await resposta.Content.ReadFromJsonAsync<AvaliacaoDto>();
+        criada.Should().NotBeNull();
+        criada!.Nota.Should().Be(5);
+        criada.Sugestao.Should().Be("Senti falta de exercícios extras.");
+
+        // Reenvio do mesmo aluno atualiza a avaliação, sem duplicar.
+        var atualizacao = await client.PostAsJsonAsync(
+            "/api/v1/avaliacoes", request with { Nota = 4, Depoimento = "Bom, mas pode melhorar." });
+        atualizacao.StatusCode.Should().Be(HttpStatusCode.OK);
+        var atualizada = await atualizacao.Content.ReadFromJsonAsync<AvaliacaoDto>();
+        atualizada!.Id.Should().Be(criada.Id);
+
+        var doCurso = await client.GetFromJsonAsync<List<AvaliacaoDto>>(
+            $"/api/v1/avaliacoes?cursoSlug={slug}&limite=50");
+        doCurso.Should().NotBeNull();
+        doCurso!.Should().ContainSingle(a => a.CursoSlug == slug && a.Nome == "Aluno Teste");
+
+        var detalhe = await client.GetFromJsonAsync<CursoDetalheDto>($"/api/v1/cursos/{slug}");
+        detalhe.Should().NotBeNull();
+        detalhe!.Avaliacao.Total.Should().BeGreaterThan(0);
+        detalhe.Avaliacao.Media.Should().BeInRange(1, 5);
+    }
+
+    [Fact]
+    public async Task AvaliacaoCurso_NotaInvalidaOuSemCurso_DeveRetornar400Ou404()
+    {
+        var client = _factory.CreateClient();
+
+        var semNota = new CriarAvaliacaoRequest(
+            "processo-seletivo-desenvolvedor-de-sistemas-i", "aluno-invalido@teste.com", "Aluno",
+            0, null, 5, 5, 5, 5, null, null);
+        (await client.PostAsJsonAsync("/api/v1/avaliacoes", semNota)).StatusCode
+            .Should().Be(HttpStatusCode.BadRequest);
+
+        var semUsuario = semNota with { UsuarioId = " ", Nota = 5 };
+        (await client.PostAsJsonAsync("/api/v1/avaliacoes", semUsuario)).StatusCode
+            .Should().Be(HttpStatusCode.BadRequest);
+
+        var cursoInexistente = semNota with { UsuarioId = "aluno-invalido@teste.com", Nota = 5, CursoSlug = "curso-que-nao-existe" };
+        (await client.PostAsJsonAsync("/api/v1/avaliacoes", cursoInexistente)).StatusCode
+            .Should().Be(HttpStatusCode.NotFound);
     }
 }

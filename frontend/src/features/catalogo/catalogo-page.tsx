@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Link } from "react-router-dom"
+import { useTranslation } from "react-i18next"
 import { MainLayout } from "@/components/layout/main-layout"
 import { Container } from "@/components/layout/container"
 import { Button } from "@/components/ui/button"
@@ -9,6 +10,7 @@ import { IconeCategoria, estiloBadgeCategoria } from "@/lib/ui/icones-categoria"
 import { imagemDoCurso } from "@/lib/ui/imagens-cursos"
 
 export function CatalogoPage() {
+  const { t } = useTranslation("catalog")
   const [busca, setBusca] = useState("")
   const [categoria, setCategoria] = useState("")
   const [modalidade, setModalidade] = useState("")
@@ -40,8 +42,8 @@ export function CatalogoPage() {
     <MainLayout>
       <section className="bg-[var(--sesi-red)] py-12 text-white">
         <Container>
-          <h1 className="font-['Open_Sans_Condensed',sans-serif] text-4xl font-bold sm:text-5xl">Catálogo de Cursos</h1>
-          <p className="mt-2 text-lg">Consulte, pesquise e filtre os cursos disponíveis</p>
+          <h1 className="font-['Open_Sans_Condensed',sans-serif] text-4xl font-bold sm:text-5xl">{t("title")}</h1>
+          <p className="mt-2 text-lg">{t("subtitle")}</p>
         </Container>
       </section>
 
@@ -49,32 +51,32 @@ export function CatalogoPage() {
         <Container className="flex flex-col gap-8">
           <div className="flex flex-col gap-4 rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] p-4 md:flex-row md:flex-wrap md:items-end">
             <div className="flex min-w-[240px] flex-1 flex-col gap-2">
-              <label htmlFor="busca" className="text-sm font-semibold">Pesquisar pelo nome</label>
-              <input id="busca" value={busca} onChange={(e) => { setBusca(e.target.value); setPagina(1) }} placeholder="Digite o nome do curso" className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] px-4 py-2" />
+              <label htmlFor="busca" className="text-sm font-semibold">{t("searchLabel")}</label>
+              <input id="busca" value={busca} onChange={(e) => { setBusca(e.target.value); setPagina(1) }} placeholder={t("searchPlaceholder")} className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] px-4 py-2" />
             </div>
             <div className="flex flex-col gap-2">
-              <label htmlFor="categoria" className="text-sm font-semibold">Categoria</label>
+              <label htmlFor="categoria" className="text-sm font-semibold">{t("category")}</label>
               <select id="categoria" value={categoria} onChange={(e) => { setCategoria(e.target.value); setPagina(1) }} className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] px-4 py-2">
-                <option value="">Todas</option>
+                <option value="">{t("all")}</option>
                 {facetas?.categorias.map((c) => <option key={c.slug} value={c.slug}>{c.nome}</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-2">
-              <label htmlFor="modalidade" className="text-sm font-semibold">Modalidade</label>
+              <label htmlFor="modalidade" className="text-sm font-semibold">{t("modality")}</label>
               <select id="modalidade" value={modalidade} onChange={(e) => { setModalidade(e.target.value); setPagina(1) }} className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] px-4 py-2">
-                <option value="">Todas</option>
+                <option value="">{t("all")}</option>
                 {facetas?.modalidades.map((m) => <option key={m.slug} value={m.slug}>{m.nome}</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-2">
-              <label htmlFor="status" className="text-sm font-semibold">Status</label>
+              <label htmlFor="status" className="text-sm font-semibold">{t("status")}</label>
               <select id="status" value={status} onChange={(e) => { setStatus(e.target.value); setPagina(1) }} className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] px-4 py-2">
-                <option value="">Todos</option>
+                <option value="">{t("allStatus")}</option>
                 {facetas?.status.map((s) => <option key={s.slug} value={s.slug}>{s.nome}</option>)}
               </select>
             </div>
             {temFiltros && (
-              <Button variant="secondary" onClick={limparFiltros} className="border-[var(--sesi-black)]">Limpar filtros</Button>
+              <Button variant="secondary" onClick={limparFiltros} className="border-[var(--sesi-black)]">{t("clearFilters")}</Button>
             )}
           </div>
 
@@ -85,14 +87,14 @@ export function CatalogoPage() {
           )}
           {!isLoading && data && (
             <div className="flex items-center justify-between">
-              <p className="text-[var(--sesi-muted)]">{`${data.total} resultado(s) encontrado(s)`}</p>
+              <p className="text-[var(--sesi-muted)]">{t("results", { count: data.total })}</p>
             </div>
           )}
 
           {isLoading && (
             <div
               className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
-              aria-label="Carregando cursos"
+              aria-label={t("loading")}
               aria-busy="true"
               role="status"
             >
@@ -110,20 +112,20 @@ export function CatalogoPage() {
                   </div>
                 </div>
               ))}
-              <span className="sr-only">Carregando cursos...</span>
+              <span className="sr-only">{t("loading")}</span>
             </div>
           )}
           {isError && (
             <div className="flex items-center justify-center py-12">
-              <p className="text-red-600">Erro ao carregar cursos. Verifique se a API está em execução e acessível.</p>
+              <p className="text-red-600">{t("error")}. {t("errorHint")}</p>
             </div>
           )}
 
           {!isLoading && !isError && data && data.itens.length === 0 && (
             <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
-              <p className="text-xl font-semibold">Nenhum curso encontrado</p>
-              <p className="text-[var(--sesi-muted)]">Tente ajustar os filtros ou limpar a pesquisa.</p>
-              {temFiltros && <Button variant="primary" onClick={limparFiltros}>Limpar filtros</Button>}
+              <p className="text-xl font-semibold">{t("noResults")}</p>
+              <p className="text-[var(--sesi-muted)]">{t("noResultsHint")}</p>
+              {temFiltros && <Button variant="primary" onClick={limparFiltros}>{t("clearFilters")}</Button>}
             </div>
           )}
 
@@ -179,9 +181,9 @@ export function CatalogoPage() {
 
           {data && data.total > data.tamanho && (
             <div className="flex items-center justify-center gap-4">
-              <Button variant="secondary" disabled={pagina === 1} onClick={() => setPagina((p) => Math.max(1, p - 1))}>Anterior</Button>
-              <span>Página {pagina}</span>
-              <Button variant="secondary" disabled={pagina * data.tamanho >= data.total} onClick={() => setPagina((p) => p + 1)}>Próxima</Button>
+              <Button variant="secondary" disabled={pagina === 1} onClick={() => setPagina((p) => Math.max(1, p - 1))}>{t("previous")}</Button>
+              <span>{t("page", { page: pagina })}</span>
+              <Button variant="secondary" disabled={pagina * data.tamanho >= data.total} onClick={() => setPagina((p) => p + 1)}>{t("next")}</Button>
             </div>
           )}
         </Container>

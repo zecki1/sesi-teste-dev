@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
 import {
   ApiError,
+  listarAvaliacoes,
   listarCursos,
   listarMatriculas,
   listarTurmas,
@@ -29,6 +30,17 @@ export function useCurso(slug: string) {
     retry: import.meta.env.DEV
       ? false
       : (tentativas, erro) => !(erro instanceof ApiError && erro.status === 404) && tentativas < 3,
+  })
+}
+
+export function useAvaliacoes(cursoSlug?: string, limite = 20) {
+  const { i18n } = useTranslation()
+  const lang = i18n.language || "pt-BR"
+  return useQuery({
+    queryKey: ["avaliacoes", cursoSlug ?? "todos", limite, lang],
+    queryFn: () => listarAvaliacoes({ cursoSlug, limite }),
+    // A avaliação é um extra da página: uma falha não deve quebrar a tela.
+    retry: false,
   })
 }
 

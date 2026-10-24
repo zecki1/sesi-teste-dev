@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom"
 import { useEffect, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { useCurso } from "@/hooks/use-catalogo"
 import { ApiError, API_URL } from "@/lib/api/catalogo"
 import { usePerfil } from "@/lib/auth/perfil"
@@ -25,7 +26,47 @@ import {
 } from "./scorm-api"
 import { gestaoLocalHabilitada, registrarMarcoCurso } from "@/lib/api/gestao"
 
+const IDIOMAS_SUPORTADOS = ["pt-BR", "en-US", "es-ES"] as const
+
+/** Reduz o idioma da interface a um dos três suportados. */
+function normalizarIdioma(valor: string | undefined) {
+  const idioma = (valor ?? "").replace("_", "-").toLowerCase()
+  if (idioma.startsWith("en")) return "en-US"
+  if (idioma.startsWith("es")) return "es-ES"
+  return "pt-BR"
+}
+
+/** Alerta de idioma indisponível, exibido acima do conteúdo SCORM. */
+function AlertaIdioma({ idioma, padrao }: { idioma: string; padrao: string }) {
+  const { t, i18n } = useTranslation("course")
+  const formatador = new Intl.DisplayNames([i18n.language], { type: "language" })
+  const nome = (codigo: string) => {
+    try {
+      return formatador.of(codigo) ?? codigo
+    } catch {
+      return codigo
+    }
+  }
+
+  return (
+    <div
+      role="alert"
+      data-alerta-idioma
+      className="mt-4 flex items-start gap-3 rounded-[var(--radius-lg)] border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+    >
+      <span aria-hidden="true" className="mt-0.5 text-base">⚠️</span>
+      <div>
+        <p className="font-semibold">{t("scorm.languageAlertTitle")}</p>
+        <p className="mt-1">
+          {t("scorm.languageAlert", { idioma: nome(idioma), padrao: nome(padrao) })}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export function ScormCursoPage() {
+  const { t, i18n } = useTranslation("course")
   const { slug } = useParams<{ slug: string }>()
   const { pathname } = useLocation()
   const navigate = useNavigate()
@@ -51,9 +92,9 @@ export function ScormCursoPage() {
   useEffect(() => {
     if (!gestaoLocalHabilitada || !emPlayer || !slug || !perfil?.email) return
     registrarMarcoCurso(slug, perfil.email, "inicio").catch((falha: unknown) => {
-      setErroProgresso(falha instanceof Error ? falha.message : "Não foi possível registrar o início do curso.")
+      setErroProgresso(falha instanceof Error ? falha.message : t("scorm.progressError"))
     })
-  }, [emPlayer, slug, perfil?.email])
+  }, [emPlayer, slug, perfil?.email, t])
 
   useEffect(() => {
     if (!slug || !curso) return
@@ -66,14 +107,14 @@ export function ScormCursoPage() {
       .catch((falha: unknown) => {
         if (ativo) {
           setConfiguracaoRemota(null)
-          setErroConfiguracao(falha instanceof Error ? falha.message : "Não foi possível carregar a configuração da página SCORM.")
+          setErroConfiguracao(falha instanceof Error ? falha.message : t("scorm.configError"))
         }
       })
 
     return () => {
       ativo = false
     }
-  }, [slug, curso])
+  }, [slug, curso, t])
 
   useEffect(() => {
     if (!slug) return
@@ -88,7 +129,7 @@ export function ScormCursoPage() {
       .catch((falha: unknown) => {
         if (ativo) {
           setPacote(null)
-          setErroPacote(falha instanceof Error ? falha.message : "Não foi possível consultar o pacote SCORM.")
+          setErroPacote(falha instanceof Error ? falha.message : t("scorm.packageError"))
         }
       })
       .finally(() => {
@@ -98,7 +139,7 @@ export function ScormCursoPage() {
     return () => {
       ativo = false
     }
-  }, [slug])
+  }, [slug, t])
 
   useEffect(() => {
     const usuarioId = perfil?.email || "anonimo"
@@ -114,14 +155,14 @@ export function ScormCursoPage() {
       })
       .catch((falha: unknown) => {
         if (ativo) {
-          setErroProgresso(falha instanceof Error ? falha.message : "Não foi possível consultar o progresso SCORM.")
+          setErroProgresso(falha instanceof Error ? falha.message : t("scorm.progressError"))
         }
       })
 
     return () => {
       ativo = false
     }
-  }, [slug, pacote, perfil?.email])
+  }, [slug, pacote, perfil?.email, t])
 
   useEffect(() => {
     const origemApi = new URL(API_URL).origin
@@ -171,14 +212,14 @@ export function ScormCursoPage() {
       })
       .catch((falha: unknown) => {
         conclusaoRegistrada.current = false
-        setErroProgresso(falha instanceof Error ? falha.message : "Não foi possível registrar a conclusão do curso.")
+        setErroProgresso(falha instanceof Error ? falha.message : t("scorm.completionError"))
       })
-  }, [emPlayer, slug, perfil?.email, perfil?.nome, perfil?.sobrenome, progresso, statusScorm, curso?.nomeCompleto])
+  }, [emPlayer, slug, perfil?.email, perfil?.nome, perfil?.sobrenome, progresso, statusScorm, curso?.nomeCompleto, t])
 
   if (isLoading) {
     return (
       <MainLayout>
-        <Container className="py-10">Carregando...</Container>
+        <Container className="py-10">{t("loading")}</Container>
       </MainLayout>
     )
   }
@@ -190,18 +231,16 @@ export function ScormCursoPage() {
       <MainLayout>
         <Container className="flex flex-col items-start gap-4 py-16">
           <p className="text-sm font-semibold uppercase tracking-wide text-[var(--sesi-red)]">
-            {naoEncontrado ? "Erro 404" : "Falha de conexão"}
+            {naoEncontrado ? t("notFoundEyebrow") : t("connectionEyebrow")}
           </p>
           <h1 className="font-['Open_Sans_Condensed',sans-serif] text-3xl font-bold sm:text-4xl">
-            {naoEncontrado ? "Curso não encontrado" : "Não foi possível carregar o curso"}
+            {naoEncontrado ? t("notFoundTitle") : t("connectionTitle")}
           </h1>
           <p className="max-w-xl text-[var(--sesi-muted)]">
-            {naoEncontrado
-              ? "O curso que você procura não existe ou saiu do catálogo."
-              : "A API não respondeu. Verifique se o serviço está em execução e tente novamente."}
+            {naoEncontrado ? t("notFoundHint") : t("connectionHintApi")}
           </p>
           <Link to="/catalogo">
-            <Button variant="primary" className="mt-2">Voltar ao catálogo</Button>
+            <Button variant="primary" className="mt-2">{t("backToCatalog")}</Button>
           </Link>
         </Container>
       </MainLayout>
@@ -209,10 +248,17 @@ export function ScormCursoPage() {
   }
 
   const config = configScormEfetiva(curso, configuracaoRemota)
-  const subtitulo = config.subtitulo || `${curso.categoria.nome} · ${curso.modalidade.nome} · Curso autoinstrucional`
+  const subtitulo = config.subtitulo || `${curso.categoria.nome} · ${curso.modalidade.nome} · ${t("scorm.autoInstructional")}`
   const versaoEfetiva = pacote?.versao ?? config.versao
   const urlPlayer = pacote ? urlPlayerScorm(pacote, perfil?.email ?? "anonimo") : config.urlLancamento
   const temPlayer = Boolean(urlPlayer)
+
+  const idiomaAtual = normalizarIdioma(i18n.language)
+  const idiomasDoPacote = (config.idiomas.length ? config.idiomas : ["pt-BR"])
+    .map(normalizarIdioma)
+    .filter((idioma, indice, lista) => IDIOMAS_SUPORTADOS.includes(idioma as typeof IDIOMAS_SUPORTADOS[number]) && lista.indexOf(idioma) === indice)
+  const idiomaPadrao = normalizarIdioma(config.idiomaPadrao)
+  const idiomaIndisponivel = !idiomasDoPacote.includes(idiomaAtual)
 
   const irParaConteudo = () => navigate(`/curso/${curso.slug}/scorm/player`)
 
@@ -222,36 +268,44 @@ export function ScormCursoPage() {
         <section className="flex min-h-[calc(100svh-72px)] flex-col">
           <Container className="flex w-full items-center justify-between gap-4 border-b border-[var(--sesi-gray)] py-4">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--sesi-muted)]">Curso SCORM {versaoEfetiva}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--sesi-muted)]">
+                {t("scorm.playerEyebrow", { versao: versaoEfetiva })}
+              </p>
               <h1 className="truncate text-lg font-bold text-[var(--sesi-black)] sm:text-xl">{config.titulo}</h1>
             </div>
             <div className="shrink-0 text-right">
-              <span className="block text-xs text-[var(--sesi-muted)]">Progresso</span>
+              <span className="block text-xs text-[var(--sesi-muted)]">{t("scorm.progress")}</span>
               <strong className="text-sm text-[var(--sesi-black)]">{progresso}%</strong>
             </div>
           </Container>
+
+          {idiomaIndisponivel && (
+            <Container className="w-full">
+              <AlertaIdioma idioma={idiomaAtual} padrao={idiomaPadrao} />
+            </Container>
+          )}
 
           {temPlayer ? (
             <iframe
               data-player-scorm
               src={urlPlayer}
-              title={`Conteúdo SCORM do curso ${curso.nomeBreve}`}
+              title={t("scorm.playerTitle", { curso: curso.nomeBreve })}
               className="h-[calc(100svh-150px)] min-h-[420px] w-full border-0"
               allow="fullscreen"
             />
           ) : carregandoPacote ? (
             <div data-player-carregando className="grid min-h-[420px] flex-1 place-items-center px-6 py-10 text-sm text-[var(--sesi-muted)]">
-              Carregando player SCORM...
+              {t("scorm.loadingPlayer")}
             </div>
           ) : (
             <Container className="flex flex-1 flex-col items-center justify-center gap-4 py-12 text-center">
               <p role={erroPacote ? "alert" : undefined} className={erroPacote ? "text-sm text-[var(--sesi-red)]" : "text-sm text-[var(--sesi-muted)]"}>
                 {erroPacote
-                  ? `Não foi possível carregar o pacote SCORM. ${erroPacote}`
-                  : "Nenhum pacote SCORM foi publicado para este curso."}
+                  ? `${t("scorm.packageError")} ${erroPacote}`
+                  : t("scorm.noPackage")}
               </p>
               <Button type="button" variant="secondary" onClick={() => navigate(`/curso/${curso.slug}/scorm`)}>
-                Voltar aos detalhes do curso
+                {t("scorm.backToCourse")}
               </Button>
             </Container>
           )}
@@ -279,21 +333,23 @@ export function ScormCursoPage() {
       <section id="conteudo-scorm" className="scroll-mt-[88px] py-12 sm:py-16">
         <Container className="grid gap-10 lg:grid-cols-12">
           <div className="lg:col-span-8">
-            <h2 className="font-['Open_Sans_Condensed',sans-serif] text-3xl font-bold sm:text-4xl">Conteúdo do curso</h2>
+            <h2 className="font-['Open_Sans_Condensed',sans-serif] text-3xl font-bold sm:text-4xl">{t("scorm.contentTitle")}</h2>
             <p className="mt-2 text-sm text-[var(--sesi-muted)]">
-              Pacote SCORM {versaoEfetiva}; seu progresso é salvo enquanto você realiza as aulas.
+              {t("scorm.contentSubtitle", { versao: versaoEfetiva })}
             </p>
             {erroConfiguracao && (
               <p role="alert" className="mt-4 rounded-[var(--radius-lg)] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                Não foi possível consultar a configuração salva no servidor. Exibindo os dados disponíveis neste navegador. {erroConfiguracao}
+                {t("scorm.configError")} {erroConfiguracao}
               </p>
             )}
+
+            {idiomaIndisponivel && <AlertaIdioma idioma={idiomaAtual} padrao={idiomaPadrao} />}
 
             <div className="mt-5 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white">
               {temPlayer ? (
                 <>
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--sesi-gray)] px-4 py-2 text-xs text-[var(--sesi-muted)]">
-                    <span className="font-semibold uppercase tracking-wide">Progresso do aluno</span>
+                    <span className="font-semibold uppercase tracking-wide">{t("scorm.progressLabel")}</span>
                     <span className="flex items-center gap-3">
                       {statusScorm && (
                         <span data-status-scorm className="rounded bg-[var(--sesi-gray)] px-2 py-0.5 font-semibold text-[var(--sesi-black)]">
@@ -310,25 +366,25 @@ export function ScormCursoPage() {
                   {erroProgresso && <p role="alert" className="border-b border-[var(--sesi-gray)] px-4 py-2 text-sm text-[var(--sesi-red)]">{erroProgresso}</p>}
                   <div className="flex flex-col items-start gap-4 bg-[#F5F5F5] px-6 py-8 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <h3 className="font-semibold text-[var(--sesi-black)]">Seu curso está pronto</h3>
-                      <p className="mt-1 text-sm text-[var(--sesi-muted)]">Continue de onde parou. Seu progresso é salvo durante as aulas.</p>
+                      <h3 className="font-semibold text-[var(--sesi-black)]">{t("scorm.readyTitle")}</h3>
+                      <p className="mt-1 text-sm text-[var(--sesi-muted)]">{t("scorm.readyText")}</p>
                     </div>
                     <Link
                       to={`/curso/${curso.slug}/scorm/player`}
                       className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--sesi-red)] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[var(--sesi-red-dark)]"
                     >
-                      {progresso > 0 ? "Continuar curso" : "Iniciar curso"}
+                      {progresso > 0 ? t("continueCourse") : t("startCourse")}
                       <span aria-hidden="true">→</span>
                     </Link>
                   </div>
                 </>
               ) : carregandoPacote ? (
                 <div data-player-carregando className="grid min-h-[280px] place-items-center bg-[#F5F5F5] px-6 py-10 text-sm text-[var(--sesi-muted)]">
-                  Carregando player SCORM...
+                  {t("scorm.loadingPlayer")}
                 </div>
               ) : erroPacote ? (
                 <div role="alert" className="bg-red-50 px-6 py-10 text-sm text-red-800">
-                  Não foi possível carregar o pacote SCORM. {erroPacote}
+                  {t("scorm.packageError")} {erroPacote}
                 </div>
               ) : (
                 <div data-player-demonstrativo className="flex flex-col items-center gap-4 bg-[#F5F5F5] px-6 py-14 text-center">
@@ -341,13 +397,13 @@ export function ScormCursoPage() {
                   </span>
                   <h3 className="text-lg font-bold text-[var(--sesi-black)]">Player SCORM</h3>
                   <p className="max-w-md text-sm text-[#4A4A4A]">
-                    {config.arquivo ? <>O pacote <strong className="text-[var(--sesi-black)]">{config.arquivo}</strong> está registrado no admin.</> : "Nenhum pacote SCORM publicado ainda."}{" "}
-                    Envie o <strong className="text-[var(--sesi-black)]">.zip</strong> no admin do curso para disponibilizar o conteúdo aqui.
+                    {config.arquivo ? t("scorm.demoPackage", { arquivo: config.arquivo }) : t("scorm.demoNoPackage")}{" "}
+                    {t("scorm.demoUploadHint")}
                   </p>
                   <dl className="mt-2 grid gap-2 text-sm text-[var(--sesi-black)] sm:grid-cols-3">
-                    <div><dt className="text-xs uppercase tracking-wide text-[#4A4A4A]">Versão</dt><dd className="font-semibold">SCORM {versaoEfetiva}</dd></div>
-                    <div><dt className="text-xs uppercase tracking-wide text-[#4A4A4A]">Carga horária</dt><dd className="font-semibold">{config.cargaHoraria}h</dd></div>
-                    <div><dt className="text-xs uppercase tracking-wide text-[#4A4A4A]">Arquivo</dt><dd className="font-semibold">{config.arquivo || "não anexado"}</dd></div>
+                    <div><dt className="text-xs uppercase tracking-wide text-[#4A4A4A]">{t("scorm.version")}</dt><dd className="font-semibold">SCORM {versaoEfetiva}</dd></div>
+                    <div><dt className="text-xs uppercase tracking-wide text-[#4A4A4A]">{t("scorm.workloadLabel")}</dt><dd className="font-semibold">{config.cargaHoraria}h</dd></div>
+                    <div><dt className="text-xs uppercase tracking-wide text-[#4A4A4A]">{t("scorm.file")}</dt><dd className="font-semibold">{config.arquivo || t("scorm.fileNotAttached")}</dd></div>
                   </dl>
                 </div>
               )}
@@ -355,15 +411,15 @@ export function ScormCursoPage() {
           </div>
 
           <aside className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white p-6 lg:col-span-4">
-            <h2 className="text-lg font-bold text-[var(--sesi-black)]">Informações do curso</h2>
+            <h2 className="text-lg font-bold text-[var(--sesi-black)]">{t("scorm.infoTitle")}</h2>
             <dl className="mt-4 flex flex-col gap-3 text-sm">
               {[
-                { rotulo: "Carga horária", valor: `${config.cargaHoraria} horas` },
-                { rotulo: "Modalidade", valor: curso.modalidade.nome },
-                { rotulo: "Categoria", valor: curso.categoria.nome },
-                { rotulo: "Público-alvo", valor: curso.publicoAlvo || "Não informado" },
-                { rotulo: "Formato", valor: `Pacote SCORM ${versaoEfetiva}` },
-                { rotulo: "Certificação", valor: "SESI" },
+                { rotulo: t("scorm.workloadLabel"), valor: `${config.cargaHoraria}h` },
+                { rotulo: t("modality"), valor: curso.modalidade.nome },
+                { rotulo: t("scorm.category"), valor: curso.categoria.nome },
+                { rotulo: t("scorm.infoAudience"), valor: curso.publicoAlvo || t("scorm.infoNotInformed") },
+                { rotulo: t("scorm.infoFormat"), valor: t("scorm.infoFormatValue", { versao: versaoEfetiva }) },
+                { rotulo: t("certification"), valor: "SESI" },
               ].map((item) => (
                 <div key={item.rotulo} className="flex flex-col gap-0.5 border-b border-[var(--sesi-gray)] pb-2 last:border-0 last:pb-0">
                   <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--sesi-muted)]">{item.rotulo}</dt>
@@ -375,15 +431,15 @@ export function ScormCursoPage() {
               to={`/area-do-aluno/curso/${curso.slug}`}
               className="mt-5 inline-flex w-full items-center justify-center rounded-[var(--radius-lg)] bg-[var(--sesi-black)] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
             >
-              Abrir na área do aluno
+              {t("scorm.openStudentArea")}
             </Link>
           </aside>
         </Container>
       </section>
 
       <SobreCurso curso={curso} descricao={config.descricao} />
-      <DepoimentosCurso />
-      <AjudaCurso />
+      <DepoimentosCurso curso={curso} />
+      <AjudaCurso curso={curso} />
       <FaixaMatricula
         nomeCurso={curso.nomeCompleto}
         onMatricular={() => setMatriculaAberta(true)}

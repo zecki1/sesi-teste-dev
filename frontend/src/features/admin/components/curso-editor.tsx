@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import type { FacetasDto } from "@/lib/api/catalogo"
+import type { FacetasDto, PerguntaAdminDto } from "@/lib/api/catalogo"
 import { configScormPadrao, type ScormPaginaConfig } from "@/features/scorm/scorm-config"
 import { detectarVersaoScorm } from "@/features/scorm/detectar-versao-scorm"
 import { obterPacoteScorm, urlDownloadScorm, type PacoteScormDto } from "@/features/scorm/scorm-api"
@@ -29,6 +29,34 @@ const campo =
   "w-full rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[var(--sesi-red)] focus:ring-2 focus:ring-[var(--sesi-red)]/20"
 
 const rotulo = "text-xs font-semibold uppercase tracking-wide text-[var(--sesi-muted)]"
+
+const IDIOMAS_CONTEUDO = [
+  { codigo: "pt-BR", bandeira: "🇧🇷", nome: "Português" },
+  { codigo: "en-US", bandeira: "🇺🇸", nome: "English" },
+  { codigo: "es-ES", bandeira: "🇪🇸", nome: "Español" },
+] as const
+
+type IdiomaConteudo = (typeof IDIOMAS_CONTEUDO)[number]["codigo"]
+
+const CAMPOS_PERGUNTA: Record<IdiomaConteudo, { pergunta: keyof PerguntaAdminDto; resposta: keyof PerguntaAdminDto }> = {
+  "pt-BR": { pergunta: "perguntaPt", resposta: "respostaPt" },
+  "en-US": { pergunta: "perguntaEn", resposta: "respostaEn" },
+  "es-ES": { pergunta: "perguntaEs", resposta: "respostaEs" },
+}
+
+function perguntaVazia(ordem: number): PerguntaAdminDto {
+  return {
+    id: 0,
+    ordem,
+    ativa: true,
+    perguntaPt: "",
+    respostaPt: "",
+    perguntaEn: "",
+    respostaEn: "",
+    perguntaEs: "",
+    respostaEs: "",
+  }
+}
 const normalizarBusca = (valor: string) =>
   valor.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim()
 
@@ -84,6 +112,7 @@ export function CursoEditor({
   const [detectandoVersao, setDetectandoVersao] = useState(false)
   const [pacoteAtual, setPacoteAtual] = useState<PacoteScormDto | null>(null)
   const [carregandoPacoteAtual, setCarregandoPacoteAtual] = useState(false)
+  const [idiomaPerguntas, setIdiomaPerguntas] = useState<IdiomaConteudo>("pt-BR")
   const deteccaoAtual = useRef(0)
   useBodyScrollLock(progressoUploadScorm !== null)
 
@@ -162,6 +191,38 @@ export function CursoEditor({
       ...atual,
       modulos: atual.modulos.map((modulo) => (modulo.id === moduloId ? { ...modulo, ...alteracao } : modulo)),
     }))
+  }
+
+  const alterarPerguntas = (perguntas: PerguntaAdminDto[]) => {
+    setDraft((atual) => ({ ...atual, perguntas: perguntas.map((pergunta, ordem) => ({ ...pergunta, ordem })) }))
+  }
+
+  const alterarPergunta = (indice: number, alteracao: Partial<PerguntaAdminDto>) => {
+    const atuais = draft.perguntas ?? []
+    alterarPerguntas(atuais.map((pergunta, posicao) => (posicao === indice ? { ...pergunta, ...alteracao } : pergunta)))
+  }
+
+  const adicionarPergunta = () => {
+    const atuais = draft.perguntas ?? []
+    if (atuais.length >= 10) return
+    alterarPerguntas([...atuais, perguntaVazia(atuais.length)])
+  }
+
+  const removerPergunta = (indice: number) => {
+    const atuais = draft.perguntas ?? []
+    alterarPerguntas(atuais.filter((_, posicao) => posicao !== indice))
+  }
+
+  const alternarIdiomaScorm = (idioma: IdiomaConteudo) => {
+    const atuais = draft.scorm?.idiomas ?? ["pt-BR"]
+    const idiomas = atuais.includes(idioma)
+      ? atuais.filter((item) => item !== idioma)
+      : [...atuais, idioma]
+    const padrao = draft.scorm?.idiomaPadrao
+    alterarScorm({
+      idiomas,
+      idiomaPadrao: padrao && idiomas.includes(padrao) ? padrao : idiomas[0],
+    })
   }
 
   const alterarAula = (moduloId: string, aulaId: string, alteracao: Partial<AulaAdmin>) => {
@@ -873,6 +934,49 @@ export function CursoEditor({
               className={campo}
             />
           </Campo>
+          <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--sesi-gray)] p-4 sm:col-span-2">
+            <p className={rotulo}>Idiomas disponíveis no pacote SCORM</p>
+            <p className="mt-1 text-xs text-[var(--sesi-muted)]">
+              Marque os idiomas em que o conteúdo está traduzido. Quando o visitante escolher um idioma não marcado,
+              a página SCORM exibe um alerta acima do conteúdo.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {IDIOMAS_CONTEUDO.map((idioma) => {
+                const marcado = (draft.scorm?.idiomas ?? ["pt-BR"]).includes(idioma.codigo)
+                return (
+                  <button
+                    key={idioma.codigo}
+                    type="button"
+                    aria-pressed={marcado}
+                    onClick={() => alternarIdiomaScorm(idioma.codigo)}
+                    className={`inline-flex items-center gap-2 rounded-[var(--radius-pill)] border px-4 py-2 text-sm font-semibold transition ${
+                      marcado
+                        ? "border-[var(--sesi-red)] bg-[var(--sesi-red)]/10 text-[var(--sesi-black)]"
+                        : "border-[var(--sesi-gray)] bg-white text-[var(--sesi-muted)] hover:border-[var(--sesi-black)]"
+                    }`}
+                  >
+                    <span aria-hidden="true" className="text-base">{idioma.bandeira}</span>
+                    {idioma.nome}
+                    <span aria-hidden="true">{marcado ? "✓" : "+"}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <label className="mt-4 flex flex-col gap-1.5">
+              <span className={rotulo}>Idioma padrão (usado quando falta tradução)</span>
+              <select
+                value={draft.scorm?.idiomaPadrao ?? "pt-BR"}
+                onChange={(evento) => alterarScorm({ idiomaPadrao: evento.target.value })}
+                className={campo}
+              >
+                {IDIOMAS_CONTEUDO.filter((idioma) => (draft.scorm?.idiomas ?? ["pt-BR"]).includes(idioma.codigo)).map((idioma) => (
+                  <option key={idioma.codigo} value={idioma.codigo}>
+                    {idioma.bandeira} {idioma.nome}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <Campo titulo="URL de lançamento do pacote" largura="sm:col-span-2">
             <input
               value={draft.scorm?.urlLancamento ?? ""}
@@ -893,6 +997,103 @@ export function CursoEditor({
             />
           </Campo>
         </div>
+      </section>
+
+      <section className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white p-5">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-bold text-[var(--sesi-black)]">Perguntas frequentes (3 idiomas)</h3>
+            <p className="mt-1 max-w-2xl text-xs text-[var(--sesi-muted)]">
+              Até 10 perguntas por curso. Cada idioma tem seu próprio texto; o que ficar vazio cai no idioma padrão
+              na página pública.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={adicionarPergunta}
+            disabled={(draft.perguntas?.length ?? 0) >= 10}
+            className="rounded-[var(--radius-lg)] border border-[var(--sesi-black)] px-4 py-2 text-xs font-semibold transition hover:bg-[var(--sesi-black)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            + Adicionar pergunta
+          </button>
+        </div>
+
+        <div className="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Idioma das perguntas">
+          {IDIOMAS_CONTEUDO.map((idioma) => (
+            <button
+              key={idioma.codigo}
+              type="button"
+              role="tab"
+              aria-selected={idiomaPerguntas === idioma.codigo}
+              onClick={() => setIdiomaPerguntas(idioma.codigo)}
+              className={`inline-flex items-center gap-2 rounded-[var(--radius-pill)] border px-4 py-2 text-sm font-semibold transition ${
+                idiomaPerguntas === idioma.codigo
+                  ? "border-[var(--sesi-black)] bg-[var(--sesi-black)] text-white"
+                  : "border-[var(--sesi-gray)] bg-white text-[var(--sesi-muted)] hover:border-[var(--sesi-black)]"
+              }`}
+            >
+              <span aria-hidden="true" className="text-base">{idioma.bandeira}</span>
+              {idioma.nome}
+            </button>
+          ))}
+        </div>
+
+        {(draft.perguntas?.length ?? 0) === 0 ? (
+          <p className="rounded-[var(--radius-lg)] bg-[#F5F5F5] px-4 py-3 text-sm text-[var(--sesi-muted)]">
+            Nenhuma pergunta cadastrada. Use “Adicionar pergunta” para incluir as dúvidas básicas do curso.
+          </p>
+        ) : (
+          <ol className="flex flex-col gap-4">
+            {(draft.perguntas ?? []).map((pergunta, indice) => {
+              const campos = CAMPOS_PERGUNTA[idiomaPerguntas]
+              return (
+                <li key={`${pergunta.id}-${indice}`} className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-[var(--sesi-muted)]">
+                      Pergunta {indice + 1}
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-1.5 text-xs font-semibold text-[var(--sesi-muted)]">
+                        <input
+                          type="checkbox"
+                          checked={pergunta.ativa}
+                          onChange={(evento) => alterarPergunta(indice, { ativa: evento.target.checked })}
+                        />
+                        Ativa
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => removerPergunta(indice)}
+                        className="text-xs font-semibold text-[var(--sesi-red)] hover:underline"
+                      >
+                        Remover
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-3">
+                    <Campo titulo="Pergunta">
+                      <input
+                        value={String(pergunta[campos.pergunta] ?? "")}
+                        onChange={(evento) => alterarPergunta(indice, { [campos.pergunta]: evento.target.value } as Partial<PerguntaAdminDto>)}
+                        maxLength={300}
+                        className={campo}
+                      />
+                    </Campo>
+                    <Campo titulo="Resposta">
+                      <textarea
+                        value={String(pergunta[campos.resposta] ?? "")}
+                        onChange={(evento) => alterarPergunta(indice, { [campos.resposta]: evento.target.value } as Partial<PerguntaAdminDto>)}
+                        rows={3}
+                        maxLength={2000}
+                        className={campo}
+                      />
+                    </Campo>
+                  </div>
+                </li>
+              )
+            })}
+          </ol>
+        )}
       </section>
 
       {erro && (

@@ -51,6 +51,7 @@ export function AdminGestaoPage() {
   const [carregando, setCarregando] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [rascunhosChamados, setRascunhosChamados] = useState<Record<string, Pick<Chamado, "status" | "resposta">>>({})
+  const [notificarChamado, setNotificarChamado] = useState<Record<string, boolean>>({})
 
   const carregar = async () => {
     setCarregando(true)
@@ -182,12 +183,17 @@ export function AdminGestaoPage() {
     setErro("")
     setAviso("")
     try {
-      const atualizado = await atualizarChamadoGestao(chamado.id, {
+      const envio = await atualizarChamadoGestao(chamado.id, {
         status: rascunho.status,
         resposta: rascunho.resposta,
+        notificarAluno: notificarChamado[chamado.id] ?? true,
       })
-      setChamados((atuais) => atuais.map((item) => (item.id === chamado.id ? atualizado : item)))
-      setAviso(`Chamado ${chamado.protocolo} atualizado.`)
+      setChamados((atuais) => atuais.map((item) => (item.id === chamado.id ? envio.chamado : item)))
+      setAviso(
+        envio.alunoEnviado
+          ? `Chamado ${chamado.protocolo} atualizado e e-mail enviado ao aluno via Resend.`
+          : `Chamado ${chamado.protocolo} atualizado.${envio.erro ? ` E-mail não enviado: ${envio.erro}` : ""}`,
+      )
     } catch (falha) {
       registrarErro(falha)
     }
@@ -321,6 +327,13 @@ export function AdminGestaoPage() {
                       </div>
                       <p className="mt-3 whitespace-pre-wrap text-sm">{chamado.descricao}</p>
                       <p className="mt-2 break-all text-xs text-[var(--sesi-muted)]">Página: {chamado.pagina}</p>
+                      {(chamado.cursoSlug || chamado.usuarioId) && (
+                        <p className="mt-1 break-all text-xs text-[var(--sesi-muted)]">
+                          {chamado.cursoSlug ? <>Curso: <strong className="font-semibold">{chamado.cursoSlug}</strong></> : null}
+                          {chamado.cursoSlug && chamado.usuarioId ? " · " : null}
+                          {chamado.usuarioId ? <>Usuário: <strong className="font-semibold">{chamado.usuarioId}</strong></> : null}
+                        </p>
+                      )}
                       {chamado.capturaTela && (
                         <a href={chamado.capturaTela} target="_blank" rel="noreferrer" className="mt-3 inline-block">
                           <img src={chamado.capturaTela} alt={`Captura de tela anexada ao chamado ${chamado.protocolo}`} className="max-h-64 rounded-lg border border-[var(--sesi-gray)] object-contain object-top" />
@@ -335,8 +348,16 @@ export function AdminGestaoPage() {
                         <label className="text-xs font-semibold">Resposta/observação
                           <textarea rows={2} value={rascunho.resposta ?? ""} onChange={(evento) => atualizarRascunhoChamado(chamado, { resposta: evento.target.value })} className={`${campo} mt-1 font-normal`} />
                         </label>
-                        <button type="button" onClick={() => void salvarChamado(chamado)} className={`${botao} self-end`}>Salvar</button>
+                        <button type="button" onClick={() => void salvarChamado(chamado)} className={`${botao} self-end`}>Salvar e notificar</button>
                       </div>
+                      <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-[var(--sesi-muted)]">
+                        <input
+                          type="checkbox"
+                          checked={notificarChamado[chamado.id] ?? true}
+                          onChange={(evento) => setNotificarChamado((atuais) => ({ ...atuais, [chamado.id]: evento.target.checked }))}
+                        />
+                        Enviar a mudança de status e a resposta ao aluno por e-mail (Resend)
+                      </label>
                     </article>
                   )
                 })}

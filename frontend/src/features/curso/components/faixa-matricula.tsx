@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 
 /**
@@ -15,6 +16,7 @@ export function FaixaMatricula({
   matriculaEmBreve?: boolean
 }) {
   const [visivel, setVisivel] = useState(false)
+  const { t } = useTranslation("course")
 
   useEffect(() => {
     const ctaPrincipal = document.querySelector<HTMLElement>("[data-cta-principal]")
@@ -54,7 +56,7 @@ export function FaixaMatricula({
       }`}
     >
       <section
-        aria-label="Matrícula"
+        aria-label={t("enrollModal.title")}
         aria-hidden={!visivel}
         className="mx-auto flex w-full max-w-[1280px] items-center gap-4 rounded-lg bg-[var(--sesi-black)] px-4 py-3 shadow-[0_8px_30px_rgba(0,0,0,0.25)] sm:px-6 sm:py-4 lg:px-8"
       >
@@ -76,7 +78,7 @@ export function FaixaMatricula({
             tabIndex={visivel ? undefined : -1}
             className="rounded-lg bg-white text-[var(--sesi-black)] hover:bg-white/85"
           >
-            {matriculaEmBreve ? "Matrículas em breve" : "Matricule-se"}
+            {matriculaEmBreve ? t("enrollSoon") : t("enroll")}
           </Button>
         </div>
       </section>

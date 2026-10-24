@@ -51,8 +51,27 @@ export function idiomaAtual(): Idioma {
   return atual === "en-US" || atual === "es-ES" ? atual : "pt-BR"
 }
 
+/** Idioma explícito na URL (`?lang=en-US`), usado para links compartilháveis. */
+function idiomaDaQuery(): Idioma | null {
+  if (typeof window === "undefined") return null
+  const bruto = (new URLSearchParams(window.location.search).get("lang") ?? "").replace("_", "-").toLowerCase()
+  if (bruto.startsWith("en")) return "en-US"
+  if (bruto.startsWith("es")) return "es-ES"
+  if (bruto.startsWith("pt")) return "pt-BR"
+  return null
+}
+
 /** Detecta e aplica o idioma no primeiro acesso e guarda a escolha automática. */
 export function iniciarIdioma() {
+  // Um idioma explícito na URL tem prioridade sobre a detecção automática.
+  const porQuery = idiomaDaQuery()
+  if (porQuery) {
+    window.localStorage.setItem(CHAVE, porQuery)
+    window.localStorage.setItem(CHAVE_MANUAL, "1")
+    aplicarIdioma(porQuery)
+    return
+  }
+
   if (!idiomaFoiEscolhidoManualmente()) aplicarIdioma(detectarIdioma())
   else aplicarIdioma(idiomaSalvo() ?? "pt-BR")
 }

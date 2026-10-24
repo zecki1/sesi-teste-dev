@@ -30,6 +30,8 @@ public class Curso
     public StatusCurso? Status { get; set; }
 
     public ICollection<Modulo> Modulos { get; set; } = new List<Modulo>();
+    public ICollection<CursoPergunta> Perguntas { get; set; } = new List<CursoPergunta>();
+    public ICollection<AvaliacaoCurso> Avaliacoes { get; set; } = new List<AvaliacaoCurso>();
     public ICollection<Turma> Turmas { get; set; } = new List<Turma>();
     public ICollection<Matricula> Matriculas { get; set; } = new List<Matricula>();
 }

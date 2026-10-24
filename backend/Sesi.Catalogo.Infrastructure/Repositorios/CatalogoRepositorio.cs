@@ -187,6 +187,7 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
             .Include(c => c.Modalidade)
             .Include(c => c.Status)
             .Include(c => c.Modulos).ThenInclude(m => m.Aulas)
+            .Include(c => c.Perguntas).ThenInclude(p => p.Traducoes)
             .FirstOrDefaultAsync(c =>
                 c.Slug == slug &&
                 c.Ativo &&
@@ -202,7 +203,21 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
         var traducaoMod = await db.ModalidadesTraducoes.AsNoTracking()
             .FirstOrDefaultAsync(t => t.ModalidadeId == curso.ModalidadeId && t.Idioma == lang, ct);
 
-        return curso.ParaDetalheDto(lang, traducao, traducaoCat, traducaoMod);
+        var perguntas = curso.Perguntas
+            .Where(p => p.Ativa)
+            .OrderBy(p => p.Ordem)
+            .Select(p => p.ParaDto(lang))
+            .ToList();
+
+        var notas = await db.Avaliacoes.AsNoTracking()
+            .Where(a => a.CursoId == curso.Id && a.Publicada)
+            .Select(a => a.Nota)
+            .ToListAsync(ct);
+        var resumoAvaliacoes = new AvaliacaoResumoDto(
+            notas.Count == 0 ? 0 : Math.Round(notas.Average(), 1),
+            notas.Count);
+
+        return curso.ParaDetalheDto(lang, traducao, traducaoCat, traducaoMod, perguntas, resumoAvaliacoes);
     }
 
     private async Task<CursoDetalheDto?> ObterCursoSemFiltroDePublicacaoAsync(string slug, CancellationToken ct)
@@ -248,10 +263,13 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
 
         var status = await db.StatusCursos.AsNoTracking()
             .OrderBy(s => s.Id)
-            .Select(s => new StatusCursoDto(s.Id, s.Nome, s.Slug))
             .ToListAsync(ct);
 
-        return new FacetasDto(catDtos, modDtos, status);
+        var statusDtos = status
+            .Select(s => new StatusCursoDto(s.Id, Mapeador.TraduzirStatus(s.Nome, s.Slug, lang), s.Slug))
+            .ToList();
+
+        return new FacetasDto(catDtos, modDtos, statusDtos);
     }
 
     public Task<FacetasDto> ObterFacetasAsync(CancellationToken ct = default)
@@ -531,6 +549,191 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
         await db.SaveChangesAsync(ct);
         return true;
     }
+
+    public async Task<IReadOnlyList<PerguntaAdminDto>> ListarPerguntasAsync(string slug, CancellationToken ct = default)
+    {
+        var cursoId = await db.Cursos.AsNoTracking()
+            .Where(c => c.Slug == slug && c.Ativo)
+            .Select(c => (int?)c.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (cursoId is null)
+            return Array.Empty<PerguntaAdminDto>();
+
+        var perguntas = await db.CursosPerguntas.AsNoTracking()
+            .Include(p => p.Traducoes)
+            .Where(p => p.CursoId == cursoId)
+            .OrderBy(p => p.Ordem)
+            .ToListAsync(ct);
+
+        return perguntas.Select(ParaPerguntaAdminDto).ToList();
+    }
+
+    public async Task<IReadOnlyList<PerguntaAdminDto>?> SalvarPerguntasAsync(
+        string slug, IReadOnlyList<PerguntaAdminDto> perguntas, CancellationToken ct = default)
+    {
+        var curso = await db.Cursos
+            .Include(c => c.Perguntas).ThenInclude(p => p.Traducoes)
+            .FirstOrDefaultAsync(c => c.Slug == slug && c.Ativo, ct);
+
+        if (curso is null)
+            return null;
+
+        // Substitui a lista inteira: o editor envia o conjunto completo (até 10 perguntas).
+        db.CursosPerguntas.RemoveRange(curso.Perguntas);
+
+        var ordem = 0;
+        foreach (var item in perguntas
+            .Where(p => !string.IsNullOrWhiteSpace(p.PerguntaPt) || !string.IsNullOrWhiteSpace(p.RespostaPt))
+            .Take(10))
+        {
+            var pergunta = new CursoPergunta
+            {
+                CursoId = curso.Id,
+                Ordem = ordem++,
+                Ativa = item.Ativa
+            };
+
+            AdicionarTraducao(pergunta, "pt-BR", item.PerguntaPt, item.RespostaPt);
+            AdicionarTraducao(pergunta, "en-US", item.PerguntaEn, item.RespostaEn);
+            AdicionarTraducao(pergunta, "es-ES", item.PerguntaEs, item.RespostaEs);
+
+            db.CursosPerguntas.Add(pergunta);
+        }
+
+        await db.SaveChangesAsync(ct);
+        return await ListarPerguntasAsync(slug, ct);
+    }
+
+    private static void AdicionarTraducao(CursoPergunta pergunta, string idioma, string? texto, string? resposta)
+    {
+        if (string.IsNullOrWhiteSpace(texto) && string.IsNullOrWhiteSpace(resposta))
+            return;
+
+        pergunta.Traducoes.Add(new CursoPerguntaTraducao
+        {
+            Idioma = idioma,
+            Pergunta = texto?.Trim() ?? string.Empty,
+            Resposta = resposta?.Trim() ?? string.Empty
+        });
+    }
+
+    private static PerguntaAdminDto ParaPerguntaAdminDto(CursoPergunta pergunta)
+    {
+        string Texto(string idioma) =>
+            pergunta.Traducoes.FirstOrDefault(t => t.Idioma == idioma)?.Pergunta ?? string.Empty;
+        string Resposta(string idioma) =>
+            pergunta.Traducoes.FirstOrDefault(t => t.Idioma == idioma)?.Resposta ?? string.Empty;
+
+        return new PerguntaAdminDto(
+            pergunta.Id,
+            pergunta.Ordem,
+            pergunta.Ativa,
+            Texto("pt-BR"), Resposta("pt-BR"),
+            Texto("en-US"), Resposta("en-US"),
+            Texto("es-ES"), Resposta("es-ES"));
+    }
+
+    public async Task<AvaliacaoDto?> SalvarAvaliacaoAsync(CriarAvaliacaoRequest request, CancellationToken ct = default)
+    {
+        var curso = await db.Cursos
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Slug == request.CursoSlug && c.Ativo, ct);
+
+        if (curso is null)
+            return null;
+
+        var usuarioId = request.UsuarioId.Trim();
+        var avaliacao = await db.Avaliacoes
+            .FirstOrDefaultAsync(a => a.CursoId == curso.Id && a.UsuarioId == usuarioId, ct);
+
+        if (avaliacao is null)
+        {
+            avaliacao = new AvaliacaoCurso { CursoId = curso.Id, UsuarioId = usuarioId };
+            db.Avaliacoes.Add(avaliacao);
+        }
+
+        // Reenvio do mesmo aluno atualiza a avaliação em vez de duplicar.
+        avaliacao.Nome = request.Nome.Trim();
+        avaliacao.Nota = request.Nota;
+        avaliacao.Depoimento = request.Depoimento?.Trim() ?? string.Empty;
+        avaliacao.NotaPlataforma = request.NotaPlataforma;
+        avaliacao.NotaCurso = request.NotaCurso;
+        avaliacao.NotaAvaliacao = request.NotaAvaliacao;
+        avaliacao.NotaAcessibilidade = request.NotaAcessibilidade;
+        avaliacao.Sugestao = request.Sugestao?.Trim() ?? string.Empty;
+        avaliacao.Idioma = NormalizarIdioma(request.Idioma);
+        avaliacao.Publicada = true;
+        avaliacao.AtualizadoEm = DateTime.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+
+        var nome = await NomeTraduzidoDoCursoAsync(curso.Id, curso.NomeBreve, avaliacao.Idioma, ct);
+        return ParaAvaliacaoDto(avaliacao, curso.Slug, nome);
+    }
+
+    public async Task<IReadOnlyList<AvaliacaoDto>> ListarAvaliacoesAsync(
+        string? cursoSlug = null, int limite = 20, string? idioma = null, CancellationToken ct = default)
+    {
+        var lang = NormalizarIdioma(idioma);
+        var limiteNormalizado = Math.Clamp(limite, 1, 50);
+
+        var consulta = db.Avaliacoes.AsNoTracking()
+            .Include(a => a.Curso)
+            .Where(a => a.Publicada && a.Curso!.Ativo);
+
+        if (!string.IsNullOrWhiteSpace(cursoSlug))
+            consulta = consulta.Where(a => a.Curso!.Slug == cursoSlug);
+
+        var avaliacoes = await consulta
+            .OrderByDescending(a => a.AtualizadoEm ?? a.CriadoEm)
+            .Take(limiteNormalizado)
+            .ToListAsync(ct);
+
+        if (avaliacoes.Count == 0)
+            return Array.Empty<AvaliacaoDto>();
+
+        var cursoIds = avaliacoes.Select(a => a.CursoId).Distinct().ToList();
+        var traducoes = await db.CursosTraducoes.AsNoTracking()
+            .Where(t => t.Idioma == lang && cursoIds.Contains(t.CursoId))
+            .ToDictionaryAsync(t => t.CursoId, t => t.NomeBreve, ct);
+
+        return avaliacoes
+            .Select(a => ParaAvaliacaoDto(
+                a,
+                a.Curso!.Slug,
+                traducoes.TryGetValue(a.CursoId, out var nome) ? nome : a.Curso.NomeBreve))
+            .ToList();
+    }
+
+    private async Task<string> NomeTraduzidoDoCursoAsync(
+        int cursoId, string nomePadrao, string idioma, CancellationToken ct)
+    {
+        if (idioma == "pt-BR")
+            return nomePadrao;
+
+        var nome = await db.CursosTraducoes.AsNoTracking()
+            .Where(t => t.CursoId == cursoId && t.Idioma == idioma)
+            .Select(t => t.NomeBreve)
+            .FirstOrDefaultAsync(ct);
+
+        return string.IsNullOrWhiteSpace(nome) ? nomePadrao : nome;
+    }
+
+    private static AvaliacaoDto ParaAvaliacaoDto(AvaliacaoCurso avaliacao, string cursoSlug, string cursoNome) =>
+        new(
+            avaliacao.Id,
+            cursoSlug,
+            cursoNome,
+            avaliacao.Nome,
+            avaliacao.Nota,
+            avaliacao.Depoimento,
+            avaliacao.NotaPlataforma,
+            avaliacao.NotaCurso,
+            avaliacao.NotaAvaliacao,
+            avaliacao.NotaAcessibilidade,
+            avaliacao.Sugestao,
+            avaliacao.CriadoEm);
 
     public async Task<SessaoScormDto> SalvarCommitScormAsync(CommitScormRequest request, CancellationToken ct = default)
     {

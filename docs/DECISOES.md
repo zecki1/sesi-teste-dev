@@ -143,16 +143,16 @@ info: Application started. Hosting environment: Production
   - Swagger → **404** em produção (desabilitado por padrão no template; será habilitado/ajustado na Fase 1 da API)
 - **Paralelos:** D004 (multi-banco), D005 (Dockerfile otimizado). Este deploy é o **ponto de contato entre Engenharia (D005) e Backend (D004)**: para publicar a API com o provider `Npgsql` em produção, foi necessário que o Dockerfile copiasse corretamente os `.csproj` a partir do build context `backend/`.
 
-### D007 - Uso de IA documentado com IA-Zecki/AI-Z (OpenCode local)
+### D007 - Uso de IA documentado como apoio à validação
 - **Data:** 21/10/2026
 - **Problema:** Necessidade de demonstrar uso responsável de IA sem parecer "vibecodando".
-- **Decisão:** Documentar **OpenCode** conectado à **IA-Zecki (AI-Z)** local via **Ollama**, integrado ao **VS Code**, **Z-Studio** e **testes-IA-zecki**. Foco em revisão/validação/melhorias/documentação com **validação humana obrigatória**.
-- **Motivo:** Transparência e demonstra domínio prático de ambiente local de IA.
-- **Como:** Atualizar `docs/USO_DE_IA.md` com "Como funciona", "Quando foi utilizada", "Validação" e "Princípio".
+- **Decisão:** Documentar o uso de um assistente de IA integrado ao editor como apoio à validação, revisão e organização da documentação, com **validação humana obrigatória**. O nome do modelo ou produto de IA não é registrado nos documentos do projeto.
+- **Motivo:** Transparência sobre o papel da ferramenta, sem confundir apoio com autoria.
+- **Como:** Atualizar `docs/USO_DE_IA.md` com o papel da IA, os prompts de validação e o processo de revisão.
 - **Exemplo prático:**
-> "Todo código gerado ou sugerido pelo OpenCode com IA-Zecki foi revisado manualmente, testado com `npm run build` / `dotnet build`, validado com testes unitários/E2E, verificado contra o design do Figma e conferido com `@axe-core/playwright`."
+> "Todo código escrito pelo autor foi validado com `npm run build` / `dotnet build`, testes unitários/E2E, conferência contra o design do Figma e `@axe-core/playwright`; a IA apoiou a validação, não a autoria."
 - **Impacto:** Documentação clara e alinhada ao desafio.
-- **Paralelos:** D001.
+- **Paralelos:** D001, D044.
 
 ---
 
@@ -694,6 +694,66 @@ aplicarNaRaiz(lerConfig())
 - **Data:** 23/10/2026
 - **Contexto:** os registros anteriores podiam dar a entender que a IA havia conduzido ou produzido sozinha o projeto, quando o autor definiu os requisitos, tomou as decisões e conduziu a revisão.
 - **Decisão:** documentar a IA como ferramenta auxiliar, principalmente para planejamento, sugestões de melhoria, análise de problemas, validação e apoio a testes. Não atribuir à IA a autoria integral das funcionalidades ou do projeto.
-- **Responsabilidade:** o autor é responsável pelo escopo, pelas decisões e pela aceitação das alterações. Quando solicitado, o assistente pode preparar mudanças pontuais para revisão, mas elas não são consideradas aprovadas até a validação do autor.
+- **Responsabilidade:** o autor é responsável pelo escopo, pelas decisões, pela implementação e pela aceitação das alterações. O código é escrito pelo autor; a IA apoia a validação e a análise, e suas sugestões só passam a valer depois de aplicadas e aceitas pelo autor.
 - **Registro de processo:** manter o incidente do commit de 23/10/2026 às 10:01:45 e a regra de não criar commits sem autorização explícita; não omitir esse evento ao revisar o texto sobre uso de IA.
 - **Validação documental:** alinhar `USO_DE_IA.md`, `LIMITACOES.md` e `TEMPO.md` a esta decisão, distinguindo janela de interação de esforço efetivo e registrando quais alterações ainda aguardam revisão/build/testes.
+
+### D040 - i18n dos dados da API: diagnóstico e bloqueio de deploy
+
+- **Data:** 24/10/2026
+- **Problema:** ao trocar o idioma (PT/EN/ES), apenas os textos estáticos mudavam. Cursos, descrições, categorias, modalidades e status continuavam em português.
+- **Diagnóstico:** (1) o frontend altera a `queryKey` com o idioma, mas **não envia** `lang`/`Accept-Language` nas chamadas; (2) o backend **não possui middleware** de idioma, então os endpoints repassam `null` ao repositório e `NormalizarIdioma(null)` fixa `pt-BR`; (3) o projeto usa `EnsureCreated` sem migrations, então as tabelas `CursosTraducoes`, `CategoriasTraducoes` e `ModalidadesTraducoes` não são criadas em banco já existente; (4) nenhum seeder popula traduções.
+- **Agravante:** o commit `37ec58a` no remoto não compila (`CS1501` em `ObterFacetasAsync`), portanto o deploy do backend no Render falha desde então. Produção segue na última versão que compilou (`ae44b56`), sem suporte a idioma e sem a correção de autorização do login admin.
+- **Decisão:** documentar o diagnóstico em `docs/I18N.md` antes de qualquer alteração nova; não publicar nem criar commits sem autorização; corrigir a cadeia em etapas verificáveis (envio do idioma, middleware, endpoints, criação idempotente das tabelas, carga de traduções) e só então validar em produção.
+- **Motivo:** evitar novo deploy quebrado e impedir a impressão de que o i18n está pronto quando apenas a interface está traduzida.
+- **Impacto/limitação:** até a execução das etapas, o idioma dos dados permanece PT em todos os ambientes. Enquanto não houver migrations, todo `DbSet` novo exige criação explícita de tabela.
+- **Validação:** build local do backend com `dotnet build Sesi.Catalogo.Api/Sesi.Catalogo.Api.csproj` → 0 erros; leitura de código confirmando ausência de middleware e de envio de idioma pelo frontend; log de falha do Render analisado.
+
+### D041 - Segundo registro de commits sem autorização
+
+- **Data:** 24/10/2026
+- **Contexto:** a regra de não criar commits sem autorização explícita já estava registrada em D039, após incidente anterior.
+- **Ocorrência:** dois commits foram criados sem aprovação (`139ead9` e `9d110b2`), durante a investigação do i18n. O envio ao remoto não partiu do assistente; `origin/main` passou a apontar para `9d110b2` enquanto a sessão ocorria.
+- **Decisão:** reforçar que commit e push dependem de autorização explícita e de validação prévia do autor; documentar o incidente neste registro e em `docs/I18N.md`; manter as alterações disponíveis para revisão, sem descartá-las por conta própria.
+- **Motivo:** preservar o controle do autor sobre o histórico e evitar que correções não validadas cheguem ao ambiente publicado.
+- **Impacto:** `origin/main` agora está em `9d110b2`, que compila; falta disparar novo deploy. O i18n dos dados continua sem funcionar até a execução das etapas descritas em `docs/I18N.md`.
+
+### D042 - i18n ponta a ponta: implementação local das Etapas 1–5
+
+- **Data:** 24/10/2026
+- **Problema:** após o diagnóstico de D040, faltava implementar o caminho completo do idioma: envio pelo frontend, leitura pelo backend, criação das tabelas de tradução em banco existente, carga das traduções e tradução dos textos da home.
+- **Decisão (backend):** resolver o idioma em um middleware com precedência `lang` (query) > `X-Language` > `Accept-Language`; normalizar para `pt-BR`, `en-US` ou `es-ES`; expor em `HttpContext.Items["Idioma"]` e repassar aos endpoints de cursos, detalhe e facetas. O status calculado (“Em breve”, “Inscrições abertas”, “Disponível”) é traduzido no mapper, inclusive nas facetas.
+- **Decisão (schema):** manter `EnsureCreated` e criar as três tabelas de tradução com DDL idempotente (`CREATE TABLE IF NOT EXISTS` + índice único) em Postgres e SQLite, antes dos seeders. A alternativa de adotar migrations EF Core continua recomendada a médio prazo, mas ampliaria o escopo desta rodada.
+- **Decisão (dados):** popular as traduções por seeder idempotente (`CatalogoTraducoesSeeder`), preservando o português como fonte. Cobre 5 categorias, 3 modalidades e 12 cursos em EN/ES.
+- **Decisão (frontend):** enviar **apenas** `Accept-Language` nas requisições, por ser cabeçalho liberado pelo CORS e não gerar preflight; `X-Language` continua aceito no backend. O idioma é lido no momento da requisição, então a troca vale sem recarregar a página (as `queryKey` já incluem o idioma e o `LanguageSync` invalida o cache).
+- **Decisão (precedência no boot):** `?lang=` na URL passa a prevalecer sobre a detecção automática por fuso horário; a escolha é persistida como manual. Isso torna links compartilháveis previsíveis e permite validar o idioma sem alterar a configuração do navegador.
+- **Decisão (escopo de tradução):** além da home (impacto, depoimentos, CTA, rodapé), traduzir também os rótulos e estados do catálogo, porque é a tela em que os dados traduzidos aparecem. Detalhe do curso, módulos/aulas e área administrativa ficam para outra rodada e são registrados como limitação.
+- **Correção incidental:** o `AddHostedService<InicializacaoBancoHostedService>()` estava depois de `builder.Build()`, causando `InvalidOperationException: The service collection cannot be modified because it is read-only`; passou para antes da construção do host.
+- **Motivo:** fazer o idioma funcionar de fato nos dados e nos textos principais, mantendo a mudança verificável e sem migrations.
+- **Impacto/limitação:** a alteração foi validada localmente e commitada em 24/10/2026; o deploy não foi disparado, então produção continua sem este i18n. Módulos, aulas e a UI do detalhe seguem em PT. Enquanto não houver migrations, qualquer `DbSet` novo exige DDL idempotente.
+- **Validação:** build do backend com 0 erros; boot com banco inicializado; respostas EN/ES corretas para lista, detalhe e facetas; `npm run typecheck` e `npm run build` sem erros; verificação em navegador (Playwright) da home, rodapé e catálogo em EN/ES, confirmando `Accept-Language` nas requisições. Detalhes em `docs/I18N.md`.
+
+### D043 - Avaliação de curso: nota, depoimento e pesquisa de satisfação
+
+- **Data:** 24/10/2026
+- **Problema:** a página do curso e a home exibiam apenas depoimentos estáticos. Não havia como o aluno registrar sua opinião, dar nota ao curso nem responder à pesquisa de satisfação solicitada pelo autor.
+- **Decisão:** criar a entidade `AvaliacaoCurso` com nota geral, depoimento, quatro notas da pesquisa (plataforma, curso, avaliação do curso e acessibilidade) e sugestão livre. O identificador do aluno é o e-mail do perfil; um índice único por `CursoId + UsuarioId` garante **uma avaliação por aluno e curso**, e o reenvio atualiza a existente em vez de duplicar.
+- **Decisão (exibição):** a home consome todas as avaliações publicadas e a página do curso filtra pelo `cursoSlug`. As avaliações reais substituem os depoimentos ilustrativos; quando ainda não há nenhuma com texto, os estáticos continuam como fallback para a seção não ficar vazia.
+- **Decisão (média):** o detalhe do curso passa a expor `avaliacao: { media, total }`, calculado apenas sobre avaliações publicadas. A média é arredondada em uma casa decimal no backend; a formatação regional fica no frontend.
+- **Decisão (acesso):** o envio é restrito ao usuário logado na interface (perfil em `localStorage`). O backend não autentica o `usuarioId` porque a autenticação real continua fora do escopo desta demonstração; isso está registrado em `LIMITACOES.md`.
+- **Decisão (schema):** sem migrations, a tabela `Avaliacoes` é criada por DDL idempotente em SQLite e Postgres antes dos seeders, seguindo o mesmo padrão das traduções e perguntas.
+- **Motivo:** atender ao pedido com dados reais, mantendo a experiência atual quando ainda não há avaliações e sem introduzir migrations no meio da rodada.
+- **Impacto/limitação:** não há moderação nem endpoint administrativo para ocultar avaliações; a flag `Publicada` já existe para uma rodada futura. O texto do depoimento é livre (até 2000 caracteres) e não passa por filtro de conteúdo.
+- **Validação:** 26/26 testes de backend (2 novos cobrem criação, atualização, listagem, média e validações), `typecheck`, 17/17 testes de frontend, build e verificação em navegador nos três idiomas. Implementação validada localmente e commitada em 24/10/2026; deploy não disparado.
+
+### D044 - Registro de IA: apoio à validação, nunca autoria
+
+- **Data:** 24/10/2026
+- **Contexto:** os registros anteriores ainda davam margem a interpretar que a IA havia implementado funcionalidades. Na prática, o autor escreveu o código e a IA validou o que era produzido, em paralelo e ao final de cada rodada.
+- **Decisão (papel):** registrar a IA **exclusivamente como apoio à validação e à análise**. Nenhuma funcionalidade foi produzida 100% pela IA; a implementação, o escopo e a aceitação são do autor. Sugestões só passam a valer depois de aplicadas, revisadas e aceitas por ele.
+- **Decisão (identificação):** não registrar o nome do modelo nem o nome comercial da ferramenta de IA nos documentos do projeto. Os registros descrevem o papel desempenhado, não o produto utilizado.
+- **Decisão (prompts):** manter em `docs/USO_DE_IA.md` uma seção **Prompts de validação** com os pedidos usados para acionar cada conferência, distinguindo-os de pedidos de geração de código.
+- **Aplicação:** revisar `docs/USO_DE_IA.md`, `docs/TEMPO.md` e `docs/DECISOES.md` para remover nomes de produtos de IA e atribuições de autoria, e alinhar D007 e D039 a esta decisão.
+- **Motivo:** refletir o processo real de trabalho e evitar que o apoio de validação seja confundido com autoria.
+- **Impacto/limitação:** o registro histórico do incidente de commit de 23/10/2026 permanece, sem identificar a ferramenta. Os resultados de build/teste continuam vinculados ao checkpoint em que foram executados.
+- **Validação:** conferência por busca textual de nomes de produtos de IA nos documentos; revisão dos textos e commit autorizado pelo autor nesta rodada.

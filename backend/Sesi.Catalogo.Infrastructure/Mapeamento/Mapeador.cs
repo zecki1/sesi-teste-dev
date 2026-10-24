@@ -34,8 +34,18 @@ internal static class Mapeador
     public static ModalidadeDto ParaDto(this Modalidade m, string? idioma = null, ModalidadeTraducao? traducao = null) =>
         new(m.Id, traducao?.Nome ?? m.Nome, m.Slug);
 
-    public static StatusCursoDto ParaDto(this StatusCurso s) =>
-        new(s.Id, s.Nome, s.Slug);
+    public static StatusCursoDto ParaDto(this StatusCurso s, string? idioma = null) =>
+        new(s.Id, TraduzirStatus(s.Nome, s.Slug, idioma), s.Slug);
+
+    /// <summary>Traduz o nome de um status a partir do slug.</summary>
+    public static string TraduzirStatus(string nomeOriginal, string slug, string? idioma) =>
+        slug switch
+        {
+            "disponivel" => Traduzir("Disponível", "Available", "Disponible", idioma),
+            "em-breve" => Traduzir("Em breve", "Coming soon", "Próximamente", idioma),
+            "inscricoes-abertas" => Traduzir("Inscrições abertas", "Registration open", "Inscripciones abiertas", idioma),
+            _ => nomeOriginal
+        };
 
     public static AulaDto ParaDto(this Aula a) =>
         new(a.Id, a.ModuloId, a.Ordem, a.Titulo, a.Descricao, a.DuracaoMinutos, a.VideoUrl);
@@ -62,7 +72,7 @@ internal static class Mapeador
             new ModalidadeDto(c.Modalidade!.Id, modTrad?.Nome ?? c.Modalidade.Nome, c.Modalidade.Slug),
             StatusOferta(c, idioma));
 
-    public static CursoDetalheDto ParaDetalheDto(this Curso c, string? idioma = null, CursoTraducao? traducao = null, CategoriaTraducao? catTrad = null, ModalidadeTraducao? modTrad = null) =>
+    public static CursoDetalheDto ParaDetalheDto(this Curso c, string? idioma = null, CursoTraducao? traducao = null, CategoriaTraducao? catTrad = null, ModalidadeTraducao? modTrad = null, IReadOnlyList<PerguntaFrequenteDto>? perguntas = null, AvaliacaoResumoDto? avaliacao = null) =>
         new(c.Id,
             traducao?.NomeCompleto ?? c.NomeCompleto,
             traducao?.NomeBreve ?? c.NomeBreve,
@@ -79,11 +89,24 @@ internal static class Mapeador
             new CategoriaDto(c.Categoria!.Id, catTrad?.Nome ?? c.Categoria.Nome, c.Categoria.Slug, c.Categoria.IconeUrl, c.Categoria.Cor, c.Categoria.Ordem),
             new ModalidadeDto(c.Modalidade!.Id, modTrad?.Nome ?? c.Modalidade.Nome, c.Modalidade.Slug),
             StatusOferta(c, idioma),
-            c.Modulos.OrderBy(m => m.Ordem).Select(ParaDto).ToList());
+            c.Modulos.OrderBy(m => m.Ordem).Select(ParaDto).ToList(),
+            perguntas ?? Array.Empty<PerguntaFrequenteDto>(),
+            avaliacao ?? new AvaliacaoResumoDto(0, 0));
+
+    /// <summary>Converte uma pergunta do curso para o idioma pedido, com fallback em pt-BR.</summary>
+    public static PerguntaFrequenteDto ParaDto(this CursoPergunta p, string? idioma = null)
+    {
+        var lang = NormalizarIdioma(idioma);
+        var traducao = p.Traducoes.FirstOrDefault(t => t.Idioma == lang)
+            ?? p.Traducoes.FirstOrDefault(t => t.Idioma == "pt-BR")
+            ?? p.Traducoes.FirstOrDefault();
+
+        return new PerguntaFrequenteDto(p.Id, traducao?.Pergunta ?? string.Empty, traducao?.Resposta ?? string.Empty);
+    }
 
     private static StatusCursoDto StatusOferta(Curso curso, string? idioma = null)
     {
-        var status = curso.Status!.ParaDto();
+        var status = curso.Status!.ParaDto(idioma);
         var hoje = DateOnly.FromDateTime(DateTime.UtcNow);
         if (curso.EtapaDesenvolvimento != "Publicado" ||
             curso.DataPublicacao is { } publicacao && publicacao > hoje ||

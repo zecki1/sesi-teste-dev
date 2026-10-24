@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { MainLayout } from "@/components/layout/main-layout"
 import { Container } from "@/components/layout/container"
 import { useFacetas } from "@/hooks/use-catalogo"
-import { atualizarCurso, criarCurso, excluirCurso } from "@/lib/api/catalogo"
+import { atualizarCurso, criarCurso, excluirCurso, listarPerguntasCurso, salvarPerguntasCurso } from "@/lib/api/catalogo"
 import { listarCursosAdministracao } from "@/lib/api/gestao"
 import {
   carregarConfigScorm,
@@ -221,6 +221,9 @@ export function AdminCursosPage() {
           setProgressoUploadScorm,
         )
       }
+      if (curso.perguntas) {
+        await salvarPerguntasCurso(curso.slug, curso.perguntas)
+      }
       await recarregar()
       setEditando(null)
       setAviso(`Curso "${curso.nomeBreve}" gravado na API com sucesso.`)
@@ -256,7 +259,17 @@ export function AdminCursosPage() {
       }
     }
 
-    setEditando({ ...curso, scorm })
+    let perguntas: CursoAdmin["perguntas"]
+    if (curso.origem === "api" && curso.slug) {
+      try {
+        perguntas = await listarPerguntasCurso(curso.slug)
+      } catch (falha) {
+        setErro(falha instanceof Error ? falha.message : "Não foi possível consultar as perguntas frequentes.")
+        perguntas = []
+      }
+    }
+
+    setEditando({ ...curso, scorm, perguntas })
     setCarregandoEditor(false)
   }
 

@@ -42,6 +42,20 @@ public interface ICatalogoRepositorio
     /// <summary>Desativa um curso (exclusão lógica).</summary>
     Task<bool> ExcluirCursoAsync(string slug, CancellationToken ct = default);
 
+    /// <summary>Lista as perguntas frequentes do curso com os três idiomas (visão administrativa).</summary>
+    Task<IReadOnlyList<PerguntaAdminDto>> ListarPerguntasAsync(string slug, CancellationToken ct = default);
+
+    /// <summary>Substitui as perguntas frequentes do curso. Retorna null quando o curso não existe.</summary>
+    Task<IReadOnlyList<PerguntaAdminDto>?> SalvarPerguntasAsync(
+        string slug, IReadOnlyList<PerguntaAdminDto> perguntas, CancellationToken ct = default);
+
+    /// <summary>Persiste a avaliação do aluno (uma por curso; reenvio atualiza a existente).</summary>
+    Task<AvaliacaoDto?> SalvarAvaliacaoAsync(CriarAvaliacaoRequest request, CancellationToken ct = default);
+
+    /// <summary>Lista avaliações publicadas, opcionalmente filtrando por curso.</summary>
+    Task<IReadOnlyList<AvaliacaoDto>> ListarAvaliacoesAsync(
+        string? cursoSlug = null, int limite = 20, string? idioma = null, CancellationToken ct = default);
+
     /// <summary>Persiste um commit SCORM e devolve o estado agregado da sessão.</summary>
     Task<SessaoScormDto> SalvarCommitScormAsync(CommitScormRequest request, CancellationToken ct = default);
 

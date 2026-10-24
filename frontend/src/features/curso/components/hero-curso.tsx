@@ -1,4 +1,5 @@
 import type { CursoDetalheDto } from "@/lib/api/catalogo"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Container } from "@/components/layout/container"
 import { IconeCategoria, estiloBadgeCategoria } from "@/lib/ui/icones-categoria"
@@ -31,13 +32,15 @@ export function HeroCurso({
   imagemUrl,
   imagemFundoUrl,
   cargaHoraria = curso.cargaHoraria,
-  textoCta = "Matricule-se",
+  textoCta,
   aoClicarCta,
   dataScorm = false,
 }: HeroCursoProps) {
+  const { t } = useTranslation("course")
   const inicio = formatarData(curso.dataDisponibilizacao)
   const cta = aoClicarCta ?? onMatricular
   const matriculaEmBreve = curso.status.slug === "em-breve"
+  const textoBotao = textoCta?.trim() || t("enroll")
 
   return (
     <section
@@ -73,14 +76,14 @@ export function HeroCurso({
                   <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                 </svg>
                 <span>
-                  Carga horária: <strong data-carga-scorm="" className={imagemFundoUrl ? "text-white" : "text-[var(--sesi-black)]"}>{cargaHoraria}h</strong>
+                  {t("workload")}: <strong data-carga-scorm="" className={imagemFundoUrl ? "text-white" : "text-[var(--sesi-black)]"}>{cargaHoraria}h</strong>
                 </span>
               </li>
             )}
             <li className="flex items-center gap-3">
               <span className="grid h-5 w-5 shrink-0 place-items-center text-xs font-bold" aria-hidden="true">◎</span>
               <span>
-                Modalidade: <strong className={imagemFundoUrl ? "text-white" : "text-[var(--sesi-black)]"}>{curso.modalidade.nome}</strong>
+                {t("modality")}: <strong className={imagemFundoUrl ? "text-white" : "text-[var(--sesi-black)]"}>{curso.modalidade.nome}</strong>
               </span>
             </li>
             {inicio && (
@@ -90,7 +93,7 @@ export function HeroCurso({
                   <path d="M8 3v4M16 3v4M3 10h18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                 </svg>
                 <span>
-                  Início do curso: <strong className={imagemFundoUrl ? "text-white" : "text-[var(--sesi-black)]"}>{inicio}</strong>
+                  {t("startDate")}: <strong className={imagemFundoUrl ? "text-white" : "text-[var(--sesi-black)]"}>{inicio}</strong>
                 </span>
               </li>
             )}
@@ -105,7 +108,7 @@ export function HeroCurso({
                 <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               <span>
-                Certificação: <strong className={imagemFundoUrl ? "text-white" : "text-[var(--sesi-black)]"}>SESI</strong>
+                {t("certification")}: <strong className={imagemFundoUrl ? "text-white" : "text-[var(--sesi-black)]"}>SESI</strong>
               </span>
             </li>
           </ul>
@@ -118,7 +121,7 @@ export function HeroCurso({
               withArrow={!matriculaEmBreve}
               className="rounded-lg"
             >
-              {matriculaEmBreve ? "Matrículas em breve" : textoCta}
+              {matriculaEmBreve ? t("enrollSoon") : textoBotao}
             </Button>
           </div>
         </div>
@@ -128,7 +131,7 @@ export function HeroCurso({
             <img
               data-imagem-scorm={dataScorm ? "" : undefined}
               src={imagemUrl}
-              alt={`Capa do curso ${curso.nomeBreve}`}
+              alt={t("coverAlt", { curso: curso.nomeBreve })}
               width="1200"
               height="675"
               fetchPriority="high"

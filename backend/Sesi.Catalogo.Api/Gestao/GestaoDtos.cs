@@ -39,7 +39,9 @@ public sealed record ChamadoDto(
     string? Resposta,
     DateTime CriadoEm,
     DateTime? AtualizadoEm,
-    string? CapturaTela = null);
+    string? CapturaTela = null,
+    string? CursoSlug = null,
+    string? UsuarioId = null);
 
 public sealed record CriarChamadoRequest(
     string Nome,
@@ -47,9 +49,14 @@ public sealed record CriarChamadoRequest(
     string Categoria,
     string Descricao,
     string Pagina,
-    string? CapturaTela = null);
+    string? CapturaTela = null,
+    string? CursoSlug = null,
+    string? UsuarioId = null);
 
-public sealed record AtualizarChamadoRequest(string Status, string? Resposta);
+public sealed record AtualizarChamadoRequest(
+    string Status,
+    string? Resposta,
+    bool NotificarAluno = true);
 
 public sealed record MarcoCursoDto(
     string CursoSlug,

@@ -284,7 +284,9 @@ public sealed class GestaoArmazenamento
                 null,
                 agora,
                 null,
-                request.CapturaTela);
+                request.CapturaTela,
+                request.CursoSlug?.Trim(),
+                request.UsuarioId?.Trim());
             chamados.Add(chamado);
             await GravarAsync("chamados.json", chamados, ct);
             return chamado;

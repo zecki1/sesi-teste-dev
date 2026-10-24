@@ -9,4 +9,33 @@ export default {
     'Este site usa cookies, tags de pixel e armazenamento local para fins de desempenho, personalização e marketing. Usamos nossos próprios cookies e alguns de terceiros. Somente cookies essenciais são ativados por padrão.',
   rejectCookies: 'Recusar cookies',
   acceptAllCookies: 'Aceitar todos os cookies',
+  footer: {
+    navigation: 'Navegação',
+    popularCourses: 'Cursos Populares',
+    support: 'Suporte',
+    rights: 'Todos os direitos reservados.',
+    links: {
+      home: 'Início',
+      certification: 'Certificação',
+      courses: 'Cursos',
+      about: 'Sobre',
+      blog: 'Blog',
+    },
+    popularItems: [
+      'Cultura Organizacional',
+      'Ferramentas Google para Produtividade',
+      'Excel Básico ao Avançado',
+      'Trabalho em Equipe e Colaboração',
+      'Gestão do Tempo e Produtividade',
+      'Comunicação Assertiva',
+      'Inteligência Emocional no Trabalho',
+    ],
+    supportItems: [
+      'Termos de Uso',
+      'Política de Privacidade',
+      'Trabalhe Conosco',
+      'Fale Conosco',
+      'Central de Ajuda',
+    ],
+  },
 }

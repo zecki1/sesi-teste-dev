@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom"
+import { useTranslation } from "react-i18next"
 import { Container } from "./container"
 import logoWhite from "@/assets/logo-sesi-industria-white.svg"
 
@@ -47,33 +48,20 @@ function FacebookIcon() {
   )
 }
 
-const navegacao = [
-  { label: "Início", to: "/" },
-  { label: "Certificação", to: "/#impacto" },
-  { label: "Cursos", to: "/catalogo" },
-  { label: "Sobre", to: "/sobre" },
-  { label: "Blog", to: "/" },
-]
-
-const cursosPopulares = [
-  "Cultura Organizacional",
-  "Ferramentas Google para Produtividade",
-  "Excel Básico ao Avançado",
-  "Trabalho em Equipe e Colaboração",
-  "Gestão do Tempo e Produtividade",
-  "Comunicação Assertiva",
-  "Inteligência Emocional no Trabalho",
-]
-
-const suporte = [
-  "Termos de Uso",
-  "Política de Privacidade",
-  "Trabalhe Conosco",
-  "Fale Conosco",
-  "Central de Ajuda",
-]
-
 export function Footer() {
+  const { t } = useTranslation()
+
+  const navegacao = [
+    { label: t("footer.links.home"), to: "/" },
+    { label: t("footer.links.certification"), to: "/#impacto" },
+    { label: t("footer.links.courses"), to: "/catalogo" },
+    { label: t("footer.links.about"), to: "/sobre" },
+    { label: t("footer.links.blog"), to: "/" },
+  ]
+
+  const cursosPopulares = t("footer.popularItems", { returnObjects: true }) as string[]
+  const suporte = t("footer.supportItems", { returnObjects: true }) as string[]
+
   return (
     <footer className="bg-[var(--sesi-black)] text-white">
       <Container className="grid gap-10 py-12 sm:grid-cols-2 lg:grid-cols-4">
@@ -88,7 +76,7 @@ export function Footer() {
         </div>
 
         <div>
-          <h3 className="mb-4 text-lg font-semibold uppercase tracking-wide">Navegação</h3>
+          <h3 className="mb-4 text-lg font-semibold uppercase tracking-wide">{t("footer.navigation")}</h3>
           <ul className="flex flex-col gap-2">
             {navegacao.map((item) => (
               <li key={item.label}>
@@ -101,7 +89,7 @@ export function Footer() {
         </div>
 
         <div>
-          <h3 className="mb-4 text-lg font-semibold uppercase tracking-wide">Cursos Populares</h3>
+          <h3 className="mb-4 text-lg font-semibold uppercase tracking-wide">{t("footer.popularCourses")}</h3>
           <ul className="flex flex-col gap-2">
             {cursosPopulares.map((curso) => (
               <li key={curso}>
@@ -112,7 +100,7 @@ export function Footer() {
         </div>
 
         <div>
-          <h3 className="mb-4 text-lg font-semibold uppercase tracking-wide">Suporte</h3>
+          <h3 className="mb-4 text-lg font-semibold uppercase tracking-wide">{t("footer.support")}</h3>
           <ul className="flex flex-col gap-2">
             {suporte.map((item) => (
               <li key={item}>
@@ -129,7 +117,7 @@ export function Footer() {
         <Container className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
           <div className="flex items-center gap-4">
             <SesiMark />
-            <p className="text-sm text-white/70">Todos os direitos reservados.</p>
+            <p className="text-sm text-white/70">{t("footer.rights")}</p>
           </div>
           <div className="flex items-center gap-4">
             <a href="#" aria-label="LinkedIn" className="transition-opacity hover:opacity-70">

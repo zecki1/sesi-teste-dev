@@ -19,6 +19,10 @@ export interface ScormPaginaConfig {
   tamanho: number
   urlLancamento: string
   botaoTexto: string
+  /** Idiomas em que o pacote SCORM foi disponibilizado (pt-BR, en-US, es-ES). */
+  idiomas: string[]
+  /** Idioma exibido quando o visitante escolhe um idioma ainda não traduzido. */
+  idiomaPadrao: string
 }
 
 export type CursoScormBase = Pick<
@@ -45,6 +49,8 @@ export function configScormPadrao(curso: CursoScormBase): ScormPaginaConfig {
     tamanho: 0,
     urlLancamento: "",
     botaoTexto: "Iniciar curso",
+    idiomas: ["pt-BR"],
+    idiomaPadrao: "pt-BR",
   }
 }
 
@@ -89,5 +95,7 @@ export function configScormEfetiva(
     imagemUrl: salvo.imagemUrl?.trim() || padrao.imagemUrl,
     cargaHoraria: typeof salvo.cargaHoraria === "number" && salvo.cargaHoraria > 0 ? salvo.cargaHoraria : padrao.cargaHoraria,
     botaoTexto: salvo.botaoTexto?.trim() || padrao.botaoTexto,
+    idiomas: Array.isArray(salvo.idiomas) && salvo.idiomas.length > 0 ? salvo.idiomas : padrao.idiomas,
+    idiomaPadrao: salvo.idiomaPadrao?.trim() || padrao.idiomaPadrao,
   }
 }

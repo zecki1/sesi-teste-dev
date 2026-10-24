@@ -37,6 +37,8 @@ export interface ScormPaginaConfigDto {
   imagemUrl: string
   cargaHoraria: number
   botaoTexto: string
+  idiomas?: string[]
+  idiomaPadrao?: string
 }
 
 const mensagemErro = async (resposta: Response, padrao: string) => {
@@ -87,6 +89,8 @@ export async function salvarConfiguracaoPaginaScorm(
     imagemUrl: configuracao.imagemUrl,
     cargaHoraria: configuracao.cargaHoraria,
     botaoTexto: configuracao.botaoTexto,
+    idiomas: configuracao.idiomas,
+    idiomaPadrao: configuracao.idiomaPadrao,
   }
   const resposta = await fetch(`${API_URL}/api/v1/scorm/paginas/${encodeURIComponent(cursoSlug)}`, {
     method: "PUT",

@@ -40,6 +40,8 @@ export interface Chamado {
   resposta: string | null
   criadoEm: string
   atualizadoEm: string | null
+  cursoSlug?: string | null
+  usuarioId?: string | null
 }
 
 export interface EnvioChamado {
@@ -141,11 +143,17 @@ export function listarChamadosGestao() {
   return requisitar<Chamado[]>("/gestao/chamados")
 }
 
+export interface EnvioAtualizacaoChamado {
+  chamado: Chamado
+  alunoEnviado: boolean
+  erro: string | null
+}
+
 export function atualizarChamadoGestao(
   id: string,
-  dados: Pick<Chamado, "status" | "resposta">,
+  dados: Pick<Chamado, "status" | "resposta"> & { notificarAluno?: boolean },
 ) {
-  return requisitar<Chamado>(`/gestao/chamados/${encodeURIComponent(id)}`, {
+  return requisitar<EnvioAtualizacaoChamado>(`/gestao/chamados/${encodeURIComponent(id)}`, {
     method: "PUT",
     body: JSON.stringify(dados),
   })
@@ -158,6 +166,8 @@ export function criarChamado(dados: {
   descricao: string
   pagina: string
   capturaTela?: string | null
+  cursoSlug?: string | null
+  usuarioId?: string | null
 }) {
   return requisitar<EnvioChamado>("/chamados", {
     method: "POST",

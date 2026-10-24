@@ -25,6 +25,7 @@ public sealed class ResendEmailSender(HttpClient httpClient, IConfiguration conf
             <p><strong>Aluno:</strong> {WebUtility.HtmlEncode(chamado.Nome)} ({WebUtility.HtmlEncode(chamado.Email)})</p>
             <p><strong>Categoria:</strong> {WebUtility.HtmlEncode(chamado.Categoria)}</p>
             <p><strong>Página:</strong> {WebUtility.HtmlEncode(chamado.Pagina)}</p>
+            {LinhaCursoUsuario(chamado)}
             <p><strong>Descrição:</strong></p>
             <p>{WebUtility.HtmlEncode(chamado.Descricao).Replace("\n", "<br>")}</p>
             """;
@@ -50,6 +51,47 @@ public sealed class ResendEmailSender(HttpClient httpClient, IConfiguration conf
         if (!suporteEnviado) erros.Add("Não foi possível enviar a notificação à equipe de suporte.");
         if (!alunoEnviado) erros.Add("Não foi possível enviar a confirmação ao aluno.");
         return new(suporteEnviado, alunoEnviado, erros.Count == 0 ? null : string.Join(" ", erros));
+    }
+
+    /// <summary>
+    /// Avisa o aluno sobre a mudança de status e a resposta da equipe.
+    /// Usado pelo admin de gestão ao responder um chamado.
+    /// </summary>
+    public async Task<ResultadoEnvioChamado> EnviarAtualizacaoChamadoAsync(ChamadoDto chamado, CancellationToken ct)
+    {
+        var chave = configuracao["Resend:ApiKey"];
+        if (string.IsNullOrWhiteSpace(chave))
+            return new(false, false, "Resend:ApiKey não está configurada na API.");
+
+        var remetente = configuracao["Resend:FromEmail"]
+            ?? "SESI Indústria <noreply@zecki1.com.br>";
+
+        var html = $"""
+            <h2>Chamado {WebUtility.HtmlEncode(chamado.Protocolo)} atualizado</h2>
+            <p>Olá, {WebUtility.HtmlEncode(chamado.Nome)}. Seu chamado agora está com o status <strong>{WebUtility.HtmlEncode(chamado.Status)}</strong>.</p>
+            {LinhaCursoUsuario(chamado)}
+            <p><strong>Sua mensagem:</strong></p>
+            <p>{WebUtility.HtmlEncode(chamado.Descricao).Replace("\n", "<br>")}</p>
+            {(string.IsNullOrWhiteSpace(chamado.Resposta) ? "" : $"<p><strong>Resposta da equipe:</strong></p><p>{WebUtility.HtmlEncode(chamado.Resposta).Replace("\n", "<br>")}</p>")}
+            <p>Se precisar de algo mais, responda este e-mail.</p>
+            """;
+
+        var enviado = await EnviarAsync(
+            chave, remetente, [chamado.Email],
+            $"Chamado {chamado.Protocolo} atualizado: {chamado.Status}",
+            html, null, null, ct);
+
+        return new(false, enviado, enviado ? null : "Não foi possível enviar a atualização ao aluno.");
+    }
+
+    private static string LinhaCursoUsuario(ChamadoDto chamado)
+    {
+        var partes = new List<string>();
+        if (!string.IsNullOrWhiteSpace(chamado.CursoSlug))
+            partes.Add($"<strong>Curso:</strong> {WebUtility.HtmlEncode(chamado.CursoSlug)}");
+        if (!string.IsNullOrWhiteSpace(chamado.UsuarioId))
+            partes.Add($"<strong>Usuário:</strong> {WebUtility.HtmlEncode(chamado.UsuarioId)}");
+        return partes.Count == 0 ? string.Empty : $"<p>{string.Join("<br>", partes)}</p>";
     }
 
     private async Task<bool> EnviarAsync(

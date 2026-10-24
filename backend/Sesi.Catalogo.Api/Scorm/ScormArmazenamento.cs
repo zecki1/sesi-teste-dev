@@ -131,6 +131,19 @@ public sealed class ScormArmazenamento
         if (string.IsNullOrWhiteSpace(botaoTexto) || botaoTexto.Length > 50)
             throw new InvalidOperationException("O texto do botão é obrigatório e deve ter até 50 caracteres.");
 
+        var idiomas = (configuracao.Idiomas ?? [])
+            .Select(NormalizarIdioma)
+            .Where(idioma => idioma is not null)
+            .Select(idioma => idioma!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (idiomas.Count == 0)
+            idiomas.Add("pt-BR");
+
+        var idiomaPadrao = NormalizarIdioma(configuracao.IdiomaPadrao) ?? idiomas[0];
+        if (!idiomas.Contains(idiomaPadrao, StringComparer.OrdinalIgnoreCase))
+            idiomas.Add(idiomaPadrao);
+
         configuracao = configuracao with
         {
             Titulo = titulo,
@@ -139,6 +152,8 @@ public sealed class ScormArmazenamento
             BannerUrl = bannerUrl,
             ImagemUrl = imagemUrl,
             BotaoTexto = botaoTexto,
+            Idiomas = idiomas,
+            IdiomaPadrao = idiomaPadrao,
         };
 
         await _trava.WaitAsync(ct);
@@ -643,4 +658,15 @@ public sealed class ScormArmazenamento
 
     private static string NormalizarSlug(string? slug) =>
         (slug ?? string.Empty).Trim().ToLowerInvariant();
+
+    /// <summary>Reduz o idioma recebido a um dos três suportados pela aplicação.</summary>
+    private static string? NormalizarIdioma(string? idioma)
+    {
+        if (string.IsNullOrWhiteSpace(idioma)) return null;
+        var valor = idioma.Trim().Replace('_', '-').ToLowerInvariant();
+        if (valor.StartsWith("pt")) return "pt-BR";
+        if (valor.StartsWith("en")) return "en-US";
+        if (valor.StartsWith("es")) return "es-ES";
+        return null;
+    }
 }

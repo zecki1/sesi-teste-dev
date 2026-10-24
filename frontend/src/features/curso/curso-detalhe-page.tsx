@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useParams, Link } from "react-router-dom"
+import { useTranslation } from "react-i18next"
 import { MainLayout } from "@/components/layout/main-layout"
 import { Container } from "@/components/layout/container"
 import { Button } from "@/components/ui/button"
@@ -14,11 +15,12 @@ import { FaixaMatricula } from "./components/faixa-matricula"
 import { MatriculaModal } from "./components/matricula-modal"
 
 export function CursoDetalhePage() {
+  const { t } = useTranslation("course")
   const { slug } = useParams<{ slug: string }>()
   const { data: curso, isLoading, isError, error } = useCurso(slug || "")
   const [matriculaAberta, setMatriculaAberta] = useState(false)
 
-  if (isLoading) return <MainLayout><Container className="py-10">Carregando...</Container></MainLayout>
+  if (isLoading) return <MainLayout><Container className="py-10">{t("loading")}</Container></MainLayout>
 
   if (isError || !curso) {
     const naoEncontrado = error instanceof ApiError && error.status === 404
@@ -26,18 +28,16 @@ export function CursoDetalhePage() {
       <MainLayout>
         <Container className="flex flex-col items-start gap-4 py-16">
           <p className="text-sm font-semibold uppercase tracking-wide text-[var(--sesi-red)]">
-            {naoEncontrado ? "Erro 404" : "Falha de conexão"}
+            {naoEncontrado ? t("notFoundEyebrow") : t("connectionEyebrow")}
           </p>
           <h1 className="font-['Open_Sans_Condensed',sans-serif] text-3xl font-bold sm:text-4xl">
-            {naoEncontrado ? "Curso não encontrado" : "Não foi possível carregar o curso"}
+            {naoEncontrado ? t("notFoundTitle") : t("connectionTitle")}
           </h1>
           <p className="max-w-xl text-[var(--sesi-muted)]">
-            {naoEncontrado
-              ? "O curso que você procura não existe ou saiu do catálogo."
-              : "Verifique sua conexão com a internet e tente novamente."}
+            {naoEncontrado ? t("notFoundHint") : t("connectionHint")}
           </p>
           <Link to="/catalogo">
-            <Button variant="primary" className="mt-2">Voltar ao catálogo</Button>
+            <Button variant="primary" className="mt-2">{t("backToCatalog")}</Button>
           </Link>
         </Container>
       </MainLayout>
@@ -49,8 +49,8 @@ export function CursoDetalhePage() {
       <HeroCurso curso={curso} onMatricular={() => setMatriculaAberta(true)} />
       <BeneficiosCurso />
       <SobreCurso curso={curso} />
-      <DepoimentosCurso />
-      <AjudaCurso />
+      <DepoimentosCurso curso={curso} />
+      <AjudaCurso curso={curso} />
       <FaixaMatricula
         nomeCurso={curso.nomeCompleto}
         onMatricular={() => setMatriculaAberta(true)}

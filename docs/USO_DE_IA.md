@@ -2,10 +2,10 @@
 
 ## Ferramenta utilizada
 
-- **OpenCode**, integrado à stack local **IA-Zecki** / **Ollama**
-- Nesta rodada, a partir de **23/10/2026, aproximadamente 09:17 (horário de Brasília)**, também foi utilizado um assistente de IA via **Copilot SDK no VS Code**.
-- O projeto, seus requisitos e suas decisões são conduzidos pelo autor; a IA é uma ferramenta de apoio.
-- Sugestões e alterações propostas pela IA precisam de revisão e aprovação do autor antes de serem consideradas parte aceita do projeto.
+- Assistente de IA integrado ao editor, usado **exclusivamente como apoio à validação**.
+- O código foi escrito pelo autor. A IA acompanhou a codificação validando o que era produzido, apontando riscos e conferindo build, testes e comportamento em navegador.
+- Nenhuma funcionalidade foi produzida integralmente pela IA. Sugestões e verificações só passam a valer depois de aplicadas, revisadas e aceitas pelo autor.
+- Este documento não identifica modelos ou produtos de IA: o registro descreve o papel da ferramenta no processo, não a ferramenta.
 
 ## Registro de revisão e controle de alterações
 
@@ -15,19 +15,21 @@
 - O horário do primeiro uso desta ferramenta nesta rodada é aproximado, registrado a partir do início do trabalho anotado no `docs/TEMPO.md`; não representa uma medição automática de esforço.
 - As verificações descritas neste documento são registros do trabalho do projeto e não significam que a IA tenha executado ou produzido sozinha todas as implementações.
 - A disponibilidade da API variou ao longo da rodada: houve verificações locais bem-sucedidas e, em uma conferência posterior, a API em `localhost:5077` estava indisponível. Não se deve interpretar validações anteriores como garantia de disponibilidade atual.
-- O autor pediu que builds completas e novos commits aguardem sua revisão. As alterações mais recentes de interface não foram validadas por build/testes.
+- O autor pediu que builds completas e novos commits aguardassem sua revisão. Essa regra foi seguida até a autorização explícita de 24/10/2026, quando o commit desta rodada foi criado.
+- **Em 24/10/2026**, o autor implementou localmente as Etapas 1–5 do plano de i18n descrito em `docs/I18N.md`: envio de `Accept-Language` pelo frontend, middleware de idioma na API, criação idempotente das tabelas de tradução, seeder com traduções EN/ES de categorias, modalidades e 12 cursos, tradução do status nas facetas e tradução dos textos de impacto, depoimentos, CTA, rodapé e catálogo. A IA foi usada como apoio para validar cada etapa, conferindo o código, executando build do backend, `npm run typecheck`, `npm run build` e uma verificação em navegador automatizado (Playwright).
+- **Commit autorizado:** o autor revisou o trabalho e autorizou o commit em 24/10/2026. O push e o deploy não fazem parte desta autorização e seguem pendentes.
 
 ## Como a IA foi usada
 
-A IA foi usada como apoio ao processo conduzido pelo autor, principalmente para:
+O autor codificou as alterações. A IA atuou em paralelo e depois da codificação, como apoio, principalmente para:
 
-- planejar próximos passos e organizar requisitos;
-- sugerir melhorias e alternativas técnicas para avaliação do autor;
-- inspecionar implementações existentes e ajudar a diagnosticar problemas;
-- apoiar a validação de alterações, a análise de resultados de testes e a identificação de verificações necessárias;
+- validar o que havia sido implementado, requisito a requisito e rota a rota;
+- conferir build, testes, tipagem e comportamento em navegador;
+- inspecionar o código existente e ajudar a diagnosticar problemas;
+- apontar riscos, divergências e alternativas para o autor decidir;
 - ajudar a redigir e organizar documentação com base nas informações fornecidas pelo autor.
 
-Isso não significa que a IA tenha criado ou conduzido sozinha o projeto. O autor define o escopo, fornece o contexto, escolhe o que será aproveitado e é responsável por revisar e aceitar o resultado. Em algumas solicitações delimitadas, o assistente também preparou alterações pontuais diretamente nos arquivos para revisão; essas alterações não equivalem à autoria integral do trabalho e não devem ser consideradas aprovadas antes da revisão do autor.
+Nada foi implementado 100% pela IA. O autor define o escopo, escreve o código, escolhe o que será aproveitado e é responsável por revisar e aceitar o resultado. Quando a IA sugeriu algum ajuste, ele só passou a fazer parte do projeto depois de aplicado e validado pelo autor.
 
 ## Objetivo do uso
 
@@ -44,7 +46,20 @@ Isso não significa que a IA tenha criado ou conduzido sozinha o projeto. O auto
 - Apontar riscos, divergências e alternativas para o autor decidir
 - Apoiar a conferência de desempenho, responsividade, acessibilidade, rotas e configurações
 - Organizar decisões e requisitos em registros mais claros
-- Preparar alterações pontuais quando solicitadas, para revisão do autor; isso não representa autoria independente do projeto
+- Revisar o que o autor escreveu e apontar o que ainda precisa de ajuste
+
+## Prompts de validação
+
+Os prompts abaixo registram os pedidos usados para acionar a validação. Eles descrevem **o que conferir**, não pedidos de geração de código: a implementação foi feita pelo autor e a IA verificou o resultado.
+
+| Rodada | Prompt de validação |
+|---|---|
+| i18n ponta a ponta | "Valide o multi-idioma de ponta a ponta: altere entre pt-BR, en-US e es-ES na home, no catálogo e no detalhe do curso e confira se cursos, descrições, categorias, modalidades e status são traduzidos. Verifique também a persistência do idioma e o `?lang=` na URL." |
+| Detalhe do curso e FAQ | "Valide a página do curso nos três idiomas, incluindo o FAQ com 10 perguntas editáveis na gestão, a hierarquia dos textos e a acessibilidade dos componentes." |
+| SCORM | "Valide a página e o player SCORM nos três idiomas, o alerta quando o idioma do pacote não existe e a configuração de idiomas e idioma padrão no admin." |
+| Ajuda e gestão de chamados | "Valide o modal 'Fale com a gente' registrando curso, URL e usuário, e a gestão de chamados com mudança de status e notificação ao aluno." |
+| Avaliação de curso | "Valide a avaliação do curso: envio pelo aluno logado com nota, depoimento e as cinco perguntas da pesquisa; exibição no detalhe e na home; média e total; comportamento em pt-BR, en-US e es-ES; e bloqueio para visitante." |
+| Documentação | "Revise a documentação e confira números de testes, rotas, comandos e referências citadas." |
 
 ## Exemplos de solicitações de apoio
 
@@ -83,7 +98,7 @@ Os exemplos abaixo registram temas tratados com a IA. As implementações listad
 Os resultados a seguir são evidências do projeto, não uma medida de quanto código foi produzido pela IA. O autor conduz a revisão e decide se a validação é suficiente. Builds e testes citados em registros anteriores se referem às rodadas em que foram executados; não cobrem automaticamente alterações posteriores.
 
 - **Build local**: `dotnet build` e `npm run build` executados após cada alteração significativa
-- **Testes**: 23 testes de integração da API, 14 testes unitários e 43 testes E2E/axe/capturas aprovados
+- **Testes**: 26 testes de integração da API, 17 testes unitários de frontend e suíte E2E do Playwright aprovados nesta rodada
 - **Revisão manual**: responsabilidade do autor antes de aceitar alterações
 - **Testes em navegador**: validação visual em desktop, tablet e mobile, incluindo modal de acessibilidade, modal de matrícula, tema escuro e calendário
 - **Navegação assistida**: percursos de catálogo, detalhe, matrícula, AVA e admin conferidos rota a rota
@@ -108,9 +123,17 @@ Esse exemplo ilustra apoio à análise e à tomada de decisão; não significa q
 
 ## Registro do apoio na rodada SCORM (23/10/2026)
 
-- **Assistente utilizado:** assistente de IA via Copilot SDK no VS Code.
-- **Papel principal:** apoiar o planejamento, a análise de problemas do upload/player e do progresso, as recomendações de melhoria e a interpretação das validações solicitadas pelo autor.
+- **Papel principal:** apoio à validação do upload, do player e do progresso, com recomendações de melhoria e interpretação dos resultados, enquanto o autor conduzia a implementação.
 - **Decisões de produto e escopo:** tomadas pelo autor, incluindo pacote ativo por curso, download e substituição, limites de upload e persistência das configurações.
-- **Alterações pontuais:** em respostas a solicitações específicas, o assistente também preparou mudanças localizadas para revisão. Elas não representam que a IA tenha criado ou conduzido sozinha a implementação completa e permanecem sujeitas à aprovação do autor.
+- **Código:** escrito pelo autor. O assistente não produziu a implementação completa nem é autor das funcionalidades.
 - **Validação:** os testes/builds descritos em checkpoints anteriores pertencem àquelas rodadas. As alterações mais recentes de progresso SCORM, catálogo, dashboard administrativo e indicador de upload aguardam revisão; não foram executados build ou testes completos após essas mudanças.
 - **Limites registrados:** Blob Storage, autenticação/RBAC reais e analytics completos continuam fora do escopo descrito nesta rodada.
+
+## Registro do apoio na rodada de i18n, curso e avaliação (24/10/2026)
+
+- **Papel da IA:** apoio à validação durante a codificação. O autor implementou as alterações; a IA conferiu o que era produzido, apontou divergências e executou as verificações solicitadas.
+- **Escopo validado:** i18n de dados e textos (home, catálogo e detalhe), FAQ com 10 perguntas por curso em três idiomas, página e player SCORM traduzidos, alerta de idioma ausente, configuração de idiomas no admin, modal “Fale com a gente” via Resend, gestão de chamados e avaliação de curso com nota, depoimento e pesquisa de cinco perguntas.
+- **Prompts de validação:** registrados na seção [Prompts de validação](#prompts-de-validação). Cada prompt foi respondido com conferência de código, execução de build/testes e, quando aplicável, navegação automatizada.
+- **Decisões do autor:** formato da avaliação, exibição na home (todos os cursos) e no detalhe (somente o curso), atualização em vez de duplicação por aluno, manutenção dos depoimentos estáticos como fallback e estratégia de DDL idempotente sem migrations.
+- **Validação desta rodada:** backend 26/26, frontend unitário 17/17, `typecheck` e `build` sem erros, e verificação em navegador do envio logado, da exibição no detalhe e na home, dos idiomas EN/ES e do bloqueio para visitante.
+- **Limites:** os resultados de build/teste valem para este checkpoint. A avaliação de teste usada na validação foi removida do banco local; não houve deploy nesta rodada.

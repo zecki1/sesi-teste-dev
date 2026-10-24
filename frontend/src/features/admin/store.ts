@@ -1,4 +1,4 @@
-import type { CursoResumoDto, CursoSalvarRequest, FacetasDto } from "@/lib/api/catalogo"
+import type { CursoResumoDto, CursoSalvarRequest, FacetasDto, PerguntaAdminDto } from "@/lib/api/catalogo"
 import type { ScormPaginaConfig } from "@/features/scorm/scorm-config"
 
 export type TipoCurso = "blocos" | "scorm"
@@ -46,6 +46,8 @@ export interface CursoAdmin {
   tipo: TipoCurso
   modulos: ModuloAdmin[]
   scorm?: ScormAdmin
+  /** Perguntas frequentes editáveis em pt-BR, en-US e es-ES. */
+  perguntas?: PerguntaAdminDto[]
   criadoEm: string
 }
 

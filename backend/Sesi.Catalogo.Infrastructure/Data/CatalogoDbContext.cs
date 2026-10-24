@@ -13,6 +13,8 @@ public class CatalogoDbContext(DbContextOptions<CatalogoDbContext> options) : Db
     public DbSet<StatusCurso> StatusCursos => Set<StatusCurso>();
     public DbSet<Curso> Cursos => Set<Curso>();
     public DbSet<CursoTraducao> CursosTraducoes => Set<CursoTraducao>();
+    public DbSet<CursoPergunta> CursosPerguntas => Set<CursoPergunta>();
+    public DbSet<CursoPerguntaTraducao> CursosPerguntasTraducoes => Set<CursoPerguntaTraducao>();
     public DbSet<CategoriaTraducao> CategoriasTraducoes => Set<CategoriaTraducao>();
     public DbSet<ModalidadeTraducao> ModalidadesTraducoes => Set<ModalidadeTraducao>();
     public DbSet<Modulo> Modulos => Set<Modulo>();
@@ -22,6 +24,7 @@ public class CatalogoDbContext(DbContextOptions<CatalogoDbContext> options) : Db
     public DbSet<TentativaScorm> TentativasScorm => Set<TentativaScorm>();
     public DbSet<Turma> Turmas => Set<Turma>();
     public DbSet<Matricula> Matriculas => Set<Matricula>();
+    public DbSet<AvaliacaoCurso> Avaliacoes => Set<AvaliacaoCurso>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -93,6 +96,29 @@ public class CatalogoDbContext(DbContextOptions<CatalogoDbContext> options) : Db
             e.HasOne(x => x.Curso)
                 .WithMany()
                 .HasForeignKey(x => x.CursoId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CursoPergunta>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.CursoId, x.Ordem });
+            e.HasOne(x => x.Curso)
+                .WithMany(c => c.Perguntas)
+                .HasForeignKey(x => x.CursoId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CursoPerguntaTraducao>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Idioma).HasMaxLength(10).IsRequired();
+            e.Property(x => x.Pergunta).HasMaxLength(300).IsRequired();
+            e.Property(x => x.Resposta).HasMaxLength(2000).IsRequired();
+            e.HasIndex(x => new { x.CursoPerguntaId, x.Idioma }).IsUnique();
+            e.HasOne(x => x.CursoPergunta)
+                .WithMany(p => p.Traducoes)
+                .HasForeignKey(x => x.CursoPerguntaId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -198,6 +224,22 @@ public class CatalogoDbContext(DbContextOptions<CatalogoDbContext> options) : Db
                 .WithMany(m => m.Turmas)
                 .HasForeignKey(x => x.ModalidadeId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AvaliacaoCurso>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.UsuarioId).HasMaxLength(200).IsRequired();
+            e.Property(x => x.Nome).HasMaxLength(120).IsRequired();
+            e.Property(x => x.Depoimento).HasMaxLength(2000);
+            e.Property(x => x.Sugestao).HasMaxLength(2000);
+            e.Property(x => x.Idioma).HasMaxLength(10).IsRequired();
+            // Uma avaliação por aluno e curso: o envio seguinte atualiza a existente.
+            e.HasIndex(x => new { x.CursoId, x.UsuarioId }).IsUnique();
+            e.HasOne(x => x.Curso)
+                .WithMany(c => c.Avaliacoes)
+                .HasForeignKey(x => x.CursoId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Matricula>(e =>

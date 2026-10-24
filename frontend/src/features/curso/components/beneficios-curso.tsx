@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next"
 import { Container } from "@/components/layout/container"
 import certificacao from "@/assets/beneficios/certificacao.svg"
 import professores from "@/assets/beneficios/professores.svg"
@@ -7,27 +8,29 @@ import flexibilidade from "@/assets/beneficios/flexibilidade.svg"
 const BENEFICIOS = [
   {
     icone: certificacao,
-    titulo: "Certificação SESI",
-    texto: "Cursos com a melhor certificação do mercado industrial reconhecidos pelo SESI.",
+    titulo: "benefitCertificationTitle",
+    texto: "benefitCertificationText",
   },
   {
     icone: professores,
-    titulo: "Professores especialistas",
-    texto: "Contamos com professores reconhecidos por sua excelência no mercado.",
+    titulo: "benefitTeachersTitle",
+    texto: "benefitTeachersText",
   },
   {
     icone: suporte,
-    titulo: "Suporte contínuo",
-    texto: "Você não está sozinho! Acompanhamento online durante todo o curso.",
+    titulo: "benefitSupportTitle",
+    texto: "benefitSupportText",
   },
   {
     icone: flexibilidade,
-    titulo: "Flexibilidade",
-    texto: "Turmas presenciais e online com horários que se adaptam à sua rotina.",
+    titulo: "benefitFlexibilityTitle",
+    texto: "benefitFlexibilityText",
   },
 ]
 
 export function BeneficiosCurso() {
+  const { t } = useTranslation("course")
+
   return (
     <section className="pb-12 sm:pb-16">
       <Container>
@@ -35,8 +38,8 @@ export function BeneficiosCurso() {
           {BENEFICIOS.map((item) => (
             <li key={item.titulo} className="flex flex-col gap-4">
               <img src={item.icone} alt="" aria-hidden="true" className="h-12 w-12" />
-              <h2 className="text-lg font-semibold">{item.titulo}</h2>
-              <p className="text-[var(--sesi-muted)]">{item.texto}</p>
+              <h2 className="text-lg font-semibold">{t(item.titulo)}</h2>
+              <p className="text-[var(--sesi-muted)]">{t(item.texto)}</p>
             </li>
           ))}
         </ul>

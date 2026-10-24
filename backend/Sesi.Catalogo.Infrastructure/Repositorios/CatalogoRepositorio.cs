@@ -14,8 +14,18 @@ namespace Sesi.Catalogo.Infrastructure.Repositorios;
 /// </summary>
 public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoRepositorio
 {
+    private static string NormalizarIdioma(string? idioma)
+    {
+        if (string.IsNullOrWhiteSpace(idioma)) return "pt-BR";
+        var i = idioma.Trim().Replace('_', '-');
+        if (i.StartsWith("en", StringComparison.OrdinalIgnoreCase)) return "en-US";
+        if (i.StartsWith("es", StringComparison.OrdinalIgnoreCase)) return "es-ES";
+        return "pt-BR";
+    }
+
     public async Task<PaginaDto<CursoResumoDto>> ListarCursosAsync(CursoFiltro filtro, CancellationToken ct = default)
     {
+        var idioma = NormalizarIdioma(filtro.Idioma);
         var pagina = filtro.Pagina < 1 ? 1 : filtro.Pagina;
         var tamanho = filtro.Tamanho switch
         {
@@ -63,7 +73,17 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
                     .Replace("Ü", "u").Replace("ü", "u")
                     .Replace("Ç", "c").Replace("ç", "c")
                     .ToLower()
-                    .Contains(termo));
+                    .Contains(termo) ||
+                db.CursosTraducoes.Any(t => t.CursoId == c.Id && t.Idioma == idioma &&
+                    (t.NomeCompleto + " " + t.NomeBreve + " " + t.Descricao)
+                        .Replace("Á","a").Replace("á","a").Replace("À","a").Replace("à","a").Replace("Â","a").Replace("â","a").Replace("Ã","a").Replace("ã","a").Replace("Ä","a").Replace("ä","a")
+                        .Replace("É","e").Replace("é","e").Replace("È","e").Replace("è","e").Replace("Ê","e").Replace("ê","e").Replace("Ë","e").Replace("ë","e")
+                        .Replace("Í","i").Replace("í","i").Replace("Ì","i").Replace("ì","i").Replace("Î","i").Replace("î","i").Replace("Ï","i").Replace("ï","i")
+                        .Replace("Ó","o").Replace("ó","o").Replace("Ò","o").Replace("ò","o").Replace("Ô","o").Replace("ô","o").Replace("Õ","o").Replace("õ","o").Replace("Ö","o").Replace("ö","o")
+                        .Replace("Ú","u").Replace("ú","u").Replace("Ù","u").Replace("ù","u").Replace("Û","u").Replace("û","u").Replace("Ü","u").Replace("ü","u")
+                        .Replace("Ç","c").Replace("ç","c")
+                        .ToLower()
+                        .Contains(termo)));
         }
 
         if (!string.IsNullOrWhiteSpace(filtro.Categoria))
@@ -112,10 +132,28 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
             .Take(tamanho)
             .ToListAsync(ct);
 
-        var facetas = await ObterFacetasAsync(ct);
+        var cursoIds = itens.Select(c => c.Id).ToList();
+        var traducoesCursos = await db.CursosTraducoes
+            .AsNoTracking()
+            .Where(t => t.Idioma == idioma && cursoIds.Contains(t.CursoId))
+            .ToDictionaryAsync(t => t.CursoId, ct);
+        var traducoesCategorias = await db.CategoriasTraducoes
+            .AsNoTracking()
+            .Where(t => t.Idioma == idioma && itens.Select(c => c.CategoriaId).Distinct().Contains(t.CategoriaId))
+            .ToDictionaryAsync(t => t.CategoriaId, ct);
+        var traducoesModalidades = await db.ModalidadesTraducoes
+            .AsNoTracking()
+            .Where(t => t.Idioma == idioma && itens.Select(c => c.ModalidadeId).Distinct().Contains(t.ModalidadeId))
+            .ToDictionaryAsync(t => t.ModalidadeId, ct);
+
+        var facetas = await ObterFacetasAsync(new CursoFiltro(Idioma: idioma), ct);
 
         return new PaginaDto<CursoResumoDto>(
-            itens.Select(Mapeador.ParaResumoDto).ToList(),
+            itens.Select(c => Mapeador.ParaResumoDto(
+                c,
+                traducoesCursos.TryGetValue(c.Id, out var tc) ? tc : null,
+                traducoesCategorias.TryGetValue(c.CategoriaId, out var tcat) ? tcat : null,
+                traducoesModalidades.TryGetValue(c.ModalidadeId, out var tmod) ? tmod : null)).ToList(),
             total, pagina, tamanho, facetas);
     }
 
@@ -135,7 +173,7 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
             .OrderBy(c => c.NomeBreve)
             .ToListAsync(ct);
 
-        return cursos.Select(Mapeador.ParaResumoDto).ToList();
+        return cursos.Select(c => Mapeador.ParaResumoDto(c)).ToList();
     }
 
     public async Task<CursoDetalheDto?> ObterCursoPorSlugAsync(string slug, CancellationToken ct = default)

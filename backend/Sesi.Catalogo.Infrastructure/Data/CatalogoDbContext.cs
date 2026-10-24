@@ -12,6 +12,9 @@ public class CatalogoDbContext(DbContextOptions<CatalogoDbContext> options) : Db
     public DbSet<Modalidade> Modalidades => Set<Modalidade>();
     public DbSet<StatusCurso> StatusCursos => Set<StatusCurso>();
     public DbSet<Curso> Cursos => Set<Curso>();
+    public DbSet<CursoTraducao> CursosTraducoes => Set<CursoTraducao>();
+    public DbSet<CategoriaTraducao> CategoriasTraducoes => Set<CategoriaTraducao>();
+    public DbSet<ModalidadeTraducao> ModalidadesTraducoes => Set<ModalidadeTraducao>();
     public DbSet<Modulo> Modulos => Set<Modulo>();
     public DbSet<Aula> Aulas => Set<Aula>();
     public DbSet<AulaScorm> AulasScorm => Set<AulaScorm>();
@@ -76,6 +79,45 @@ public class CatalogoDbContext(DbContextOptions<CatalogoDbContext> options) : Db
                 .WithMany(s => s.Cursos)
                 .HasForeignKey(x => x.StatusId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CursoTraducao>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Idioma).HasMaxLength(10).IsRequired();
+            e.Property(x => x.NomeCompleto).HasMaxLength(200).IsRequired();
+            e.Property(x => x.NomeBreve).HasMaxLength(160).IsRequired();
+            e.Property(x => x.Descricao).HasMaxLength(2000);
+            e.Property(x => x.PublicoAlvo).HasMaxLength(400);
+            e.HasIndex(x => new { x.CursoId, x.Idioma }).IsUnique();
+            e.HasOne(x => x.Curso)
+                .WithMany()
+                .HasForeignKey(x => x.CursoId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CategoriaTraducao>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Idioma).HasMaxLength(10).IsRequired();
+            e.Property(x => x.Nome).HasMaxLength(120).IsRequired();
+            e.HasIndex(x => new { x.CategoriaId, x.Idioma }).IsUnique();
+            e.HasOne(x => x.Categoria)
+                .WithMany()
+                .HasForeignKey(x => x.CategoriaId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ModalidadeTraducao>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Idioma).HasMaxLength(10).IsRequired();
+            e.Property(x => x.Nome).HasMaxLength(80).IsRequired();
+            e.HasIndex(x => new { x.ModalidadeId, x.Idioma }).IsUnique();
+            e.HasOne(x => x.Modalidade)
+                .WithMany()
+                .HasForeignKey(x => x.ModalidadeId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Modulo>(e =>

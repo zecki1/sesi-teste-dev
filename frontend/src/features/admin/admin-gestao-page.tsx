@@ -7,7 +7,6 @@ import {
   PAPEIS,
   atualizarChamadoGestao,
   excluirUsuarioGestao,
-  gestaoLocalHabilitada,
   listarChamadosGestao,
   listarUsuariosGestao,
   obterPermissoesGestao,
@@ -79,7 +78,7 @@ export function AdminGestaoPage() {
   }
 
   useEffect(() => {
-    if (perfil?.papel === "admin" && gestaoLocalHabilitada) void carregar()
+    if (perfil?.papel === "admin") void carregar()
   }, [perfil?.papel])
 
   if (!perfil) return <Navigate to="/area-do-aluno" replace />
@@ -88,24 +87,11 @@ export function AdminGestaoPage() {
       <MainLayout>
         <Container className="py-16">
           <h1 className="text-2xl font-bold">Acesso restrito</h1>
-          <p className="mt-2 text-sm text-[var(--sesi-muted)]">Entre com a conta demonstrativa de administrador.</p>
+          <p className="mt-2 text-sm text-[var(--sesi-muted)]">Entre com uma conta administrativa autorizada.</p>
         </Container>
       </MainLayout>
     )
   }
-  if (!gestaoLocalHabilitada) {
-    return (
-      <MainLayout>
-        <Container className="py-16">
-          <h1 className="text-2xl font-bold">Gestão disponível somente na API local</h1>
-          <p className="mt-2 text-sm text-[var(--sesi-muted)]">
-            Esta tela usa rotas demonstrativas sem autenticação real e permanece desativada para outros ambientes.
-          </p>
-        </Container>
-      </MainLayout>
-    )
-  }
-
   const registrarErro = (falha: unknown) =>
     setErro(falha instanceof Error ? falha.message : "Não foi possível concluir a operação.")
 

@@ -52,7 +52,7 @@ export function urlBackend(caminho: string) {
 }
 
 export async function obterConfiguracaoScorm(): Promise<ScormConfiguracaoDto> {
-  const resposta = await fetch(`${API_URL}/api/v1/scorm/configuracoes`)
+  const resposta = await fetch(`${API_URL}/api/v1/scorm/configuracoes`, { credentials: "include" })
   if (!resposta.ok) throw new Error(await mensagemErro(resposta, "Não foi possível consultar o limite de upload SCORM."))
   return (await resposta.json()) as ScormConfiguracaoDto
 }
@@ -60,6 +60,7 @@ export async function obterConfiguracaoScorm(): Promise<ScormConfiguracaoDto> {
 export async function salvarLimiteScorm(limiteUploadMb: number): Promise<ScormConfiguracaoDto> {
   const resposta = await fetch(`${API_URL}/api/v1/scorm/configuracoes`, {
     method: "PUT",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ limiteUploadMb }),
   })
@@ -69,7 +70,7 @@ export async function salvarLimiteScorm(limiteUploadMb: number): Promise<ScormCo
 
 export async function obterConfiguracaoPaginaScorm(cursoSlug: string): Promise<ScormPaginaConfigDto | null> {
   const resposta = await fetch(`${API_URL}/api/v1/scorm/paginas/${encodeURIComponent(cursoSlug)}`)
-  if (resposta.status === 404) return null
+  if (resposta.status === 204 || resposta.status === 404) return null
   if (!resposta.ok) throw new Error(await mensagemErro(resposta, "Não foi possível consultar a página SCORM."))
   return (await resposta.json()) as ScormPaginaConfigDto
 }
@@ -89,6 +90,7 @@ export async function salvarConfiguracaoPaginaScorm(
   }
   const resposta = await fetch(`${API_URL}/api/v1/scorm/paginas/${encodeURIComponent(cursoSlug)}`, {
     method: "PUT",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(corpo),
   })
@@ -98,13 +100,13 @@ export async function salvarConfiguracaoPaginaScorm(
 
 export async function obterPacoteScorm(cursoSlug: string): Promise<PacoteScormDto | null> {
   const resposta = await fetch(`${API_URL}/api/v1/scorm/pacotes/${encodeURIComponent(cursoSlug)}`)
-  if (resposta.status === 404) return null
+  if (resposta.status === 204 || resposta.status === 404) return null
   if (!resposta.ok) throw new Error("Não foi possível consultar o pacote SCORM.")
   return (await resposta.json()) as PacoteScormDto
 }
 
 export async function listarPacotesScorm(): Promise<PacoteScormDto[]> {
-  const resposta = await fetch(`${API_URL}/api/v1/scorm/pacotes`)
+  const resposta = await fetch(`${API_URL}/api/v1/scorm/pacotes`, { credentials: "include" })
   if (!resposta.ok) throw new Error(await mensagemErro(resposta, "Não foi possível listar os pacotes SCORM."))
   return (await resposta.json()) as PacoteScormDto[]
 }
@@ -127,6 +129,7 @@ export async function enviarPacoteScorm(
   return new Promise((resolve, reject) => {
     const requisicao = new XMLHttpRequest()
     requisicao.open("POST", `${API_URL}/api/v1/scorm/pacotes`)
+    requisicao.withCredentials = true
     requisicao.upload.onprogress = (evento) => {
       if (evento.lengthComputable) {
         onProgress?.(Math.round((evento.loaded / evento.total) * 100))

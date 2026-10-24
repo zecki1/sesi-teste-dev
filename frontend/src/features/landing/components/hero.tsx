@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react"
 import { Link } from "react-router-dom"
+import { useTranslation } from "react-i18next"
 import gsap from "gsap"
 import { Container } from "@/components/layout/container"
 import { Button } from "@/components/ui/button"
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/button"
 const heroImage = "/images/hero-image.webp"
 
 export function Hero() {
+  const { t } = useTranslation("landing")
   const scope = useRef<HTMLElement>(null)
 
   useEffect(() => {
@@ -40,11 +42,11 @@ export function Hero() {
       />
       <div className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(208,6,2,0.92)_0%,rgba(208,6,2,0.86)_100%)]" />
       <Container className="flex min-h-[560px]  flex-col justify-center gap-6 py-16 text-white">
-        <h1 data-hero className="max-w-[400px] font-['Open_Sans_Condensed',sans-serif] text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-          Impulsione sua carreira na indústria
+        <h1 data-hero className="max-w-[500px] font-['Open_Sans_Condensed',sans-serif] text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
+          {t("heroTitle")}
         </h1>
         <p data-hero className="max-w-2xl text-lg sm:text-xl">
-          Amplie seus conhecimentos com excelência na melhor plataforma de estudos da indústria brasileira
+          {t("heroSubtitle")}
         </p>
         <div data-hero>
           <Link to="/catalogo">
@@ -53,7 +55,7 @@ export function Hero() {
               className="rounded-lg border-transparent bg-white text-[var(--sesi-black)] hover:bg-white/85"
               withArrow
             >
-              Conhecer cursos
+              {t("knowCourses")}
             </Button>
           </Link>
         </div>

@@ -161,6 +161,7 @@ export async function obterFacetas(): Promise<FacetasDto> {
 async function requisitar<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(init?.headers ?? {}),

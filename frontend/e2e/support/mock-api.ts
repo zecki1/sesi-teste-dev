@@ -109,9 +109,14 @@ export async function mockApi(page: Page) {
     return route.fulfill({ status: 200, contentType: "application/json", body: "[]" })
   })
 
-  await page.route("**/api/v1/scorm/pacotes/*", (route) =>
-    route.fulfill({ status: 404, contentType: "application/problem+json", body: JSON.stringify({ status: 404 }) }),
-  )
+  await page.route("**/api/v1/scorm/pacotes/*", (route) => {
+    const origin = route.request().headers().origin
+    return route.fulfill({
+      status: 204,
+      body: "",
+      headers: origin ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" } : {},
+    })
+  })
 
   await page.route("**/api/v1/scorm/pacotes", async (route) => {
     if (route.request().method() === "POST") {
@@ -145,6 +150,6 @@ export async function mockApi(page: Page) {
     if (route.request().method() === "PUT") {
       return route.fulfill({ status: 200, contentType: "application/json", body: route.request().postData() ?? "{}" })
     }
-    return route.fulfill({ status: 404, contentType: "application/problem+json", body: JSON.stringify({ status: 404 }) })
+    return route.fulfill({ status: 204, body: "" })
   })
 }

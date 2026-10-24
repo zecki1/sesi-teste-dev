@@ -55,6 +55,46 @@ public class CatalogoApiTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     [Fact]
+    public async Task GestaoEmProducao_DeveExigirLoginAdministrador()
+    {
+        using var producao = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("environment", "Production");
+            builder.UseSetting("Gestao:Admin:Senha", "Senha-forte-de-teste-2026!");
+            builder.UseSetting("Cors:AllowedOrigins:0", "https://frontend-ezequiel-reginos-projects.vercel.app");
+        });
+        var client = producao.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        var semSessao = await client.GetAsync("/api/v1/gestao/usuarios");
+        semSessao.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var cursoSemSessao = await client.PostAsJsonAsync("/api/v1/cursos", new { });
+        cursoSemSessao.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        var login = await client.PostAsJsonAsync("/api/v1/gestao/sessao", new
+        {
+            email = "admin@sesindustria.com.br",
+            senha = "Senha-forte-de-teste-2026!"
+        });
+        login.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var comSessao = await client.GetAsync("/api/v1/gestao/usuarios");
+        comSessao.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var origemNaoPermitida = new HttpRequestMessage(HttpMethod.Get, "/api/v1/gestao/usuarios");
+        origemNaoPermitida.Headers.Add("Origin", "https://site-nao-autorizado.example");
+        (await client.SendAsync(origemNaoPermitida)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        var logout = await client.DeleteAsync("/api/v1/gestao/sessao");
+        logout.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var aposLogout = await client.GetAsync("/api/v1/gestao/usuarios");
+        aposLogout.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
     public async Task Facetas_DeveRetornarCategoriasModalidadesStatus()
     {
         var client = _factory.CreateClient();
@@ -543,7 +583,8 @@ public class CatalogoApiTests : IClassFixture<WebApplicationFactory<Program>>
         var slug = $"pagina-scorm-{Guid.NewGuid():N}";
         var pagina = new ScormPaginaConfigDto(
             "Curso SCORM", "Subtítulo", "Sobre", "", "/capa.webp", 10, "Iniciar curso");
-        (await client.GetAsync($"/api/v1/scorm/paginas/{slug}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await client.GetAsync($"/api/v1/scorm/paginas/{slug}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await client.GetAsync($"/api/v1/scorm/pacotes/{slug}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
         var salva = await client.PutAsJsonAsync($"/api/v1/scorm/paginas/{slug}", pagina);
         salva.StatusCode.Should().Be(HttpStatusCode.OK);
         (await client.GetFromJsonAsync<ScormPaginaConfigDto>($"/api/v1/scorm/paginas/{slug}"))

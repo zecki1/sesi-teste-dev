@@ -8,6 +8,7 @@ import { StudentCertificateCelebration } from '@/components/support/StudentCerti
 import { SmoothScroll } from '@/components/motion/smooth-scroll'
 import { usePerfil } from '@/lib/auth/perfil'
 import { aplicarIdioma, iniciarIdioma } from '@/lib/i18n/idioma'
+import { LanguageSync } from './LanguageSync'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,6 +31,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <SmoothScroll />
+        <LanguageSync />
         <Routes />
         <AccessibilityMenu />
         <StudentSupportDialog />

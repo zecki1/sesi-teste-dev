@@ -13,6 +13,7 @@ import {
 } from "@/lib/auth/perfil"
 import { idiomaAtual } from "@/lib/i18n/idioma"
 import {
+  autenticarAdministrador,
   autenticarAlunoGestao,
   gestaoLocalHabilitada,
   obterUsuarioGestaoPorEmail,
@@ -87,8 +88,25 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
     try {
       const normalizado = valor.trim().toLowerCase()
       const contaDemo = normalizado === EMAIL_ADMIN || normalizado === EMAIL_TESTE
-      if (!contaDemo && !gestaoLocalHabilitada) {
-        setErro("O login com senha está disponível apenas com a API local. A autenticação de produção ainda não está configurada.")
+      if (!gestaoLocalHabilitada && normalizado === EMAIL_TESTE) {
+        concluir(entrar(normalizado, "aluno"))
+        return
+      }
+
+      if (!gestaoLocalHabilitada) {
+        const registrado = await autenticarAdministrador(normalizado, senha)
+        if (!registrado.ativo) {
+          setErro("Esta conta está inativa. Entre em contato com o suporte.")
+          return
+        }
+        const perfil = entrar(normalizado, papelDeGestao(registrado.papel))
+        const [nome, ...sobrenome] = registrado.nome.trim().split(/\s+/)
+        const nomeCompleto = registrado.nome.trim()
+        const perfilAtualizado = nomeCompleto
+          ? { ...perfil, nome: nome || perfil.nome, sobrenome: sobrenome.join(" ") }
+          : perfil
+        salvarPerfil(perfilAtualizado)
+        concluir(perfilAtualizado)
         return
       }
 
@@ -132,7 +150,10 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
       return
     }
     setErro("")
-    if (normalizado !== EMAIL_ADMIN && normalizado !== EMAIL_TESTE && !senha) {
+    const senhaObrigatoria = gestaoLocalHabilitada
+      ? normalizado !== EMAIL_ADMIN && normalizado !== EMAIL_TESTE
+      : normalizado !== EMAIL_TESTE
+    if (senhaObrigatoria && !senha) {
       setErro("Informe sua senha para continuar.")
       return
     }
@@ -241,6 +262,7 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
               <input
                 id="login-email"
                 type="email"
+                autoComplete="username"
                 autoFocus
                 value={email}
                 onChange={(evento) => setEmail(evento.target.value)}
@@ -250,7 +272,10 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
                 aria-describedby={erro ? "login-erro" : undefined}
               />
               <label htmlFor="login-senha" className="mt-1 text-sm font-semibold text-[var(--sesi-black)]">
-                Senha <span className="font-normal text-[var(--sesi-muted)]">(não exigida nas contas de demonstração)</span>
+                Senha
+                <span className="font-normal text-[var(--sesi-muted)]">
+                  {gestaoLocalHabilitada ? " (não exigida nas contas de demonstração)" : " (obrigatória para a gestão)"}
+                </span>
               </label>
               <input
                 id="login-senha"

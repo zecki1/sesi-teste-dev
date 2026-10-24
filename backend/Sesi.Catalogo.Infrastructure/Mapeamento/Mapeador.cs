@@ -8,10 +8,19 @@ namespace Sesi.Catalogo.Infrastructure.Mapeamento;
 /// </summary>
 internal static class Mapeador
 {
-    public static CategoriaDto ParaDto(this Categoria c) =>
+    private static string NormalizarIdioma(string? idioma)
+    {
+        if (string.IsNullOrWhiteSpace(idioma)) return "pt-BR";
+        var i = idioma.Trim().Replace('_', '-');
+        if (i.StartsWith("en", StringComparison.OrdinalIgnoreCase)) return "en-US";
+        if (i.StartsWith("es", StringComparison.OrdinalIgnoreCase)) return "es-ES";
+        return "pt-BR";
+    }
+
+    public static CategoriaDto ParaDto(this Categoria c, string? idioma = null) =>
         new(c.Id, c.Nome, c.Slug, c.IconeUrl, c.Cor, c.Ordem);
 
-    public static ModalidadeDto ParaDto(this Modalidade m) =>
+    public static ModalidadeDto ParaDto(this Modalidade m, string? idioma = null) =>
         new(m.Id, m.Nome, m.Slug);
 
     public static StatusCursoDto ParaDto(this StatusCurso s) =>
@@ -24,17 +33,41 @@ internal static class Mapeador
         new(m.Id, m.CursoId, m.Ordem, m.Titulo, m.Descricao,
             m.Aulas.OrderBy(a => a.Ordem).Select(ParaDto).ToList());
 
-    public static CursoResumoDto ParaResumoDto(this Curso c) =>
-        new(c.Id, c.NomeCompleto, c.NomeBreve, c.Slug, c.Descricao, c.CargaHoraria,
-            c.PublicoAlvo, c.ImagemUrl, c.DataDisponibilizacao, c.DataPublicacao,
-            c.DataLiberacaoMatricula, c.EtapaDesenvolvimento, c.Destaque,
-            c.Categoria!.ParaDto(), c.Modalidade!.ParaDto(), StatusOferta(c));
+    public static CursoResumoDto ParaResumoDto(this Curso c, CursoTraducao? traducao = null, CategoriaTraducao? catTrad = null, ModalidadeTraducao? modTrad = null) =>
+        new(c.Id,
+            traducao?.NomeCompleto ?? c.NomeCompleto,
+            traducao?.NomeBreve ?? c.NomeBreve,
+            c.Slug,
+            traducao?.Descricao ?? c.Descricao,
+            c.CargaHoraria,
+            traducao?.PublicoAlvo ?? c.PublicoAlvo,
+            c.ImagemUrl,
+            c.DataDisponibilizacao,
+            c.DataPublicacao,
+            c.DataLiberacaoMatricula,
+            c.EtapaDesenvolvimento,
+            c.Destaque,
+            new CategoriaDto(c.Categoria!.Id, catTrad?.Nome ?? c.Categoria.Nome, c.Categoria.Slug, c.Categoria.IconeUrl, c.Categoria.Cor, c.Categoria.Ordem),
+            new ModalidadeDto(c.Modalidade!.Id, modTrad?.Nome ?? c.Modalidade.Nome, c.Modalidade.Slug),
+            StatusOferta(c));
 
-    public static CursoDetalheDto ParaDetalheDto(this Curso c) =>
-        new(c.Id, c.NomeCompleto, c.NomeBreve, c.Slug, c.Descricao, c.CargaHoraria,
-            c.PublicoAlvo, c.ImagemUrl, c.DataDisponibilizacao, c.DataPublicacao,
-            c.DataLiberacaoMatricula, c.EtapaDesenvolvimento, c.Destaque,
-            c.Categoria!.ParaDto(), c.Modalidade!.ParaDto(), StatusOferta(c),
+    public static CursoDetalheDto ParaDetalheDto(this Curso c, CursoTraducao? traducao = null, CategoriaTraducao? catTrad = null, ModalidadeTraducao? modTrad = null) =>
+        new(c.Id,
+            traducao?.NomeCompleto ?? c.NomeCompleto,
+            traducao?.NomeBreve ?? c.NomeBreve,
+            c.Slug,
+            traducao?.Descricao ?? c.Descricao,
+            c.CargaHoraria,
+            traducao?.PublicoAlvo ?? c.PublicoAlvo,
+            c.ImagemUrl,
+            c.DataDisponibilizacao,
+            c.DataPublicacao,
+            c.DataLiberacaoMatricula,
+            c.EtapaDesenvolvimento,
+            c.Destaque,
+            new CategoriaDto(c.Categoria!.Id, catTrad?.Nome ?? c.Categoria.Nome, c.Categoria.Slug, c.Categoria.IconeUrl, c.Categoria.Cor, c.Categoria.Ordem),
+            new ModalidadeDto(c.Modalidade!.Id, modTrad?.Nome ?? c.Modalidade.Nome, c.Modalidade.Slug),
+            StatusOferta(c),
             c.Modulos.OrderBy(m => m.Ordem).Select(ParaDto).ToList());
 
     private static StatusCursoDto StatusOferta(Curso curso)

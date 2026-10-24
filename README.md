@@ -29,7 +29,7 @@
 - **Landing** com 6 cursos em destaque (Matemática e Ciências da Natureza), cards com capas em WebP, **sliders full-bleed** (4 cards + fração do 5º no desktop), card “Todos os cursos” e CTA final que abre o catálogo.
 - **Detalhe do curso** com módulos e aulas, certificação, benefícios, acordeão “Sobre o curso”, depoimentos e **modal de matrícula** com turmas, data, dias, horário, modalidade e vagas.
 - **Área do aluno** com login e cadastro demonstrativos, perfil sincronizado com o usuário local da API, matrículas, certificados, calendário de aulas gerado a partir das turmas e preferências de acessibilidade.
-- **Gestão local** de usuários, papéis e matriz de permissões (Criar, Editar, Excluir e Visualizar), além da triagem de chamados de suporte.
+- **Gestão administrativa** de cursos, usuários, papéis, permissões e chamados. Em produção, a API exige uma sessão administrativa autenticada, protegida por cookie `HttpOnly`, `Secure` e com validade de oito horas.
 - **Ajuda ao aluno** por formulário persistido na API, com captura de tela opcional anexada ao chamado, notificação para a equipe e confirmação ao aluno via Resend quando o serviço está configurado.
 - **Calendário navegável** com eventos de aula e marcos persistidos de início e conclusão dos cursos; conclusão exibe um comprovante demonstrativo para impressão.
 - **AVA** em `/area-do-aluno/curso/:slug`, em duas colunas, com introdução, seis módulos, busca, progresso e conteúdo.
@@ -360,12 +360,18 @@ repo/
   ```env
   Database__Provider=Npgsql
   ConnectionStrings__Catalogo=Host=...;Database=...;Username=...;Password=...
-  # Opcional: o padrão já libera localhost e *.vercel.app
-  Cors__AllowedOrigins__0=https://meu-dominio.com
+  Cors__AllowedOrigins__0=https://frontend-ezequiel-reginos-projects.vercel.app
+  Gestao__Admin__Email=admin@sesindustria.com.br
+  Gestao__Admin__Senha=<segredo-forte-configurado-no-Render>
+  Gestao__DiretorioDados=/var/data/gestao
+  Scorm__Root=/var/data/scorm
   ```
 
 - O banco é criado com `EnsureCreated()` e populado pelos seeders na inicialização.
 - Em desenvolvimento, o padrão é SQLite (`Data Source=catalogo.db`), sem configuração extra.
+- Configure `Gestao__Admin__Senha` como segredo no painel do Render; não use a senha demonstrativa nem a versione no repositório. O e-mail configurado precisa corresponder a um usuário ativo com papel `Administrador`.
+- Anexe um disco persistente do Render montado em `/var/data`. A gestão e os pacotes/progresso SCORM ainda usam arquivos; sem o disco, esses dados podem ser perdidos em novos deploys ou reinicializações.
+- `Cors__AllowedOrigins__0` deve conter a origem exata do front-end publicado. A API rejeita curingas de origem fora de Development para impedir que outros sites compartilhem a sessão administrativa.
 
 ---
 

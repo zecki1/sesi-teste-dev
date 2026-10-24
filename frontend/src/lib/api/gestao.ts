@@ -1,4 +1,4 @@
-import { API_URL, listarCursos } from "./catalogo"
+import { API_URL } from "./catalogo"
 import type { CursoResumoDto } from "./catalogo"
 
 export const PAPEIS = ["Aluno", "Suporte", "Monitor", "Tutor", "Administrador", "Gestor", "Editor", "Convidado"] as const
@@ -59,6 +59,7 @@ export interface MarcoCurso {
 async function requisitar<T>(caminho: string, init?: RequestInit): Promise<T> {
   const resposta = await fetch(`${API_URL}/api/v1${caminho}`, {
     ...init,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(init?.headers ?? {}),
@@ -82,8 +83,21 @@ export function listarUsuariosGestao() {
   return requisitar<UsuarioGestao[]>("/gestao/usuarios")
 }
 
+export function autenticarAdministrador(email: string, senha: string) {
+  return requisitar<UsuarioGestao>("/gestao/sessao", {
+    method: "POST",
+    body: JSON.stringify({ email, senha }),
+  })
+}
+
+export function encerrarSessaoAdministrador() {
+  return requisitar<void>("/gestao/sessao", { method: "DELETE" })
+}
+
 export async function obterUsuarioGestaoPorEmail(email: string): Promise<UsuarioGestao | null> {
-  const resposta = await fetch(`${API_URL}/api/v1/gestao/usuarios/perfil?email=${encodeURIComponent(email)}`)
+  const resposta = await fetch(`${API_URL}/api/v1/gestao/usuarios/perfil?email=${encodeURIComponent(email)}`, {
+    credentials: "include",
+  })
   if (resposta.status === 404) return null
   if (!resposta.ok) {
     let mensagem = `Falha ao consultar o usuário (${resposta.status}).`
@@ -159,9 +173,6 @@ export function registrarAlunoGestao(nome: string, email: string) {
 }
 
 export function listarCursosAdministracao(): Promise<CursoResumoDto[]> {
-  if (!gestaoLocalHabilitada) {
-    return listarCursos({ tamanho: 48 }).then((pagina) => pagina.itens)
-  }
   return requisitar<CursoResumoDto[]>("/gestao/cursos")
 }
 

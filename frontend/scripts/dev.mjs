@@ -68,12 +68,38 @@ function iniciar(comando, argumentos, nome, env = process.env) {
 function encerrar(exitCode = 0) {
   if (stopping) return
   stopping = true
-  for (const processo of children) processo.kill()
+  console.log("\n[dev] Encerrando frontend e backend...")
+  for (const processo of children) {
+    try {
+      if (process.platform === "win32" && processo.pid) {
+        spawn("taskkill", ["/pid", String(processo.pid), "/T", "/F"], { stdio: "ignore", shell: true })
+      } else {
+        processo.kill("SIGTERM")
+        setTimeout(() => {
+          try {
+            if (!processo.killed) processo.kill("SIGKILL")
+          } catch {
+            // ignora
+          }
+        }, 2000)
+      }
+    } catch {
+      try {
+        processo.kill()
+      } catch {
+        // ignora
+      }
+    }
+  }
   process.exitCode = exitCode
+  setTimeout(() => process.exit(exitCode), 500)
 }
 
-process.once("SIGINT", () => encerrar(0))
-process.once("SIGTERM", () => encerrar(0))
+process.on("SIGINT", () => encerrar(0))
+process.on("SIGTERM", () => encerrar(0))
+if (process.platform === "win32") {
+  process.on("SIGBREAK", () => encerrar(0))
+}
 
 try {
   await access(apiProject)
@@ -98,7 +124,22 @@ if (!stopping) {
   const portaVite = await vitePortaAtiva()
   if (portaVite !== null) {
     console.info(`Vite já está respondendo em localhost:${portaVite}.`)
+    console.log("\n==========================================")
+    console.log(`  Frontend: http://localhost:${portaVite}`)
+    console.log("  Backend:  http://localhost:5077")
+    console.log("  Swagger:  http://localhost:5077/swagger")
+    console.log("==========================================\n")
   } else {
     iniciar(process.execPath, [viteEntrypoint], "Vite")
+    setTimeout(() => {
+      void (async () => {
+        const porta = await vitePortaAtiva()
+        console.log("\n==========================================")
+        console.log(`  Frontend: http://localhost:${porta ?? 5173}`)
+        console.log("  Backend:  http://localhost:5077")
+        console.log("  Swagger:  http://localhost:5077/swagger")
+        console.log("==========================================\n")
+      })()
+    }, 8000)
   }
 }

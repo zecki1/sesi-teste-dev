@@ -10,5 +10,6 @@ public record CursoFiltro(
     string? Status = null,
     string? Ordenar = null,
     bool? Destaque = null,
+    string? Idioma = null,
     int Pagina = 1,
     int Tamanho = 12);

@@ -1,5 +1,6 @@
 import { useLayoutEffect, useState } from "react"
 import { Link } from "react-router-dom"
+import { useTranslation } from "react-i18next"
 import { Container } from "@/components/layout/container"
 import { MainLayout } from "@/components/layout/main-layout"
 import { CookieBanner } from "@/components/cookie-banner"
@@ -15,6 +16,7 @@ import { imagemDoCurso } from "@/lib/ui/imagens-cursos"
 import { useSliderArrastavel } from "@/hooks/use-slider-arrastavel"
 
 export function Home() {
+  const { t } = useTranslation("landing")
   const { data, isLoading } = useCursos({ destaque: "true", tamanho: 12 })
   const [categoria, setCategoria] = useState("")
 
@@ -47,14 +49,14 @@ export function Home() {
       <section id="cursos" className="scroll-mt-[88px] py-16">
         <Container>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <h2 data-aos="fade-up" className="font-['Open_Sans_Condensed',sans-serif] text-3xl font-bold sm:text-4xl">Principais cursos</h2>
+            <h2 data-aos="fade-up" className="font-['Open_Sans_Condensed',sans-serif] text-3xl font-bold sm:text-4xl">{t("mainCourses")}</h2>
             <select
-              aria-label="Filtrar cursos por categoria"
+              aria-label={t("filterByCategory")}
               value={categoria}
               onChange={(evento) => setCategoria(evento.target.value)}
               className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] px-4 py-2"
             >
-              <option value="">Todos os cursos</option>
+              <option value="">{t("allCourses")}</option>
               {categorias.map((item) => (
                 <option key={item.slug} value={item.slug}>{item.nome}</option>
               ))}
@@ -66,7 +68,7 @@ export function Home() {
           tabIndex={0}
           data-aos="fade-up"
           role="region"
-          aria-label="Principais cursos"
+          aria-label={t("mainCourses")}
           data-arrastando={arrastando}
           className="slider-bleed mt-5 flex snap-x snap-mandatory gap-6 overflow-x-auto pb-4 pt-3 [overflow-anchor:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
@@ -92,6 +94,9 @@ export function Home() {
                   data-card
                   to={`/curso/${curso.slug}`}
                   draggable={false}
+                  onMouseEnter={() => {
+                    import("@/features/curso/curso-detalhe-page")
+                  }}
                   className="slider-card card-lift group relative flex aspect-[4/5] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-lg)] bg-[var(--sesi-black)]"
                 >
                   <img
@@ -139,22 +144,22 @@ export function Home() {
               <ArrowRight className="h-12 w-12 text-[var(--sesi-beige)] transition-transform duration-300 group-hover:translate-x-1" />
               <div className="relative flex flex-col gap-3">
                 <p className="font-['Open_Sans_Condensed',sans-serif] text-4xl font-bold uppercase leading-[0.95]">
-                  Todos os cursos
+                  {t("allCourses")}
                 </p>
-                <span className="text-sm text-white">Explorar o catálogo completo</span>
+                <span className="text-sm text-white">{t("exploreCatalog")}</span>
               </div>
             </Link>
         </div>
 
         <Container className="mt-8 flex items-center justify-between gap-4">
           <Link to="/catalogo">
-            <Button variant="secondary" className="rounded-lg border-[var(--sesi-black)]">Ver todos os cursos</Button>
+            <Button variant="secondary" className="rounded-lg border-[var(--sesi-black)]">{t("seeAllCourses")}</Button>
           </Link>
           <div className="flex gap-3">
             <button
               type="button"
               onClick={() => scrollByCard(-1)}
-              aria-label="Cursos anteriores"
+              aria-label={t("previousCourses")}
               className="text-[var(--sesi-black)] transition-opacity hover:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sesi-black)]"
             >
               <ArrowLeft />
@@ -162,7 +167,7 @@ export function Home() {
             <button
               type="button"
               onClick={() => scrollByCard(1)}
-              aria-label="Próximos cursos"
+              aria-label={t("nextCourses")}
               className="text-[var(--sesi-black)] transition-opacity hover:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sesi-black)]"
             >
               <ArrowRight />

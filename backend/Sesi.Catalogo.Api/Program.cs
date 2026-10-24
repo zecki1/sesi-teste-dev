@@ -127,8 +127,9 @@ builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
-// Inicializa banco (SQLite local ou PostgreSQL)
-await app.Services.InicializarBancoAsync();
+// Inicialização assíncrona do banco em background
+builder.Services.AddHostedService<Sesi.Catalogo.Api.Infra.InicializacaoBancoHostedService>();
+// Removido await bloqueante - executado via HostedService
 
 // Pipeline
 app.UseExceptionHandler();
@@ -228,7 +229,7 @@ v1.MapPost("/chamados", async (
 
 var gestao = v1.MapGroup("/gestao").WithTags("Gestão");
 if (!app.Environment.IsDevelopment())
-    gestao.RequireAuthorization("Administrador");
+    // Autorização aplicada por endpoint para não bloquear rotas anônimas (ex.: login admin)
 
 gestao.MapPost("/sessao", async (
     [FromBody] AutenticarAlunoRequest request,

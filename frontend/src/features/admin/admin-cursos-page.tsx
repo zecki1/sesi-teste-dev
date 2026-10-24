@@ -203,8 +203,14 @@ export function AdminCursosPage() {
       }
       cursoSalvo = true
       if (curso.tipo === "scorm" && curso.scorm) {
-        await salvarConfiguracaoPaginaScorm(curso.slug, curso.scorm)
-        salvarConfigScormLocal(curso.slug, curso.scorm)
+        const configuracaoScorm = {
+          ...curso.scorm,
+          titulo: curso.scorm.titulo.trim() || curso.nomeCompleto.trim(),
+          botaoTexto: curso.scorm.botaoTexto.trim() || "Iniciar curso",
+          cargaHoraria: curso.scorm.cargaHoraria > 0 ? curso.scorm.cargaHoraria : curso.cargaHoraria,
+        }
+        await salvarConfiguracaoPaginaScorm(curso.slug, configuracaoScorm)
+        salvarConfigScormLocal(curso.slug, configuracaoScorm)
       }
       if (curso.tipo === "scorm" && arquivoPacote) {
         setProgressoUploadScorm(0)

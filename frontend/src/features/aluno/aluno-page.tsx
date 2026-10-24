@@ -19,6 +19,7 @@ import {
 import { carregarProgressoAva } from "@/features/ava/progresso-ava"
 import { obterProgressoScorm } from "@/features/scorm/scorm-api"
 import {
+  encerrarSessaoAdministrador,
   gestaoLocalHabilitada,
   obterMarcosCurso,
   obterUsuarioGestaoPorEmail,
@@ -124,6 +125,18 @@ export function AlunoPage() {
   const [mesCalendario, setMesCalendario] = useState(() => new Date())
   const { data } = useCursos({ tamanho: 48 })
   const { data: matriculasApi } = useMatriculas(perfil?.email)
+
+  const aoSair = async () => {
+    if (perfil?.papel === "admin" && !gestaoLocalHabilitada) {
+      try {
+        await encerrarSessaoAdministrador()
+      } catch (falha) {
+        setErroUsuario(falha instanceof Error ? falha.message : "Não foi possível encerrar a sessão administrativa.")
+        return
+      }
+    }
+    sair()
+  }
 
   useEffect(() => {
     if (!perfil) setModalAberto(true)
@@ -371,7 +384,7 @@ export function AlunoPage() {
             </Link>
             <button
               type="button"
-              onClick={sair}
+              onClick={() => void aoSair()}
               className="rounded-[var(--radius-lg)] bg-[var(--sesi-red)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--sesi-red-dark)]"
             >
               {t("student:logout")}

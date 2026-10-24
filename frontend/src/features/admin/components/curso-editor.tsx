@@ -1,7 +1,9 @@
-import { FormEvent, useEffect, useState, type ReactNode } from "react"
+import { FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import type { FacetasDto } from "@/lib/api/catalogo"
 import { configScormPadrao, type ScormPaginaConfig } from "@/features/scorm/scorm-config"
+import { detectarVersaoScorm } from "@/features/scorm/detectar-versao-scorm"
 import { obterPacoteScorm, urlDownloadScorm, type PacoteScormDto } from "@/features/scorm/scorm-api"
+import { useBodyScrollLock } from "@/lib/ui/use-body-scroll-lock"
 import {
   gerarSlug,
   novoId,
@@ -27,6 +29,26 @@ const campo =
   "w-full rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[var(--sesi-red)] focus:ring-2 focus:ring-[var(--sesi-red)]/20"
 
 const rotulo = "text-xs font-semibold uppercase tracking-wide text-[var(--sesi-muted)]"
+const normalizarBusca = (valor: string) =>
+  valor.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim()
+
+function distanciaEdicao(a: string, b: string) {
+  const linha = Array.from({ length: b.length + 1 }, (_, indice) => indice)
+  for (let indiceA = 1; indiceA <= a.length; indiceA += 1) {
+    let diagonal = linha[0]
+    linha[0] = indiceA
+    for (let indiceB = 1; indiceB <= b.length; indiceB += 1) {
+      const acima = linha[indiceB]
+      linha[indiceB] = Math.min(
+        linha[indiceB] + 1,
+        linha[indiceB - 1] + 1,
+        diagonal + (a[indiceA - 1] === b[indiceB - 1] ? 0 : 1),
+      )
+      diagonal = acima
+    }
+  }
+  return linha[b.length]
+}
 
 const TIPOS_BLOCO: { valor: TipoBloco; nome: string }[] = [
   { valor: "texto", nome: "Texto" },
@@ -56,21 +78,39 @@ export function CursoEditor({
   const [draft, setDraft] = useState<CursoAdmin>(curso)
   const [erro, setErro] = useState("")
   const [slugTocado, setSlugTocado] = useState(curso.origem === "api" || Boolean(curso.slug))
+  const [buscaCategoria, setBuscaCategoria] = useState(curso.categoria)
+  const [categoriaAberta, setCategoriaAberta] = useState(false)
   const [arquivoPacote, setArquivoPacote] = useState<File | null>(null)
+  const [detectandoVersao, setDetectandoVersao] = useState(false)
   const [pacoteAtual, setPacoteAtual] = useState<PacoteScormDto | null>(null)
   const [carregandoPacoteAtual, setCarregandoPacoteAtual] = useState(false)
+  const deteccaoAtual = useRef(0)
+  useBodyScrollLock(progressoUploadScorm !== null)
 
   useEffect(() => {
-    if (draft.tipo !== "scorm" || !draft.slug) {
+    if (draft.tipo !== "scorm" || curso.origem !== "api" || !curso.slug) {
       setPacoteAtual(null)
+      setCarregandoPacoteAtual(false)
       return
     }
 
     let ativo = true
     setCarregandoPacoteAtual(true)
-    obterPacoteScorm(draft.slug)
+    obterPacoteScorm(curso.slug)
       .then((pacote) => {
-        if (ativo) setPacoteAtual(pacote)
+        if (!ativo) return
+        setPacoteAtual(pacote)
+        if (pacote) {
+          setDraft((atual) => ({
+            ...atual,
+            scorm: {
+              ...(atual.scorm ?? configScormPadrao(atual)),
+              arquivo: pacote.nomeArquivo,
+              tamanho: pacote.tamanho,
+              versao: pacote.versao === "2004" ? "2004" : "1.2",
+            },
+          }))
+        }
       })
       .catch((falha: unknown) => {
         if (ativo) setErro(falha instanceof Error ? falha.message : "Não foi possível consultar o pacote SCORM.")
@@ -82,7 +122,29 @@ export function CursoEditor({
     return () => {
       ativo = false
     }
-  }, [draft.tipo, draft.slug])
+  }, [curso.origem, curso.slug, draft.tipo])
+
+  useEffect(() => {
+    setBuscaCategoria(curso.categoria)
+  }, [curso.id, curso.categoria])
+
+  const categoriasFiltradas = useMemo(() => {
+    const consulta = normalizarBusca(buscaCategoria)
+    const categorias = facetas?.categorias ?? []
+    if (!consulta) return categorias
+
+    return categorias
+      .map((categoria) => {
+        const nome = normalizarBusca(categoria.nome)
+        const distancia = distanciaEdicao(consulta, nome)
+        const similaridade = 1 - distancia / Math.max(consulta.length, nome.length)
+        const corresponde = nome.includes(consulta) || similaridade >= 0.68
+        return { categoria, corresponde, similaridade }
+      })
+      .filter((item) => item.corresponde)
+      .sort((a, b) => b.similaridade - a.similaridade || a.categoria.nome.localeCompare(b.categoria.nome))
+      .map((item) => item.categoria)
+  }, [buscaCategoria, facetas?.categorias])
 
   const alterar = <C extends keyof CursoAdmin>(chave: C, valor: CursoAdmin[C]) => {
     setDraft((atual) => ({ ...atual, [chave]: valor }))
@@ -178,8 +240,32 @@ export function CursoEditor({
       setErro("Informe a descrição e uma carga horária maior que zero.")
       return
     }
+    if (draft.tipo === "scorm" && draft.scorm) {
+      const configuracao = draft.scorm
+      const tituloEfetivo = configuracao.titulo.trim() || draft.nomeCompleto.trim()
+      if (tituloEfetivo.length > 200 || configuracao.subtitulo.length > 500 || configuracao.descricao.length > 2000) {
+        setErro("O título deve ter até 200 caracteres, o subtítulo até 500 e a descrição até 2.000.")
+        return
+      }
+      if (configuracao.bannerUrl.length > 2048 || configuracao.imagemUrl.length > 2048 || configuracao.urlLancamento.length > 2048) {
+        setErro("Cada URL da página SCORM deve ter até 2.048 caracteres.")
+        return
+      }
+      if (configuracao.botaoTexto.trim().length > 50 || (configuracao.cargaHoraria || draft.cargaHoraria) <= 0) {
+        setErro("O texto do botão deve ter até 50 caracteres e a carga horária deve ser maior que zero.")
+        return
+      }
+    }
+    if (!facetas?.categorias.some((categoria) => normalizarBusca(categoria.nome) === normalizarBusca(draft.categoria))) {
+      setErro("Selecione uma categoria já cadastrada.")
+      return
+    }
     if (draft.tipo === "scorm" && !arquivoPacote && !pacoteAtual) {
       setErro("Anexe o pacote SCORM (.zip) para continuar.")
+      return
+    }
+    if (detectandoVersao) {
+      setErro("Aguarde a identificação automática da versão do pacote SCORM.")
       return
     }
     if (
@@ -220,7 +306,7 @@ export function CursoEditor({
         </div>
         <button
           type="submit"
-          disabled={salvando || carregandoPacoteAtual}
+          disabled={salvando || carregandoPacoteAtual || detectandoVersao}
           className="rounded-[var(--radius-lg)] bg-[var(--sesi-red)] px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--sesi-red-dark)] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {salvando ? "Salvando..." : "Salvar curso"}
@@ -291,16 +377,60 @@ export function CursoEditor({
               required
             />
           </Campo>
-          <Campo titulo="Categoria">
-            <select value={draft.categoria} onChange={(evento) => alterar("categoria", evento.target.value)} className={campo} required>
-              <option value="">Selecione</option>
-              {facetas?.categorias.map((categoria) => (
-                <option key={categoria.id} value={categoria.nome}>
-                  {categoria.nome}
-                </option>
-              ))}
-            </select>
-          </Campo>
+          <div className="relative flex flex-col gap-1.5">
+            <label htmlFor="categoria-curso" className={rotulo}>Categoria</label>
+            <input
+              id="categoria-curso"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded={categoriaAberta}
+              aria-controls="opcoes-categoria"
+              aria-invalid={!facetas?.categorias.some((categoria) => normalizarBusca(categoria.nome) === normalizarBusca(draft.categoria))}
+              autoComplete="off"
+              value={buscaCategoria}
+              onFocus={() => setCategoriaAberta(true)}
+              onBlur={() => setCategoriaAberta(false)}
+              onChange={(evento) => {
+                setBuscaCategoria(evento.target.value)
+                alterar("categoria", evento.target.value)
+                setCategoriaAberta(true)
+              }}
+              className={campo}
+              placeholder="Busque uma categoria cadastrada"
+              required
+            />
+            {categoriaAberta && (
+              <ul
+                id="opcoes-categoria"
+                role="listbox"
+                className="absolute inset-x-0 top-full z-30 mt-1 max-h-56 overflow-y-auto rounded-lg border border-[var(--sesi-gray)] bg-white p-1 shadow-xl"
+              >
+                {categoriasFiltradas.length > 0 ? categoriasFiltradas.map((categoria) => (
+                  <li key={categoria.id} role="option" aria-selected={draft.categoria === categoria.nome}>
+                    <button
+                      type="button"
+                      onMouseDown={(evento) => evento.preventDefault()}
+                      onClick={() => {
+                        setBuscaCategoria(categoria.nome)
+                        alterar("categoria", categoria.nome)
+                        setCategoriaAberta(false)
+                      }}
+                      className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5]"
+                    >
+                      {categoria.nome}
+                    </button>
+                  </li>
+                )) : (
+                  <li className="px-3 py-2 text-sm text-[var(--sesi-muted)]">
+                    Nenhuma categoria cadastrada corresponde à busca.
+                  </li>
+                )}
+              </ul>
+            )}
+            {buscaCategoria && !categoriasFiltradas.some((categoria) => normalizarBusca(categoria.nome) === normalizarBusca(draft.categoria)) && (
+              <span className="text-xs text-[var(--sesi-muted)]">Selecione uma categoria existente para evitar duplicidades.</span>
+            )}
+          </div>
           <Campo titulo="Modalidade">
             <select value={draft.modalidade} onChange={(evento) => alterar("modalidade", evento.target.value)} className={campo} required>
               <option value="">Selecione</option>
@@ -552,7 +682,8 @@ export function CursoEditor({
           <input
             type="file"
             accept=".zip,application/zip"
-            onChange={(evento) => {
+            disabled={detectandoVersao || salvando}
+            onChange={async (evento) => {
               const arquivo = evento.target.files?.[0]
               if (!arquivo) return
               if (arquivo.size > limitePacoteMb * 1024 * 1024) {
@@ -561,13 +692,37 @@ export function CursoEditor({
                 setArquivoPacote(null)
                 return
               }
+              const idDeteccao = deteccaoAtual.current + 1
+              deteccaoAtual.current = idDeteccao
               setErro("")
               setArquivoPacote(arquivo)
-              alterarScorm({ arquivo: arquivo.name, tamanho: arquivo.size, versao: draft.scorm?.versao ?? "1.2" })
+              setDetectandoVersao(true)
+              try {
+                const versao = await detectarVersaoScorm(arquivo)
+                if (deteccaoAtual.current !== idDeteccao) return
+                alterarScorm({ arquivo: arquivo.name, tamanho: arquivo.size, versao })
+              } catch (falha) {
+                if (deteccaoAtual.current !== idDeteccao) return
+                setArquivoPacote(null)
+                evento.target.value = ""
+                setErro(falha instanceof Error ? falha.message : "Não foi possível identificar a versão do pacote SCORM.")
+              } finally {
+                if (deteccaoAtual.current === idDeteccao) setDetectandoVersao(false)
+              }
             }}
             aria-label="Arquivo SCORM"
             className="block w-full cursor-pointer rounded-[var(--radius-lg)] border border-dashed border-[var(--sesi-gray)] p-4 text-sm file:mr-4 file:rounded-[var(--radius-lg)] file:border-0 file:bg-[var(--sesi-black)] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
           />
+          {detectandoVersao && (
+            <p className="mt-2 text-xs font-medium text-[var(--sesi-muted)]" role="status">
+              Lendo o manifesto do pacote para identificar a versão...
+            </p>
+          )}
+          {arquivoPacote && !detectandoVersao && (
+            <p className="mt-2 text-xs font-semibold text-[var(--sesi-black)]">
+              Versão identificada automaticamente: SCORM {draft.scorm?.versao}
+            </p>
+          )}
           {arquivoPacote && (
             <p className="mt-2 text-xs font-semibold text-[var(--sesi-black)]">
               {pacoteAtual ? "Será publicado como substituição após a validação: " : "Pronto para enviar: "}
@@ -575,38 +730,57 @@ export function CursoEditor({
             </p>
           )}
           {progressoUploadScorm !== null && (
-            <div className="mt-4 rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white p-4" role="status" aria-live="polite">
-              <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                <span className="font-semibold text-[var(--sesi-black)]">
-                  {progressoUploadScorm < 100 ? "Fazendo upload do pacote SCORM" : "Upload concluído. Processando pacote..."}
-                </span>
-                <span className="font-bold tabular-nums text-[var(--sesi-red)]">{progressoUploadScorm}%</span>
-              </div>
+            <div className="fixed inset-0 z-[11000] flex items-center justify-center bg-black/60 p-4" role="presentation">
               <div
-                className="h-2.5 overflow-hidden rounded-full bg-[#F1F1F1]"
-                role="progressbar"
-                aria-label="Progresso do upload do pacote SCORM"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={progressoUploadScorm}
+                className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="upload-scorm-titulo"
+                aria-describedby="upload-scorm-descricao"
+                aria-live="polite"
               >
+                <div className="mb-4 flex items-center gap-3">
+                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--sesi-gray)] border-t-[var(--sesi-red)]" aria-hidden="true" />
+                  <h3 id="upload-scorm-titulo" className="text-lg font-bold text-[var(--sesi-black)]">
+                    {progressoUploadScorm < 100 ? "Enviando pacote SCORM" : "Validando pacote SCORM"}
+                  </h3>
+                </div>
+                <p id="upload-scorm-descricao" className="mb-4 text-sm text-[var(--sesi-muted)]">
+                  {progressoUploadScorm < 100
+                    ? "Aguarde enquanto o pacote é enviado. Não feche esta janela."
+                    : "Upload concluído. O pacote está sendo processado e validado."}
+                </p>
+                <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                  <span className="font-semibold text-[var(--sesi-black)]">Progresso do upload</span>
+                  <span className="font-bold tabular-nums text-[var(--sesi-red)]">{progressoUploadScorm}%</span>
+                </div>
                 <div
-                  className="h-full rounded-full bg-[var(--sesi-red)] transition-[width] duration-200"
-                  style={{ width: `${progressoUploadScorm}%` }}
-                />
+                  className="h-3 overflow-hidden rounded-full bg-[#F1F1F1]"
+                  role="progressbar"
+                  aria-label="Progresso do upload do pacote SCORM"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={progressoUploadScorm}
+                >
+                  <div
+                    className="h-full rounded-full bg-[var(--sesi-red)] transition-[width] duration-200"
+                    style={{ width: `${progressoUploadScorm}%` }}
+                  />
+                </div>
               </div>
             </div>
           )}
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <Campo titulo="Versão do SCORM">
-              <select
-                value={draft.scorm?.versao ?? "1.2"}
-                onChange={(evento) => alterarScorm({ versao: evento.target.value as "1.2" | "2004" })}
-                className={campo}
-              >
-                <option value="1.2">SCORM 1.2</option>
-                <option value="2004">SCORM 2004</option>
-              </select>
+              <div className={`${campo} flex items-center bg-[#F5F5F5]`} aria-live="polite">
+                {pacoteAtual && !arquivoPacote
+                  ? `SCORM ${pacoteAtual.versao}`
+                  : arquivoPacote && !detectandoVersao
+                    ? `SCORM ${draft.scorm?.versao}`
+                    : detectandoVersao
+                      ? "Identificando versão..."
+                      : "A versão será identificada pelo manifesto do pacote"}
+              </div>
             </Campo>
             {draft.scorm && (
               <div className="flex flex-col justify-end rounded-[var(--radius-lg)] bg-[#F5F5F5] px-4 py-2 text-sm">
@@ -648,6 +822,7 @@ export function CursoEditor({
               value={draft.scorm?.titulo ?? ""}
               onChange={(evento) => alterarScorm({ titulo: evento.target.value })}
               placeholder={draft.nomeCompleto || "Nome do curso"}
+              maxLength={200}
               className={campo}
             />
           </Campo>
@@ -656,6 +831,7 @@ export function CursoEditor({
               value={draft.scorm?.subtitulo ?? ""}
               onChange={(evento) => alterarScorm({ subtitulo: evento.target.value })}
               placeholder="Categoria · modalidade · curso autoinstrucional"
+              maxLength={500}
               className={campo}
             />
           </Campo>
@@ -664,6 +840,7 @@ export function CursoEditor({
               value={draft.scorm?.bannerUrl ?? ""}
               onChange={(evento) => alterarScorm({ bannerUrl: evento.target.value })}
               placeholder="vazio usa o banner padrão"
+              maxLength={2048}
               className={campo}
             />
           </Campo>
@@ -672,6 +849,7 @@ export function CursoEditor({
               value={draft.scorm?.imagemUrl ?? ""}
               onChange={(evento) => alterarScorm({ imagemUrl: evento.target.value })}
               placeholder={draft.imagemUrl || "/cursos/exemplo.webp"}
+              maxLength={2048}
               className={campo}
             />
           </Campo>
@@ -682,6 +860,7 @@ export function CursoEditor({
               value={draft.scorm?.cargaHoraria || ""}
               onChange={(evento) => alterarScorm({ cargaHoraria: Number(evento.target.value) })}
               placeholder={String(draft.cargaHoraria || "")}
+              required
               className={campo}
             />
           </Campo>
@@ -690,6 +869,7 @@ export function CursoEditor({
               value={draft.scorm?.botaoTexto ?? ""}
               onChange={(evento) => alterarScorm({ botaoTexto: evento.target.value })}
               placeholder="Iniciar curso"
+              maxLength={50}
               className={campo}
             />
           </Campo>
@@ -698,6 +878,7 @@ export function CursoEditor({
               value={draft.scorm?.urlLancamento ?? ""}
               onChange={(evento) => alterarScorm({ urlLancamento: evento.target.value })}
               placeholder="https://... (vazio mostra o player demonstrativo)"
+              maxLength={2048}
               className={campo}
             />
           </Campo>
@@ -707,6 +888,7 @@ export function CursoEditor({
               onChange={(evento) => alterarScorm({ descricao: evento.target.value })}
               rows={3}
               placeholder={draft.descricao || "Descrição exibida em “Sobre o curso”"}
+              maxLength={2000}
               className={campo}
             />
           </Campo>
@@ -729,7 +911,7 @@ export function CursoEditor({
         </button>
         <button
           type="submit"
-          disabled={salvando}
+          disabled={salvando || detectandoVersao}
           className="rounded-[var(--radius-lg)] bg-[var(--sesi-red)] px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--sesi-red-dark)] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {salvando ? "Salvando..." : "Salvar curso"}

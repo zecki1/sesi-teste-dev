@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Sesi.Catalogo.Api.Dev;
 using Sesi.Catalogo.Api.Gestao;
@@ -15,6 +16,7 @@ using Sesi.Catalogo.Api.Scorm;
 using Sesi.Catalogo.Domain.Abstractions;
 using Sesi.Catalogo.Domain.Dtos;
 using Sesi.Catalogo.Infrastructure;
+using Sesi.Catalogo.Infrastructure.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -934,6 +936,102 @@ v1.MapPost("/scorm/progresso/reiniciar", async (
 .Produces<ProgressoScormDto>(StatusCodes.Status200OK)
 .Produces(StatusCodes.Status400BadRequest)
 .Produces(StatusCodes.Status404NotFound);
+
+// DEBUG I18N
+app.MapGet("/api/v1/debug/i18n", async (HttpContext ctx, CatalogoDbContext db, CancellationToken ct) =>
+{
+    var cursos = await db.Cursos.AsNoTracking()
+        .Include(c => c.Categoria)
+        .Include(c => c.Modalidade)
+        .Where(c => c.Ativo && c.EtapaDesenvolvimento == "Publicado")
+        .OrderBy(c => c.Id)
+        .Take(50)
+        .ToListAsync(ct);
+
+    var catTrad = await db.CategoriasTraducoes.AsNoTracking().ToListAsync(ct);
+    var modTrad = await db.ModalidadesTraducoes.AsNoTracking().ToListAsync(ct);
+    var curTrad = await db.CursosTraducoes.AsNoTracking().ToListAsync(ct);
+
+    var catEn = catTrad.Where(x => x.Idioma == "en-US").ToDictionary(x => x.CategoriaId, x => x.Nome);
+    var catEs = catTrad.Where(x => x.Idioma == "es-ES").ToDictionary(x => x.CategoriaId, x => x.Nome);
+    var modEn = modTrad.Where(x => x.Idioma == "en-US").ToDictionary(x => x.ModalidadeId, x => x.Nome);
+    var modEs = modTrad.Where(x => x.Idioma == "es-ES").ToDictionary(x => x.ModalidadeId, x => x.Nome);
+    var curEn = curTrad.Where(x => x.Idioma == "en-US").ToDictionary(x => x.CursoId, x => x.NomeCompleto);
+    var curEs = curTrad.Where(x => x.Idioma == "es-ES").ToDictionary(x => x.CursoId, x => x.NomeCompleto);
+
+    var sb = new System.Text.StringBuilder();
+    sb.Append("<html><head><meta charset='utf-8'><title>DEBUG I18N</title><style>body{font-family:Arial}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:6px;font-size:12px}th{background:#f5f5f5}tr:nth-child(even){background:#fafafa}</style></head><body>");
+    sb.Append("<h2>DEBUG I18N - PT x EN x ES</h2>");
+    sb.Append("<p>Idioma contexto: ").Append(ctx.Items["Idioma"]?.ToString() ?? "null").Append(" | lang: ").Append(ctx.Request.Query["lang"].ToString()).Append(" | Accept-Language: ").Append(ctx.Request.Headers["Accept-Language"].ToString()).Append("</p>");
+    sb.Append("<table><thead><tr><th>ID</th><th>Slug</th><th>Cat PT</th><th>Cat EN</th><th>Cat ES</th><th>Mod PT</th><th>Mod EN</th><th>Mod ES</th><th>Curso PT</th><th>Curso EN</th><th>Curso ES</th></tr></thead><tbody>");
+    foreach (var c in cursos)
+    {
+        sb.Append("<tr><td>").Append(c.Id).Append("</td><td>").Append(c.Slug).Append("</td>");
+        sb.Append("<td>").Append(c.Categoria?.Nome ?? "-").Append("</td><td>").Append(catEn.TryGetValue(c.CategoriaId, out var cen) ? System.Net.WebUtility.HtmlEncode(cen) : "<span style='color:red'>SEM</span>").Append("</td><td>").Append(catEs.TryGetValue(c.CategoriaId, out var ces) ? System.Net.WebUtility.HtmlEncode(ces) : "<span style='color:red'>SEM</span>").Append("</td>");
+        sb.Append("<td>").Append(c.Modalidade?.Nome ?? "-").Append("</td><td>").Append(modEn.TryGetValue(c.ModalidadeId, out var men) ? System.Net.WebUtility.HtmlEncode(men) : "<span style='color:red'>SEM</span>").Append("</td><td>").Append(modEs.TryGetValue(c.ModalidadeId, out var mes) ? System.Net.WebUtility.HtmlEncode(mes) : "<span style='color:red'>SEM</span>").Append("</td>");
+        sb.Append("<td>").Append(System.Net.WebUtility.HtmlEncode(c.NomeCompleto)).Append("</td><td>").Append(curEn.TryGetValue(c.Id, out var cuen) ? System.Net.WebUtility.HtmlEncode(cuen) : "<span style='color:red'>SEM</span>").Append("</td><td>").Append(curEs.TryGetValue(c.Id, out var cues) ? System.Net.WebUtility.HtmlEncode(cues) : "<span style='color:red'>SEM</span>").Append("</td></tr>");
+    }
+    sb.Append("</tbody></table></body></html>");
+    return Results.Content(sb.ToString(), "text/html; charset=utf-8");
+});
+
+app.MapPost("/api/v1/debug/i18n/seed", async (CatalogoDbContext db, CancellationToken ct) =>
+{
+    var categorias = await db.Categorias.ToListAsync(ct);
+    foreach (var c in categorias)
+    {
+        var temEnCat = await db.CategoriasTraducoes.Where(x => x.CategoriaId == c.Id && x.Idioma == "en-US").AnyAsync(ct);
+        if (!temEnCat)
+        {
+            var nomeEn = c.Nome switch
+            {
+                "Matemática" => "Mathematics",
+                "Ciências da Natureza" => "Natural Sciences",
+                "Segurança do Trabalho" => "Occupational Safety",
+                "Gestão" => "Management",
+                "Tecnologia" => "Technology",
+                _ => c.Nome
+            };
+            db.CategoriasTraducoes.Add(new() { CategoriaId = c.Id, Idioma = "en-US", Nome = nomeEn });
+        }
+
+        var temEsCat = await db.CategoriasTraducoes.Where(x => x.CategoriaId == c.Id && x.Idioma == "es-ES").AnyAsync(ct);
+        if (!temEsCat)
+        {
+            var nomeEs = c.Nome switch
+            {
+                "Matemática" => "Matemáticas",
+                "Ciências da Natureza" => "Ciencias de la Naturaleza",
+                "Segurança do Trabalho" => "Seguridad y Salud en el Trabajo",
+                "Gestão" => "Gestión",
+                "Tecnologia" => "Tecnología",
+                _ => c.Nome
+            };
+            db.CategoriasTraducoes.Add(new() { CategoriaId = c.Id, Idioma = "es-ES", Nome = nomeEs });
+        }
+    }
+
+    var modalidades = await db.Modalidades.ToListAsync(ct);
+    foreach (var m in modalidades)
+    {
+        var temEnMod = await db.ModalidadesTraducoes.Where(x => x.ModalidadeId == m.Id && x.Idioma == "en-US").AnyAsync(ct);
+        if (!temEnMod)
+        {
+            var nomeEn = m.Nome == "Presencial" ? "In-person" : m.Nome == "EAD" ? "Distance Learning" : m.Nome;
+            db.ModalidadesTraducoes.Add(new() { ModalidadeId = m.Id, Idioma = "en-US", Nome = nomeEn });
+        }
+
+        var temEsMod = await db.ModalidadesTraducoes.Where(x => x.ModalidadeId == m.Id && x.Idioma == "es-ES").AnyAsync(ct);
+        if (!temEsMod)
+        {
+            var nomeEs = m.Nome == "Presencial" ? "Presencial" : m.Nome == "EAD" ? "Educación a Distancia" : m.Nome;
+            db.ModalidadesTraducoes.Add(new() { ModalidadeId = m.Id, Idioma = "es-ES", Nome = nomeEs });
+        }
+    }
+
+    await db.SaveChangesAsync(ct);
+    return Results.Ok(new { ok = true });
+});
 
 app.Run();
 

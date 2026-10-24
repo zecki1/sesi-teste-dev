@@ -17,11 +17,22 @@ internal static class Mapeador
         return "pt-BR";
     }
 
-    public static CategoriaDto ParaDto(this Categoria c, string? idioma = null) =>
-        new(c.Id, c.Nome, c.Slug, c.IconeUrl, c.Cor, c.Ordem);
+    private static string Traduzir(string pt, string en, string es, string? idioma)
+    {
+        var lang = NormalizarIdioma(idioma);
+        return lang switch
+        {
+            "en-US" => en,
+            "es-ES" => es,
+            _ => pt
+        };
+    }
 
-    public static ModalidadeDto ParaDto(this Modalidade m, string? idioma = null) =>
-        new(m.Id, m.Nome, m.Slug);
+    public static CategoriaDto ParaDto(this Categoria c, string? idioma = null, CategoriaTraducao? traducao = null) =>
+        new(c.Id, traducao?.Nome ?? c.Nome, c.Slug, c.IconeUrl, c.Cor, c.Ordem);
+
+    public static ModalidadeDto ParaDto(this Modalidade m, string? idioma = null, ModalidadeTraducao? traducao = null) =>
+        new(m.Id, traducao?.Nome ?? m.Nome, m.Slug);
 
     public static StatusCursoDto ParaDto(this StatusCurso s) =>
         new(s.Id, s.Nome, s.Slug);
@@ -33,7 +44,7 @@ internal static class Mapeador
         new(m.Id, m.CursoId, m.Ordem, m.Titulo, m.Descricao,
             m.Aulas.OrderBy(a => a.Ordem).Select(ParaDto).ToList());
 
-    public static CursoResumoDto ParaResumoDto(this Curso c, CursoTraducao? traducao = null, CategoriaTraducao? catTrad = null, ModalidadeTraducao? modTrad = null) =>
+    public static CursoResumoDto ParaResumoDto(this Curso c, string? idioma = null, CursoTraducao? traducao = null, CategoriaTraducao? catTrad = null, ModalidadeTraducao? modTrad = null) =>
         new(c.Id,
             traducao?.NomeCompleto ?? c.NomeCompleto,
             traducao?.NomeBreve ?? c.NomeBreve,
@@ -49,9 +60,9 @@ internal static class Mapeador
             c.Destaque,
             new CategoriaDto(c.Categoria!.Id, catTrad?.Nome ?? c.Categoria.Nome, c.Categoria.Slug, c.Categoria.IconeUrl, c.Categoria.Cor, c.Categoria.Ordem),
             new ModalidadeDto(c.Modalidade!.Id, modTrad?.Nome ?? c.Modalidade.Nome, c.Modalidade.Slug),
-            StatusOferta(c));
+            StatusOferta(c, idioma));
 
-    public static CursoDetalheDto ParaDetalheDto(this Curso c, CursoTraducao? traducao = null, CategoriaTraducao? catTrad = null, ModalidadeTraducao? modTrad = null) =>
+    public static CursoDetalheDto ParaDetalheDto(this Curso c, string? idioma = null, CursoTraducao? traducao = null, CategoriaTraducao? catTrad = null, ModalidadeTraducao? modTrad = null) =>
         new(c.Id,
             traducao?.NomeCompleto ?? c.NomeCompleto,
             traducao?.NomeBreve ?? c.NomeBreve,
@@ -67,10 +78,10 @@ internal static class Mapeador
             c.Destaque,
             new CategoriaDto(c.Categoria!.Id, catTrad?.Nome ?? c.Categoria.Nome, c.Categoria.Slug, c.Categoria.IconeUrl, c.Categoria.Cor, c.Categoria.Ordem),
             new ModalidadeDto(c.Modalidade!.Id, modTrad?.Nome ?? c.Modalidade.Nome, c.Modalidade.Slug),
-            StatusOferta(c),
+            StatusOferta(c, idioma),
             c.Modulos.OrderBy(m => m.Ordem).Select(ParaDto).ToList());
 
-    private static StatusCursoDto StatusOferta(Curso curso)
+    private static StatusCursoDto StatusOferta(Curso curso, string? idioma = null)
     {
         var status = curso.Status!.ParaDto();
         var hoje = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -79,10 +90,10 @@ internal static class Mapeador
             curso.DataLiberacaoMatricula is not { } liberacao)
             return status;
 
-        if (liberacao > hoje) return status with { Nome = "Em breve", Slug = "em-breve" };
+        if (liberacao > hoje) return status with { Nome = Traduzir("Em breve", "Coming soon", "Próximamente", idioma), Slug = "em-breve" };
         if (curso.DataDisponibilizacao is null || curso.DataDisponibilizacao > hoje)
-            return status with { Nome = "Inscrições abertas", Slug = "inscricoes-abertas" };
-        return status with { Nome = "Disponível", Slug = "disponivel" };
+            return status with { Nome = Traduzir("Inscrições abertas", "Registration open", "Inscripciones abiertas", idioma), Slug = "inscricoes-abertas" };
+        return status with { Nome = Traduzir("Disponível", "Available", "Disponible", idioma), Slug = "disponivel" };
     }
 
     public static TurmaDto ParaDto(this Turma t) =>

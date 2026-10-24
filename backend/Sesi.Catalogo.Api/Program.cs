@@ -538,7 +538,7 @@ gestao.MapGet("/cursos", async (ICatalogoRepositorio repo, CancellationToken ct)
         if (request.Percentual is < 0 or > 100)
             return Results.BadRequest(new { erro = "O percentual do curso deve estar entre 0 e 100." });
 
-        var curso = await repo.ObterCursoPorSlugAsync(request.CursoSlug, ct);
+        var curso = await repo.ObterCursoPorSlugAsync(request.CursoSlug, (string?)null, ct);
         if (curso is null) return Results.NotFound(new { erro = "Curso não encontrado." });
         if (request.Marco == "conclusao")
         {
@@ -560,7 +560,7 @@ gestao.MapGet("/cursos", async (ICatalogoRepositorio repo, CancellationToken ct)
 
 v1.MapGet("/facetas", async (ICatalogoRepositorio repo, CancellationToken ct) =>
 {
-    var facetas = await repo.ObterFacetasAsync(ct);
+    var facetas = await repo.ObterFacetasAsync((string?)null, ct);
     return Results.Ok(facetas);
 })
 .WithName("ObterFacetas")
@@ -578,7 +578,7 @@ v1.MapGet("/cursos", async ([AsParameters] CursoFiltro filtro, ICatalogoReposito
 
 v1.MapGet("/cursos/{slug}", async (string slug, ICatalogoRepositorio repo, CancellationToken ct) =>
 {
-    var curso = await repo.ObterCursoPorSlugAsync(slug, ct);
+    var curso = await repo.ObterCursoPorSlugAsync(slug, (string?)null, ct);
     return curso is null ? Results.NotFound() : Results.Ok(curso);
 })
 .WithName("ObterCursoPorSlug")

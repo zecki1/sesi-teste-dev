@@ -146,11 +146,12 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
             .Where(t => t.Idioma == idioma && itens.Select(c => c.ModalidadeId).Distinct().Contains(t.ModalidadeId))
             .ToDictionaryAsync(t => t.ModalidadeId, ct);
 
-        var facetas = await ObterFacetasAsync(new CursoFiltro(Idioma: idioma), ct);
+        var facetas = await ObterFacetasAsync(idioma, ct);
 
         return new PaginaDto<CursoResumoDto>(
             itens.Select(c => Mapeador.ParaResumoDto(
                 c,
+                idioma,
                 traducoesCursos.TryGetValue(c.Id, out var tc) ? tc : null,
                 traducoesCategorias.TryGetValue(c.CategoriaId, out var tcat) ? tcat : null,
                 traducoesModalidades.TryGetValue(c.ModalidadeId, out var tmod) ? tmod : null)).ToList(),
@@ -176,8 +177,9 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
         return cursos.Select(c => Mapeador.ParaResumoDto(c)).ToList();
     }
 
-    public async Task<CursoDetalheDto?> ObterCursoPorSlugAsync(string slug, CancellationToken ct = default)
+    public async Task<CursoDetalheDto?> ObterCursoPorSlugAsync(string slug, string? idioma = null, CancellationToken ct = default)
     {
+        var lang = NormalizarIdioma(idioma);
         var hoje = DateOnly.FromDateTime(DateTime.UtcNow);
         var curso = await db.Cursos
             .AsNoTracking()
@@ -191,7 +193,16 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
                 c.EtapaDesenvolvimento == "Publicado" &&
                 (c.DataPublicacao == null || c.DataPublicacao <= hoje), ct);
 
-        return curso?.ParaDetalheDto();
+        if (curso is null) return null;
+
+        var traducao = await db.CursosTraducoes.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.CursoId == curso.Id && t.Idioma == lang, ct);
+        var traducaoCat = await db.CategoriasTraducoes.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.CategoriaId == curso.CategoriaId && t.Idioma == lang, ct);
+        var traducaoMod = await db.ModalidadesTraducoes.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.ModalidadeId == curso.ModalidadeId && t.Idioma == lang, ct);
+
+        return curso.ParaDetalheDto(lang, traducao, traducaoCat, traducaoMod);
     }
 
     private async Task<CursoDetalheDto?> ObterCursoSemFiltroDePublicacaoAsync(string slug, CancellationToken ct)
@@ -207,25 +218,47 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
         return curso?.ParaDetalheDto();
     }
 
-    public async Task<FacetasDto> ObterFacetasAsync(CancellationToken ct = default)
+    public async Task<FacetasDto> ObterFacetasAsync(string? idioma = null, CancellationToken ct = default)
     {
+        var lang = NormalizarIdioma(idioma);
+
         var categorias = await db.Categorias.AsNoTracking()
             .OrderBy(c => c.Ordem)
-            .Select(c => new CategoriaDto(c.Id, c.Nome, c.Slug, c.IconeUrl, c.Cor, c.Ordem))
             .ToListAsync(ct);
 
         var modalidades = await db.Modalidades.AsNoTracking()
             .OrderBy(m => m.Id)
-            .Select(m => new ModalidadeDto(m.Id, m.Nome, m.Slug))
             .ToListAsync(ct);
+
+        var catTrad = await db.CategoriasTraducoes.AsNoTracking()
+            .Where(t => t.Idioma == lang && categorias.Select(c => c.Id).Contains(t.CategoriaId))
+            .ToDictionaryAsync(t => t.CategoriaId, ct);
+
+        var modTrad = await db.ModalidadesTraducoes.AsNoTracking()
+            .Where(t => t.Idioma == lang && modalidades.Select(m => m.Id).Contains(t.ModalidadeId))
+            .ToDictionaryAsync(t => t.ModalidadeId, ct);
+
+        var catDtos = categorias
+            .Select(c => new CategoriaDto(c.Id, catTrad.TryGetValue(c.Id, out var ct2) ? ct2.Nome : c.Nome, c.Slug, c.IconeUrl, c.Cor, c.Ordem))
+            .ToList();
+
+        var modDtos = modalidades
+            .Select(m => new ModalidadeDto(m.Id, modTrad.TryGetValue(m.Id, out var mt2) ? mt2.Nome : m.Nome, m.Slug))
+            .ToList();
 
         var status = await db.StatusCursos.AsNoTracking()
             .OrderBy(s => s.Id)
             .Select(s => new StatusCursoDto(s.Id, s.Nome, s.Slug))
             .ToListAsync(ct);
 
-        return new FacetasDto(categorias, modalidades, status);
+        return new FacetasDto(catDtos, modDtos, status);
     }
+
+    public Task<FacetasDto> ObterFacetasAsync(CancellationToken ct = default)
+        => ObterFacetasAsync((string?)null, ct);
+
+    public Task<FacetasDto> ObterFacetasAsync(CursoFiltro? filtro, CancellationToken ct = default)
+        => ObterFacetasAsync(filtro?.Idioma, ct);
 
     public async Task<ProgressoCursoDto?> ObterProgressoAsync(string slug, string? usuarioId, CancellationToken ct = default)
     {

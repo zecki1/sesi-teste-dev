@@ -14,10 +14,12 @@ public interface ICatalogoRepositorio
     Task<IReadOnlyList<CursoResumoDto>> ListarCursosAdministracaoAsync(CancellationToken ct = default);
 
     /// <summary>Obtém o detalhe de um curso pelo slug (com módulos e aulas).</summary>
-    Task<CursoDetalheDto?> ObterCursoPorSlugAsync(string slug, CancellationToken ct = default);
+    Task<CursoDetalheDto?> ObterCursoPorSlugAsync(string slug, string? idioma = null, CancellationToken ct = default);
 
     /// <summary>Retorna as facetas (categorias, modalidades e status).</summary>
+    Task<FacetasDto> ObterFacetasAsync(string? idioma = null, CancellationToken ct = default);
     Task<FacetasDto> ObterFacetasAsync(CancellationToken ct = default);
+    Task<FacetasDto> ObterFacetasAsync(CursoFiltro? filtro, CancellationToken ct = default);
 
     /// <summary>Progresso agregado de um aluno em um curso.</summary>
     Task<ProgressoCursoDto?> ObterProgressoAsync(string slug, string? usuarioId, CancellationToken ct = default);

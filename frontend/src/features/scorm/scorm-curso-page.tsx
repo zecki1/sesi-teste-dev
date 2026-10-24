@@ -24,7 +24,7 @@ import {
   type PacoteScormDto,
   type ScormPaginaConfigDto,
 } from "./scorm-api"
-import { gestaoLocalHabilitada, registrarMarcoCurso } from "@/lib/api/gestao"
+import { registrarMarcoCurso } from "@/lib/api/gestao"
 
 const IDIOMAS_SUPORTADOS = ["pt-BR", "en-US", "es-ES"] as const
 
@@ -90,7 +90,7 @@ export function ScormCursoPage() {
   }, [slug, perfil?.email])
 
   useEffect(() => {
-    if (!gestaoLocalHabilitada || !emPlayer || !slug || !perfil?.email) return
+    if (!emPlayer || !slug || !perfil?.email) return
     registrarMarcoCurso(slug, perfil.email, "inicio").catch((falha: unknown) => {
       setErroProgresso(falha instanceof Error ? falha.message : t("scorm.progressError"))
     })
@@ -187,7 +187,6 @@ export function ScormCursoPage() {
   useEffect(() => {
     const statusConcluido = ["completed", "passed", "complete"].includes(statusScorm.toLowerCase())
     if (
-      !gestaoLocalHabilitada ||
       !emPlayer ||
       !slug ||
       !perfil?.email ||
@@ -196,25 +195,30 @@ export function ScormCursoPage() {
     ) return
 
     conclusaoRegistrada.current = true
+
+    const dispararCelebracao = (concluidoEm: string) => {
+      const chaveAviso = `sesi.certificado.mostrado.${slug}::${perfil.email.toLowerCase()}`
+      if (window.localStorage.getItem(chaveAviso)) return
+      window.localStorage.setItem(chaveAviso, "1")
+      window.dispatchEvent(new CustomEvent("sesi:curso-concluido", {
+        detail: {
+          slug,
+          titulo: curso?.nomeCompleto ?? curso?.nomeBreve ?? slug,
+          aluno: `${perfil.nome} ${perfil.sobrenome}`.trim(),
+          concluidoEm,
+        },
+      }))
+    }
+
     registrarMarcoCurso(slug, perfil.email, "conclusao", progresso)
       .then((marco) => {
-        const chaveAviso = `sesi.certificado.mostrado.${slug}::${perfil.email.toLowerCase()}`
-        if (window.localStorage.getItem(chaveAviso) || !marco.concluidoEm) return
-        window.localStorage.setItem(chaveAviso, "1")
-        window.dispatchEvent(new CustomEvent("sesi:curso-concluido", {
-          detail: {
-            slug,
-            titulo: curso?.nomeCompleto ?? slug,
-            aluno: `${perfil.nome} ${perfil.sobrenome}`.trim(),
-            concluidoEm: marco.concluidoEm,
-          },
-        }))
+        dispararCelebracao(marco.concluidoEm || new Date().toISOString())
       })
       .catch((falha: unknown) => {
-        conclusaoRegistrada.current = false
         setErroProgresso(falha instanceof Error ? falha.message : t("scorm.completionError"))
+        dispararCelebracao(new Date().toISOString())
       })
-  }, [emPlayer, slug, perfil?.email, perfil?.nome, perfil?.sobrenome, progresso, statusScorm, curso?.nomeCompleto, t])
+  }, [emPlayer, slug, perfil?.email, perfil?.nome, perfil?.sobrenome, progresso, statusScorm, curso?.nomeCompleto, curso?.nomeBreve, t])
 
   if (isLoading) {
     return (

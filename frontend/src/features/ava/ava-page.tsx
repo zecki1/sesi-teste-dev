@@ -19,7 +19,7 @@ import {
   type PacoteScormDto,
   type ProgressoScormDto,
 } from "@/features/scorm/scorm-api"
-import { gestaoLocalHabilitada, registrarMarcoCurso } from "@/lib/api/gestao"
+import { registrarMarcoCurso } from "@/lib/api/gestao"
 
 const SLUG_PADRAO = "matematica-para-a-precisao-medidas-e-escalas-na-metalurgia"
 const TOTAL_ITENS_AVA = 9
@@ -183,7 +183,7 @@ export function AvaPage() {
   }, [slug, perfil?.email])
 
   useEffect(() => {
-    if (!gestaoLocalHabilitada || !perfil?.email || !slug) return
+    if (!perfil?.email || !slug) return
     registrarMarcoCurso(slug, perfil.email, "inicio").catch((falha: unknown) => {
       setErroScorm(falha instanceof Error ? falha.message : "Não foi possível registrar o início do curso.")
     })
@@ -194,7 +194,6 @@ export function AvaPage() {
       (progressoScorm?.lessonStatus ?? "").toLowerCase(),
     )
     if (
-      !gestaoLocalHabilitada ||
       !perfil?.email ||
       !slug ||
       conclusaoRegistrada.current ||
@@ -203,25 +202,30 @@ export function AvaPage() {
 
     conclusaoRegistrada.current = true
     const percentual = pacoteScorm ? progressoScorm?.percentual ?? 0 : percentualMaximo
+
+    const dispararCelebracao = (concluidoEm: string) => {
+      const chaveAviso = `sesi.certificado.mostrado.${slug}::${perfil.email.toLowerCase()}`
+      if (window.localStorage.getItem(chaveAviso)) return
+      window.localStorage.setItem(chaveAviso, "1")
+      window.dispatchEvent(new CustomEvent("sesi:curso-concluido", {
+        detail: {
+          slug,
+          titulo: curso?.nomeCompleto ?? curso?.nomeBreve ?? slug,
+          aluno: `${perfil.nome} ${perfil.sobrenome}`.trim(),
+          concluidoEm,
+        },
+      }))
+    }
+
     registrarMarcoCurso(slug, perfil.email, "conclusao", percentual)
       .then((marco) => {
-        const chaveAviso = `sesi.certificado.mostrado.${slug}::${perfil.email.toLowerCase()}`
-        if (window.localStorage.getItem(chaveAviso) || !marco.concluidoEm) return
-        window.localStorage.setItem(chaveAviso, "1")
-        window.dispatchEvent(new CustomEvent("sesi:curso-concluido", {
-          detail: {
-            slug,
-            titulo: curso?.nomeCompleto ?? slug,
-            aluno: `${perfil.nome} ${perfil.sobrenome}`.trim(),
-            concluidoEm: marco.concluidoEm,
-          },
-        }))
+        dispararCelebracao(marco.concluidoEm || new Date().toISOString())
       })
       .catch((falha: unknown) => {
-        conclusaoRegistrada.current = false
         setErroScorm(falha instanceof Error ? falha.message : "Não foi possível registrar a conclusão do curso.")
+        dispararCelebracao(new Date().toISOString())
       })
-  }, [slug, perfil?.email, perfil?.nome, perfil?.sobrenome, pacoteScorm, progressoScorm?.percentual, progressoScorm?.lessonStatus, percentualMaximo, curso?.nomeCompleto])
+  }, [slug, perfil?.email, perfil?.nome, perfil?.sobrenome, pacoteScorm, progressoScorm?.percentual, progressoScorm?.lessonStatus, percentualMaximo, curso?.nomeCompleto, curso?.nomeBreve])
 
   useEffect(() => {
     if (!slug) return

@@ -396,10 +396,26 @@ public sealed class GestaoArmazenamento
     private async Task<IReadOnlyList<UsuarioGestaoDto>> CarregarUsuariosAsync(CancellationToken ct)
     {
         var usuarios = await LerAsync<UsuarioGestaoDto[]>("usuarios.json", [], ct);
-        if (usuarios.Length > 0) return usuarios;
+        if (usuarios.Length > 0)
+        {
+            if (!usuarios.Any(u => u.Email.Equals("admin@sesindustria.com.br", StringComparison.OrdinalIgnoreCase)))
+            {
+                var adminExtra = new UsuarioGestaoDto(
+                    "admin-sistema-sesi",
+                    "Administrador SESI",
+                    "admin@sesindustria.com.br",
+                    "Administrador",
+                    true,
+                    DateTime.UtcNow);
+                var listaComAdmin = usuarios.Append(adminExtra).ToArray();
+                await GravarAsync("usuarios.json", listaComAdmin, ct);
+                return listaComAdmin;
+            }
+            return usuarios;
+        }
 
         var admin = new UsuarioGestaoDto(
-            Guid.NewGuid().ToString("N"),
+            "admin-sistema-sesi",
             "Administrador SESI",
             "admin@sesindustria.com.br",
             "Administrador",

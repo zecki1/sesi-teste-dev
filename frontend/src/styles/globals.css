@@ -14,12 +14,22 @@
 }
 
 @keyframes sesi-confete {
-  from {
-    transform: translateY(-10vh) rotate(0deg);
+  0% {
+    transform: translateY(-20px) rotate(0deg) translateX(0);
     opacity: 1;
   }
-  to {
-    transform: translateY(110vh) rotate(540deg);
+  25% {
+    transform: translateY(28vh) rotate(180deg) translateX(12px);
+  }
+  50% {
+    transform: translateY(58vh) rotate(360deg) translateX(-14px);
+    opacity: 0.95;
+  }
+  75% {
+    transform: translateY(85vh) rotate(540deg) translateX(8px);
+  }
+  100% {
+    transform: translateY(108vh) rotate(720deg) translateX(-6px);
     opacity: 0;
   }
 }

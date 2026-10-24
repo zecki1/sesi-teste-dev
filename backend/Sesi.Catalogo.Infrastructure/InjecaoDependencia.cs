@@ -53,11 +53,29 @@ public static class InjecaoDependencia
         await GarantirColunasFluxoCursoAsync(db, ct);
         await GarantirTabelasTraducaoAsync(db, ct);
         await GarantirTabelaAvaliacoesAsync(db, ct);
+        await AtualizarCorCienciasDaNaturezaAsync(db, ct);
         await CatalogoSeeder.SemearAsync(db, ct);
         await CatalogoTurmasSeeder.SemearAsync(db, ct);
         await CatalogoScormSeeder.SemearAsync(db, ct);
         await CatalogoTraducoesSeeder.SemearAsync(db, ct);
         await CatalogoPerguntasSeeder.SemearAsync(db, ct);
+    }
+
+    /// <summary>
+    /// Atualiza a cor da categoria Ciências da Natureza para o lilás do design.
+    /// Só troca quando o valor antigo ainda está no banco, para não sobrescrever
+    /// uma cor personalizada pela gestão.
+    /// </summary>
+    private static async Task AtualizarCorCienciasDaNaturezaAsync(CatalogoDbContext db, CancellationToken ct)
+    {
+        var categoria = await db.Categorias
+            .FirstOrDefaultAsync(c => c.Slug == "ciencias-da-natureza", ct);
+
+        if (categoria is null || !categoria.Cor.Equals("#0EA5E9", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        categoria.Cor = "#DEC8F8";
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>

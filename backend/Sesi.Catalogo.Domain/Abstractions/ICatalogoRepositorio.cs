@@ -42,6 +42,20 @@ public interface ICatalogoRepositorio
     /// <summary>Desativa um curso (exclusão lógica).</summary>
     Task<bool> ExcluirCursoAsync(string slug, CancellationToken ct = default);
 
+    /// <summary>Lista as categorias com traduções e quantidade de cursos ativos (gestão).</summary>
+    Task<IReadOnlyList<CategoriaAdminDto>> ListarCategoriasAdminAsync(CancellationToken ct = default);
+
+    /// <summary>Cria ou atualiza uma categoria. Retorna null quando o id informado não existe.</summary>
+    Task<CategoriaAdminDto?> SalvarCategoriaAsync(
+        int? id, CategoriaSalvarRequest request, CancellationToken ct = default);
+
+    /// <summary>Exclui uma categoria sem cursos. Retorna a mensagem de erro ou null em caso de sucesso.</summary>
+    Task<string?> ExcluirCategoriaAsync(int id, CancellationToken ct = default);
+
+    /// <summary>Busca categorias com nome parecido, para evitar duplicidade no cadastro.</summary>
+    Task<IReadOnlyList<CategoriaSimilarDto>> BuscarCategoriasSimilaresAsync(
+        string nome, int? ignorarId = null, CancellationToken ct = default);
+
     /// <summary>Lista as perguntas frequentes do curso com os três idiomas (visão administrativa).</summary>
     Task<IReadOnlyList<PerguntaAdminDto>> ListarPerguntasAsync(string slug, CancellationToken ct = default);
 

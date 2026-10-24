@@ -22,6 +22,7 @@ import {
 import { usePerfil } from "@/lib/auth/perfil"
 import { criarCursoVazio, cursoDaApi, paraPayload, type CursoAdmin } from "./store"
 import { CursoEditor } from "./components/curso-editor"
+import { CategoriasAdmin } from "./components/categorias-admin"
 
 const CORES_STATUS: Record<string, string> = {
   Disponível: "bg-green-100 text-green-800",
@@ -73,6 +74,7 @@ export function AdminCursosPage() {
     enabled: perfil?.papel === "admin",
   })
   const [editando, setEditando] = useState<CursoAdmin | null>(null)
+  const [categoriasAberto, setCategoriasAberto] = useState(false)
   const [busca, setBusca] = useState("")
   const [etapaSelecionada, setEtapaSelecionada] = useState<"Todos" | CursoAdmin["etapaDesenvolvimento"]>("Todos")
   const [aviso, setAviso] = useState("")
@@ -324,6 +326,13 @@ export function AdminCursosPage() {
             >
               Área do aluno
             </Link>
+            <button
+              type="button"
+              onClick={() => setCategoriasAberto(true)}
+              className="rounded-[var(--radius-lg)] border border-white/30 px-4 py-2.5 text-sm font-semibold transition hover:bg-white hover:text-[var(--sesi-black)]"
+            >
+              Categorias
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -603,6 +612,8 @@ export function AdminCursosPage() {
           )}
         </Container>
       </section>
+
+      <CategoriasAdmin aberto={categoriasAberto} aoFechar={() => setCategoriasAberto(false)} />
     </MainLayout>
   )
 }

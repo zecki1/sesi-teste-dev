@@ -346,3 +346,69 @@ export function salvarPerguntasCurso(
     { method: "PUT", body: JSON.stringify({ perguntas }) },
   )
 }
+
+export interface CategoriaAdminDto {
+  id: number
+  nome: string
+  slug: string
+  iconeUrl: string
+  cor: string
+  ordem: number
+  cursos: number
+  nomeEn: string
+  nomeEs: string
+}
+
+export interface CategoriaSalvarRequest {
+  nome: string
+  slug?: string | null
+  cor?: string | null
+  iconeUrl?: string | null
+  ordem?: number | null
+  nomeEn?: string | null
+  nomeEs?: string | null
+}
+
+export interface CategoriaSimilarDto {
+  id: number
+  nome: string
+  slug: string
+  cor: string
+  similaridade: number
+}
+
+export function listarCategoriasAdmin(): Promise<CategoriaAdminDto[]> {
+  return requisitar<CategoriaAdminDto[]>(`${API_URL}/api/v1/categorias`)
+}
+
+export function criarCategoria(payload: CategoriaSalvarRequest): Promise<CategoriaAdminDto> {
+  return requisitar<CategoriaAdminDto>(`${API_URL}/api/v1/categorias`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+}
+
+export function atualizarCategoria(
+  id: number,
+  payload: CategoriaSalvarRequest,
+): Promise<CategoriaAdminDto> {
+  return requisitar<CategoriaAdminDto>(`${API_URL}/api/v1/categorias/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  })
+}
+
+export function excluirCategoria(id: number): Promise<void> {
+  return requisitar<void>(`${API_URL}/api/v1/categorias/${id}`, { method: "DELETE" })
+}
+
+export function buscarCategoriasSimilares(
+  nome: string,
+  ignorarId?: number,
+): Promise<CategoriaSimilarDto[]> {
+  const params = new URLSearchParams({ nome })
+  if (ignorarId) params.set("ignorarId", String(ignorarId))
+  return requisitar<CategoriaSimilarDto[]>(
+    `${API_URL}/api/v1/categorias/similares?${params.toString()}`,
+  )
+}

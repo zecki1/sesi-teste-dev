@@ -15,10 +15,10 @@ import { idiomaAtual } from "@/lib/i18n/idioma"
 import {
   autenticarAdministrador,
   autenticarAlunoGestao,
-  gestaoLocalHabilitada,
   obterUsuarioGestaoPorEmail,
   registrarAlunoComSenhaGestao,
   registrarAlunoGestao,
+  type UsuarioGestao,
 } from "@/lib/api/gestao"
 import { useBodyScrollLock } from "@/lib/ui/use-body-scroll-lock"
 
@@ -39,6 +39,21 @@ const botaoPrimario =
 const botaoSocial =
   "inline-flex w-full items-center justify-center gap-3 rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white px-4 py-2.5 text-sm font-semibold text-[var(--sesi-black)] transition hover:bg-[#F5F5F5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sesi-black)]"
 
+const IconeOlho = ({ visivel }: { visivel: boolean }) =>
+  visivel ? (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  ) : (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+      <line x1="2" x2="22" y1="2" y2="22" />
+    </svg>
+  )
+
 export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
   const { t } = useTranslation(["student", "common"])
   const [etapa, setEtapa] = useState<"email" | "cadastro">("email")
@@ -49,6 +64,10 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
   const [dataNascimento, setDataNascimento] = useState("")
   const [senha, setSenha] = useState("")
   const [confirmarSenha, setConfirmarSenha] = useState("")
+  const [mostrarSenhaLogin, setMostrarSenhaLogin] = useState(false)
+  const [mostrarSenha, setMostrarSenha] = useState(false)
+  const [mostrarConfirmarSenha, setMostrarConfirmarSenha] = useState(false)
+  const [copiado, setCopiado] = useState(false)
   const [erro, setErro] = useState("")
   const [carregando, setCarregando] = useState(false)
   useBodyScrollLock(aberto)
@@ -71,10 +90,58 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
       setErro("")
       setSenha("")
       setConfirmarSenha("")
+      setMostrarSenhaLogin(false)
+      setMostrarSenha(false)
+      setMostrarConfirmarSenha(false)
+      setCopiado(false)
     }
   }, [aberto])
 
   if (!aberto) return null
+
+  const calcularForcaSenha = (valor: string) => {
+    if (!valor) return { score: 0, label: "", cor: "bg-gray-200", texto: "text-gray-400" }
+    let pontos = 0
+    if (valor.length >= 8) pontos++
+    if (valor.length >= 12) pontos++
+    if (/[a-z]/.test(valor) && /[A-Z]/.test(valor)) pontos++
+    if (/\d/.test(valor)) pontos++
+    if (/[^a-zA-Z0-9]/.test(valor)) pontos++
+
+    if (pontos <= 1) return { score: 1, label: "Fraca", cor: "bg-red-500", texto: "text-red-600" }
+    if (pontos <= 2) return { score: 2, label: "Regular", cor: "bg-orange-500", texto: "text-orange-600" }
+    if (pontos <= 4) return { score: 3, label: "Forte", cor: "bg-amber-500", texto: "text-amber-600" }
+    return { score: 4, label: "Excelente", cor: "bg-emerald-500", texto: "text-emerald-600" }
+  }
+
+  const forca = calcularForcaSenha(senha)
+
+  const gerarSenhaForte = () => {
+    const maiusc = "ABCDEFGHJKLMNPQRSTUVWXYZ"
+    const minusc = "abcdefghijkmnopqrstuvwxyz"
+    const nums = "23456789"
+    const simbolos = "!@#$%&*+?"
+    const todos = maiusc + minusc + nums + simbolos
+    const chars = [
+      maiusc[Math.floor(Math.random() * maiusc.length)],
+      minusc[Math.floor(Math.random() * minusc.length)],
+      nums[Math.floor(Math.random() * nums.length)],
+      simbolos[Math.floor(Math.random() * simbolos.length)],
+    ]
+    for (let i = chars.length; i < 14; i++) {
+      chars.push(todos[Math.floor(Math.random() * todos.length)])
+    }
+    const novaSenha = chars.sort(() => Math.random() - 0.5).join("")
+    setSenha(novaSenha)
+    setConfirmarSenha(novaSenha)
+    setMostrarSenha(true)
+    setMostrarConfirmarSenha(true)
+    if (navigator?.clipboard?.writeText) {
+      void navigator.clipboard.writeText(novaSenha)
+      setCopiado(true)
+      setTimeout(() => setCopiado(false), 2500)
+    }
+  }
 
   const concluir = (perfil: PerfilAluno) => {
     atualizarPerfil({ idioma: idiomaAtual() })
@@ -87,56 +154,66 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
     setErro("")
     try {
       const normalizado = valor.trim().toLowerCase()
-      const contaDemo = normalizado === EMAIL_ADMIN || normalizado === EMAIL_TESTE
-      if (!gestaoLocalHabilitada && normalizado === EMAIL_TESTE) {
+      // Conta demo sem senha entra imediatamente
+      if (normalizado === EMAIL_TESTE && !senha) {
         concluir(entrar(normalizado, "aluno"))
         return
       }
 
-      if (!gestaoLocalHabilitada) {
+      // Conta de administrador
+      if (normalizado === EMAIL_ADMIN) {
         const registrado = await autenticarAdministrador(normalizado, senha)
         if (!registrado.ativo) {
           setErro("Esta conta está inativa. Entre em contato com o suporte.")
           return
         }
         const perfil = entrar(normalizado, papelDeGestao(registrado.papel))
-        const [nome, ...sobrenome] = registrado.nome.trim().split(/\s+/)
+        const [nomeAdmin, ...sobrenomeAdmin] = registrado.nome.trim().split(/\s+/)
         const nomeCompleto = registrado.nome.trim()
         const perfilAtualizado = nomeCompleto
-          ? { ...perfil, nome: nome || perfil.nome, sobrenome: sobrenome.join(" ") }
+          ? { ...perfil, nome: nomeAdmin || perfil.nome, sobrenome: sobrenomeAdmin.join(" ") }
           : perfil
         salvarPerfil(perfilAtualizado)
         concluir(perfilAtualizado)
         return
       }
 
-      if (gestaoLocalHabilitada) {
-        const registrado = contaDemo
-          ? (await obterUsuarioGestaoPorEmail(normalizado)) ?? await registrarAlunoGestao(normalizado.split("@")[0], normalizado)
-          : senha
-            ? await autenticarAlunoGestao(normalizado, senha)
-            : null
-        if (!registrado) {
-          setErro("Informe a senha da conta. Se ainda não cadastrou uma, use Criar conta.")
-          return
+      // Autenticação de aluno (funciona tanto local quanto na API de produção no Render)
+      let usuarioGestao: UsuarioGestao | null = null
+      if (senha) {
+        usuarioGestao = await autenticarAlunoGestao(normalizado, senha).catch(() => null)
+        if (!usuarioGestao) {
+          usuarioGestao = await autenticarAdministrador(normalizado, senha).catch(() => null)
         }
-        if (!registrado.ativo) {
-          setErro("Esta conta está inativa. Entre em contato com o suporte.")
-          return
-        }
-        const perfil = entrar(normalizado, papelDeGestao(registrado.papel))
-        const [nome, ...sobrenome] = registrado.nome.trim().split(/\s+/)
-        const nomeCompleto = registrado.nome.trim()
-        const perfilAtualizado = nomeCompleto
-          ? { ...perfil, nome: nome || perfil.nome, sobrenome: sobrenome.join(" ") }
-          : perfil
-        salvarPerfil(perfilAtualizado)
-        concluir(perfilAtualizado)
-      } else {
-        concluir(entrar(normalizado))
+      } else if (normalizado === EMAIL_TESTE) {
+        usuarioGestao = (await obterUsuarioGestaoPorEmail(normalizado).catch(() => null)) ??
+          await registrarAlunoGestao(normalizado.split("@")[0], normalizado).catch(() => null)
       }
+
+      if (!usuarioGestao) {
+        if (!senha) {
+          setErro("Informe sua senha para continuar.")
+        } else {
+          setErro("E-mail ou senha incorretos. Se ainda não possui conta, use Criar conta.")
+        }
+        return
+      }
+
+      if (!usuarioGestao.ativo) {
+        setErro("Esta conta está inativa. Entre em contato com o suporte.")
+        return
+      }
+
+      const perfil = entrar(normalizado, papelDeGestao(usuarioGestao.papel))
+      const [nomeUsuario, ...sobrenomeUsuario] = usuarioGestao.nome.trim().split(/\s+/)
+      const nomeCompleto = usuarioGestao.nome.trim()
+      const perfilAtualizado = nomeCompleto
+        ? { ...perfil, nome: nomeUsuario || perfil.nome, sobrenome: sobrenomeUsuario.join(" ") }
+        : perfil
+      salvarPerfil(perfilAtualizado)
+      concluir(perfilAtualizado)
     } catch (falha) {
-      setErro(falha instanceof Error ? falha.message : "Não foi possível consultar sua conta na API local.")
+      setErro(falha instanceof Error ? falha.message : "Não foi possível validar sua conta na API.")
     } finally {
       setCarregando(false)
     }
@@ -150,9 +227,7 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
       return
     }
     setErro("")
-    const senhaObrigatoria = gestaoLocalHabilitada
-      ? normalizado !== EMAIL_ADMIN && normalizado !== EMAIL_TESTE
-      : normalizado !== EMAIL_TESTE
+    const senhaObrigatoria = normalizado !== EMAIL_TESTE
     if (senhaObrigatoria && !senha) {
       setErro("Informe sua senha para continuar.")
       return
@@ -164,6 +239,8 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
     setErro("")
     setSenha("")
     setConfirmarSenha("")
+    setMostrarSenha(false)
+    setMostrarConfirmarSenha(false)
     setEtapa("cadastro")
   }
 
@@ -189,14 +266,9 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
       setErro("As contas de demonstração entram sem senha e não precisam de cadastro.")
       return
     }
-    if (!gestaoLocalHabilitada) {
-      setErro("O cadastro com senha está disponível apenas com a API local. A autenticação de produção ainda não está configurada.")
-      return
-    }
     setErro("")
     setCarregando(true)
     try {
-      let papel: Papel | undefined
       const usuario = await registrarAlunoComSenhaGestao(
         `${nome.trim()} ${sobrenome.trim()}`,
         email.trim().toLowerCase(),
@@ -206,7 +278,7 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
         setErro("Esta conta está inativa. Entre em contato com o suporte.")
         return
       }
-      papel = papelDeGestao(usuario.papel)
+      const papel: Papel = papelDeGestao(usuario.papel)
       const perfil = criarConta({
         nome: nome.trim(),
         sobrenome: sobrenome.trim(),
@@ -274,20 +346,30 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
               <label htmlFor="login-senha" className="mt-1 text-sm font-semibold text-[var(--sesi-black)]">
                 Senha
                 <span className="font-normal text-[var(--sesi-muted)]">
-                  {gestaoLocalHabilitada ? " (não exigida nas contas de demonstração)" : " (obrigatória para a gestão)"}
+                  {" (obrigatória para contas cadastradas e gestão)"}
                 </span>
               </label>
-              <input
-                id="login-senha"
-                type="password"
-                autoComplete="current-password"
-                value={senha}
-                onChange={(evento) => setSenha(evento.target.value)}
-                placeholder="Sua senha"
-                className={campo}
-                aria-invalid={Boolean(erro)}
-                aria-describedby={erro ? "login-erro" : undefined}
-              />
+              <div className="relative">
+                <input
+                  id="login-senha"
+                  type={mostrarSenhaLogin ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={senha}
+                  onChange={(evento) => setSenha(evento.target.value)}
+                  placeholder="Sua senha"
+                  className={`${campo} pr-10`}
+                  aria-invalid={Boolean(erro)}
+                  aria-describedby={erro ? "login-erro" : undefined}
+                />
+                <button
+                  type="button"
+                  onClick={() => setMostrarSenhaLogin((prev) => !prev)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--sesi-muted)] hover:text-[var(--sesi-black)] p-1 rounded transition"
+                  aria-label={mostrarSenhaLogin ? "Ocultar senha" : "Ver senha"}
+                >
+                  <IconeOlho visivel={mostrarSenhaLogin} />
+                </button>
+              </div>
               {erro && (
                 <p id="login-erro" role="alert" className="text-sm font-medium text-[var(--sesi-red)]">
                   {erro}
@@ -410,37 +492,92 @@ export function LoginModal({ aberto, onFechar, onEntrou }: LoginModalProps) {
                   aria-invalid={Boolean(erro)}
                 />
               </div>
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="cadastro-senha" className="text-sm font-semibold">
-                  Senha (mínimo 8 caracteres)
-                </label>
-                <input
-                  id="cadastro-senha"
-                  type="password"
-                  autoComplete="new-password"
-                  value={senha}
-                  onChange={(evento) => setSenha(evento.target.value)}
-                  className={campo}
-                  required
-                  minLength={8}
-                  maxLength={128}
-                />
+
+              {/* Senha e confirmação empilhadas verticalmente (ambas sm:col-span-2) */}
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="cadastro-senha" className="text-sm font-semibold text-[var(--sesi-black)]">
+                    Senha (mínimo 8 caracteres)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={gerarSenhaForte}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--sesi-red)] hover:text-[var(--sesi-red-dark)] transition"
+                    title="Gera uma senha forte e preenche automaticamente"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4" />
+                      <path d="m21 2-9.6 9.6" />
+                      <circle cx="7.5" cy="15.5" r="5.5" />
+                    </svg>
+                    {copiado ? "Copiada para a área de transferência!" : "Gerar senha forte"}
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    id="cadastro-senha"
+                    type={mostrarSenha ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={senha}
+                    onChange={(evento) => setSenha(evento.target.value)}
+                    className={`${campo} pr-10`}
+                    required
+                    minLength={8}
+                    maxLength={128}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarSenha((prev) => !prev)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--sesi-muted)] hover:text-[var(--sesi-black)] p-1 rounded transition"
+                    aria-label={mostrarSenha ? "Ocultar senha" : "Ver senha"}
+                  >
+                    <IconeOlho visivel={mostrarSenha} />
+                  </button>
+                </div>
+                {senha && (
+                  <div className="mt-1 flex flex-col gap-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-[var(--sesi-muted)]">Força da senha:</span>
+                      <span className={`font-semibold ${forca.texto}`}>{forca.label}</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1 h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
+                      <div className={`h-full rounded-full transition-all duration-300 ${forca.score >= 1 ? forca.cor : "bg-transparent"}`} />
+                      <div className={`h-full rounded-full transition-all duration-300 ${forca.score >= 2 ? forca.cor : "bg-transparent"}`} />
+                      <div className={`h-full rounded-full transition-all duration-300 ${forca.score >= 3 ? forca.cor : "bg-transparent"}`} />
+                      <div className={`h-full rounded-full transition-all duration-300 ${forca.score >= 4 ? forca.cor : "bg-transparent"}`} />
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="cadastro-confirmar-senha" className="text-sm font-semibold">
+
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <label htmlFor="cadastro-confirmar-senha" className="text-sm font-semibold text-[var(--sesi-black)]">
                   Confirmar senha
                 </label>
-                <input
-                  id="cadastro-confirmar-senha"
-                  type="password"
-                  autoComplete="new-password"
-                  value={confirmarSenha}
-                  onChange={(evento) => setConfirmarSenha(evento.target.value)}
-                  className={campo}
-                  required
-                  minLength={8}
-                  maxLength={128}
-                />
+                <div className="relative">
+                  <input
+                    id="cadastro-confirmar-senha"
+                    type={mostrarConfirmarSenha ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={confirmarSenha}
+                    onChange={(evento) => setConfirmarSenha(evento.target.value)}
+                    className={`${campo} pr-10`}
+                    required
+                    minLength={8}
+                    maxLength={128}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarConfirmarSenha((prev) => !prev)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--sesi-muted)] hover:text-[var(--sesi-black)] p-1 rounded transition"
+                    aria-label={mostrarConfirmarSenha ? "Ocultar senha" : "Ver senha"}
+                  >
+                    <IconeOlho visivel={mostrarConfirmarSenha} />
+                  </button>
+                </div>
+                {confirmarSenha && senha !== confirmarSenha && (
+                  <p className="text-xs font-medium text-[var(--sesi-red)]">As senhas não conferem.</p>
+                )}
               </div>
 
               {erro && (

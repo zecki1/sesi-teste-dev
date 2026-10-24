@@ -84,6 +84,34 @@ public sealed class ResendEmailSender(HttpClient httpClient, IConfiguration conf
         return new(false, enviado, enviado ? null : "Não foi possível enviar a atualização ao aluno.");
     }
 
+    /// <summary>
+    /// Envia e-mail de boas-vindas ao novo aluno cadastrado com senha.
+    /// </summary>
+    public async Task<bool> EnviarBoasVindasAlunoAsync(string nome, string email, CancellationToken ct)
+    {
+        var chave = configuracao["Resend:ApiKey"];
+        if (string.IsNullOrWhiteSpace(chave))
+            return false;
+
+        var remetente = configuracao["Resend:FromEmail"]
+            ?? "SESI Indústria <noreply@zecki1.com.br>";
+
+        var html = $"""
+            <h2>Bem-vindo(a) ao Catálogo SESI Indústria!</h2>
+            <p>Olá, {WebUtility.HtmlEncode(nome)}.</p>
+            <p>Sua conta de aluno foi criada com sucesso com o e-mail <strong>{WebUtility.HtmlEncode(email)}</strong>.</p>
+            <p>Agora você já pode se matricular nos cursos disponíveis, acompanhar suas aulas e acessar seus certificados.</p>
+            <br>
+            <p>Bons estudos!</p>
+            <p><strong>Equipe SESI Indústria</strong></p>
+            """;
+
+        return await EnviarAsync(
+            chave, remetente, [email],
+            "Bem-vindo(a) ao SESI Indústria",
+            html, null, null, ct);
+    }
+
     private static string LinhaCursoUsuario(ChamadoDto chamado)
     {
         var partes = new List<string>();

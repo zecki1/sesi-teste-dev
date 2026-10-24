@@ -18,7 +18,7 @@ public static class CatalogoSeeder
         var categorias = new List<Categoria>
         {
             new() { Nome = "Matemática", Slug = "matematica", IconeUrl = "/icons/matematica.svg", Cor = "#D97706", Ordem = 1 },
-            new() { Nome = "Ciências da Natureza", Slug = "ciencias-da-natureza", IconeUrl = "/icons/ciencias-natureza.svg", Cor = "#0EA5E9", Ordem = 2 },
+            new() { Nome = "Ciências da Natureza", Slug = "ciencias-da-natureza", IconeUrl = "/icons/ciencias-natureza.svg", Cor = "#DEC8F8", Ordem = 2 },
             new() { Nome = "Tecnologia", Slug = "tecnologia", IconeUrl = "/icons/tecnologia.svg", Cor = "#1D4ED8", Ordem = 3 },
             new() { Nome = "Gestão", Slug = "gestao", IconeUrl = "/icons/gestao.svg", Cor = "#C2410C", Ordem = 4 },
             new() { Nome = "Segurança do Trabalho", Slug = "seguranca-do-trabalho", IconeUrl = "/icons/seguranca.svg", Cor = "#047857", Ordem = 5 }

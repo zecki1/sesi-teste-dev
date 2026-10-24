@@ -550,6 +550,239 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
         return true;
     }
 
+    public async Task<IReadOnlyList<CategoriaAdminDto>> ListarCategoriasAdminAsync(CancellationToken ct = default)
+    {
+        var categorias = await db.Categorias.AsNoTracking()
+            .OrderBy(c => c.Ordem)
+            .ThenBy(c => c.Nome)
+            .Select(c => new
+            {
+                c.Id,
+                c.Nome,
+                c.Slug,
+                c.IconeUrl,
+                c.Cor,
+                c.Ordem,
+                Cursos = c.Cursos.Count(curso => curso.Ativo)
+            })
+            .ToListAsync(ct);
+
+        var traducoes = await db.CategoriasTraducoes.AsNoTracking().ToListAsync(ct);
+
+        return categorias
+            .Select(c => new CategoriaAdminDto(
+                c.Id,
+                c.Nome,
+                c.Slug,
+                c.IconeUrl,
+                c.Cor,
+                c.Ordem,
+                c.Cursos,
+                traducoes.FirstOrDefault(t => t.CategoriaId == c.Id && t.Idioma == "en-US")?.Nome ?? string.Empty,
+                traducoes.FirstOrDefault(t => t.CategoriaId == c.Id && t.Idioma == "es-ES")?.Nome ?? string.Empty))
+            .ToList();
+    }
+
+    public async Task<CategoriaAdminDto?> SalvarCategoriaAsync(
+        int? id, CategoriaSalvarRequest request, CancellationToken ct = default)
+    {
+        var nome = (request.Nome ?? string.Empty).Trim();
+        if (nome.Length < 2 || nome.Length > 120)
+            throw new InvalidOperationException("Informe o nome da categoria com 2 a 120 caracteres.");
+
+        var slug = GerarSlug(string.IsNullOrWhiteSpace(request.Slug) ? nome : request.Slug);
+        if (slug.Length == 0)
+            throw new InvalidOperationException("Não foi possível gerar o endereço (slug) da categoria.");
+
+        var categorias = await db.Categorias.ToListAsync(ct);
+        var alvo = id is null ? null : categorias.FirstOrDefault(c => c.Id == id);
+        if (id is not null && alvo is null)
+            return null;
+
+        var ignorarId = id ?? 0;
+        if (categorias.Any(c => c.Id != ignorarId && NormalizarTexto(c.Nome) == NormalizarTexto(nome)))
+            throw new InvalidOperationException("Já existe uma categoria com esse nome. Edite a existente para evitar duplicidade.");
+        if (categorias.Any(c => c.Id != ignorarId && c.Slug == slug))
+            throw new InvalidOperationException("Já existe uma categoria com esse endereço (slug).");
+
+        var ordem = request.Ordem ?? alvo?.Ordem ?? (categorias.Count == 0 ? 1 : categorias.Max(c => c.Ordem) + 1);
+
+        var categoria = alvo ?? new Categoria();
+        if (alvo is null)
+            db.Categorias.Add(categoria);
+
+        categoria.Nome = nome;
+        categoria.Slug = slug;
+        categoria.Cor = NormalizarCor(request.Cor);
+        categoria.IconeUrl = string.IsNullOrWhiteSpace(request.IconeUrl) ? string.Empty : request.IconeUrl.Trim();
+        categoria.Ordem = Math.Max(1, ordem);
+
+        await db.SaveChangesAsync(ct);
+
+        await DefinirTraducaoCategoriaAsync(categoria.Id, "en-US", request.NomeEn, ct);
+        await DefinirTraducaoCategoriaAsync(categoria.Id, "es-ES", request.NomeEs, ct);
+        await db.SaveChangesAsync(ct);
+
+        return (await ListarCategoriasAdminAsync(ct)).FirstOrDefault(c => c.Id == categoria.Id);
+    }
+
+    public async Task<string?> ExcluirCategoriaAsync(int id, CancellationToken ct = default)
+    {
+        var categoria = await db.Categorias
+            .Include(c => c.Cursos)
+            .FirstOrDefaultAsync(c => c.Id == id, ct);
+
+        if (categoria is null)
+            return "Categoria não encontrada.";
+
+        if (categoria.Cursos.Count > 0)
+            return $"A categoria \"{categoria.Nome}\" está vinculada a {categoria.Cursos.Count} curso(s) e não pode ser excluída. Mova os cursos para outra categoria antes.";
+
+        db.Categorias.Remove(categoria);
+        await db.SaveChangesAsync(ct);
+        return null;
+    }
+
+    public async Task<IReadOnlyList<CategoriaSimilarDto>> BuscarCategoriasSimilaresAsync(
+        string nome, int? ignorarId = null, CancellationToken ct = default)
+    {
+        var consulta = NormalizarTexto(nome ?? string.Empty);
+        if (consulta.Length < 2)
+            return Array.Empty<CategoriaSimilarDto>();
+
+        var categorias = await db.Categorias.AsNoTracking().ToListAsync(ct);
+        var ignorar = ignorarId ?? 0;
+
+        return categorias
+            .Where(c => c.Id != ignorar)
+            .Select(c => new { Categoria = c, Score = Similaridade(consulta, NormalizarTexto(c.Nome)) })
+            .Where(item => item.Score >= 45)
+            .OrderByDescending(item => item.Score)
+            .ThenBy(item => item.Categoria.Nome)
+            .Take(5)
+            .Select(item => new CategoriaSimilarDto(
+                item.Categoria.Id,
+                item.Categoria.Nome,
+                item.Categoria.Slug,
+                item.Categoria.Cor,
+                item.Score))
+            .ToList();
+    }
+
+    private async Task DefinirTraducaoCategoriaAsync(
+        int categoriaId, string idioma, string? nome, CancellationToken ct)
+    {
+        var traducao = await db.CategoriasTraducoes
+            .FirstOrDefaultAsync(t => t.CategoriaId == categoriaId && t.Idioma == idioma, ct);
+        var valor = nome?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(valor))
+        {
+            if (traducao is not null)
+                db.CategoriasTraducoes.Remove(traducao);
+            return;
+        }
+
+        if (traducao is null)
+        {
+            db.CategoriasTraducoes.Add(new CategoriaTraducao
+            {
+                CategoriaId = categoriaId,
+                Idioma = idioma,
+                Nome = valor
+            });
+        }
+        else
+        {
+            traducao.Nome = valor;
+        }
+    }
+
+    private static string NormalizarTexto(string valor)
+    {
+        var decomposto = valor.Trim().Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder(decomposto.Length);
+        foreach (var caractere in decomposto)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(caractere) == UnicodeCategory.NonSpacingMark)
+                continue;
+            builder.Append(char.ToLowerInvariant(caractere));
+        }
+        return builder.ToString();
+    }
+
+    private static string GerarSlug(string valor)
+    {
+        var decomposto = valor.Trim().Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder(decomposto.Length);
+        foreach (var caractere in decomposto)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(caractere) == UnicodeCategory.NonSpacingMark)
+                continue;
+            builder.Append(char.IsLetterOrDigit(caractere) ? char.ToLowerInvariant(caractere) : '-');
+        }
+
+        return System.Text.RegularExpressions.Regex
+            .Replace(builder.ToString(), "-+", "-")
+            .Trim('-');
+    }
+
+    private static string NormalizarCor(string? cor)
+    {
+        if (string.IsNullOrWhiteSpace(cor))
+            return "#6B7280";
+
+        var valor = cor.Trim();
+        if (!valor.StartsWith('#'))
+            valor = $"#{valor}";
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(valor, "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"))
+            throw new InvalidOperationException("Informe a cor no formato hexadecimal, por exemplo #DEC8F8.");
+
+        return valor.ToUpperInvariant();
+    }
+
+    private static int Similaridade(string a, string b)
+    {
+        if (a == b)
+            return 100;
+
+        var maior = Math.Max(a.Length, b.Length);
+        if (maior == 0)
+            return 100;
+
+        var score = (int)Math.Round((1 - (double)DistanciaLevenshtein(a, b) / maior) * 100);
+        if (a.Contains(b, StringComparison.Ordinal) || b.Contains(a, StringComparison.Ordinal))
+            score = Math.Max(score, 85);
+
+        return score;
+    }
+
+    private static int DistanciaLevenshtein(string a, string b)
+    {
+        var anterior = new int[b.Length + 1];
+        var atual = new int[b.Length + 1];
+
+        for (var j = 0; j <= b.Length; j++)
+            anterior[j] = j;
+
+        for (var i = 1; i <= a.Length; i++)
+        {
+            atual[0] = i;
+            for (var j = 1; j <= b.Length; j++)
+            {
+                var custo = a[i - 1] == b[j - 1] ? 0 : 1;
+                atual[j] = Math.Min(
+                    Math.Min(atual[j - 1] + 1, anterior[j] + 1),
+                    anterior[j - 1] + custo);
+            }
+
+            (anterior, atual) = (atual, anterior);
+        }
+
+        return anterior[b.Length];
+    }
+
     public async Task<IReadOnlyList<PerguntaAdminDto>> ListarPerguntasAsync(string slug, CancellationToken ct = default)
     {
         var cursoId = await db.Cursos.AsNoTracking()

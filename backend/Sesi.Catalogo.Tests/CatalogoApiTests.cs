@@ -437,6 +437,43 @@ public class CatalogoApiTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     [Fact]
+    public async Task Cors_DeveAceitarListaSeparadaPorVirgula()
+    {
+        using var factory = _factory.WithWebHostBuilder(builder =>
+            builder.UseSetting("Cors:AllowedOrigins:0", "https://a.vercel.app, https://b.vercel.app"));
+        var client = factory.CreateClient();
+
+        foreach (var origem in new[] { "https://a.vercel.app", "https://b.vercel.app" })
+        {
+            var request = new HttpRequestMessage(HttpMethod.Options, "/api/v1/cursos");
+            request.Headers.Add("Origin", origem);
+            request.Headers.Add("Access-Control-Request-Method", "GET");
+
+            var response = await client.SendAsync(request);
+
+            response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            response.Headers.GetValues("Access-Control-Allow-Origin")
+                .Should().ContainSingle(origem);
+        }
+    }
+
+    [Fact]
+    public async Task Cors_OrigemNaoConfigurada_NaoDeveReceberCabecalho()
+    {
+        using var factory = _factory.WithWebHostBuilder(builder =>
+            builder.UseSetting("Cors:AllowedOrigins:0", "https://a.vercel.app"));
+        var client = factory.CreateClient();
+        var request = new HttpRequestMessage(HttpMethod.Options, "/api/v1/cursos");
+        request.Headers.Add("Origin", "https://frontend-lovat-iota-wvh45bt95b.vercel.app");
+        request.Headers.Add("Access-Control-Request-Method", "GET");
+
+        var response = await client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        response.Headers.Contains("Access-Control-Allow-Origin").Should().BeFalse();
+    }
+
+    [Fact]
     public async Task ScormPacote_UploadLaunchConteudoEProgresso()
     {
         var client = _factory.CreateClient();
@@ -669,5 +706,63 @@ public class CatalogoApiTests : IClassFixture<WebApplicationFactory<Program>>
         var cursoInexistente = semNota with { UsuarioId = "aluno-invalido@teste.com", Nota = 5, CursoSlug = "curso-que-nao-existe" };
         (await client.PostAsJsonAsync("/api/v1/avaliacoes", cursoInexistente)).StatusCode
             .Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Categorias_DeveCriarEditarSugerirEExcluir()
+    {
+        var client = _factory.CreateClient();
+
+        var iniciais = await client.GetFromJsonAsync<List<CategoriaAdminDto>>("/api/v1/categorias");
+        iniciais.Should().NotBeNull();
+        iniciais!.Should().Contain(c => c.Slug == "ciencias-da-natureza" && c.Cor == "#DEC8F8");
+
+        var nova = new CategoriaSalvarRequest(
+            "Energias Renováveis", Cor: "#0F766E", NomeEn: "Renewable Energy", NomeEs: "Energías Renovables");
+        var criadaResposta = await client.PostAsJsonAsync("/api/v1/categorias", nova);
+        criadaResposta.StatusCode.Should().Be(HttpStatusCode.Created, await criadaResposta.Content.ReadAsStringAsync());
+        var criada = await criadaResposta.Content.ReadFromJsonAsync<CategoriaAdminDto>();
+        criada.Should().NotBeNull();
+        criada!.Slug.Should().Be("energias-renovaveis");
+        criada.Cor.Should().Be("#0F766E");
+        criada.NomeEn.Should().Be("Renewable Energy");
+
+        var similares = await client.GetFromJsonAsync<List<CategoriaSimilarDto>>(
+            "/api/v1/categorias/similares?nome=Energia%20Renovavel");
+        similares.Should().NotBeNull();
+        similares!.Should().Contain(c => c.Id == criada.Id);
+
+        var duplicada = await client.PostAsJsonAsync("/api/v1/categorias", nova);
+        duplicada.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var corInvalida = await client.PostAsJsonAsync(
+            "/api/v1/categorias", nova with { Nome = "Categoria Cor Invalida", Cor = "azul" });
+        corInvalida.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var editadaResposta = await client.PutAsJsonAsync(
+            $"/api/v1/categorias/{criada.Id}", nova with { Nome = "Energias Limpas", Cor = "#DEC8F8" });
+        editadaResposta.StatusCode.Should().Be(HttpStatusCode.OK, await editadaResposta.Content.ReadAsStringAsync());
+        var editada = await editadaResposta.Content.ReadFromJsonAsync<CategoriaAdminDto>();
+        editada!.Nome.Should().Be("Energias Limpas");
+        editada.Cor.Should().Be("#DEC8F8");
+
+        var excluida = await client.DeleteAsync($"/api/v1/categorias/{criada.Id}");
+        excluida.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var restantes = await client.GetFromJsonAsync<List<CategoriaAdminDto>>("/api/v1/categorias");
+        restantes!.Should().NotContain(c => c.Id == criada.Id);
+    }
+
+    [Fact]
+    public async Task Categoria_ComCursosVinculados_NaoPodeSerExcluida()
+    {
+        var client = _factory.CreateClient();
+        var categorias = await client.GetFromJsonAsync<List<CategoriaAdminDto>>("/api/v1/categorias");
+        var emUso = categorias!.First(c => c.Cursos > 0);
+
+        var resposta = await client.DeleteAsync($"/api/v1/categorias/{emUso.Id}");
+        resposta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var corpo = await resposta.Content.ReadAsStringAsync();
+        corpo.Should().Contain("vinculada");
     }
 }

@@ -43,8 +43,16 @@ builder.Services.AddHostedService<Sesi.Catalogo.Api.Infra.InicializacaoBancoHost
 
 // CORS
 // Development pode incluir previews; em produção a lista deve usar origens exatas.
-var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-    ?? (builder.Environment.IsDevelopment()
+// A configuração aceita várias origens em Cors:AllowedOrigins__0..N e também
+// uma lista separada por vírgula ou ponto e vírgula em uma única chave.
+var corsConfigurados = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+var corsOrigins = corsConfigurados
+    .SelectMany(origem => origem.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+    .ToArray();
+
+if (corsOrigins.Length == 0)
+{
+    corsOrigins = builder.Environment.IsDevelopment()
         ? [
             "http://localhost:5173",
             "http://127.0.0.1:5173",
@@ -52,7 +60,8 @@ var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<st
             "http://127.0.0.1:5174",
             "https://*.vercel.app"
         ]
-        : ["https://frontend-ezequiel-reginos-projects.vercel.app"]);
+        : ["https://frontend-ezequiel-reginos-projects.vercel.app"];
+}
 
 if (!builder.Environment.IsDevelopment() && corsOrigins.Any(origem => origem.Contains('*')))
     throw new InvalidOperationException("Configure Cors:AllowedOrigins com origens exatas fora de Development.");
@@ -132,6 +141,10 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddProblemDetails();
 
 var app = builder.Build();
+
+app.Logger.LogInformation(
+    "[CORS] Origens permitidas: {Origins}",
+    corsOrigins.Length == 0 ? "(nenhuma)" : string.Join(", ", corsOrigins));
 
 // Inicialização do banco em background (não bloqueia a subida do Kestrel).
 
@@ -245,11 +258,10 @@ gestao.MapPost("/sessao", async (
     IHostEnvironment ambiente,
     CancellationToken ct) =>
 {
-    var origens = configuracao.GetSection("Cors:AllowedOrigins").Get<string[]>()
-        ?? ["https://frontend-ezequiel-reginos-projects.vercel.app"];
+    var origens = corsOrigins;
     var origem = contexto.Request.Headers.Origin.ToString();
     if (!ambiente.IsDevelopment() && !string.IsNullOrWhiteSpace(origem) &&
-        !origens.Contains(origem, StringComparer.OrdinalIgnoreCase))
+        !OrigemPermitida(origem, origens))
         return Results.Forbid();
 
     var emailAdmin = configuracao["Gestao:Admin:Email"] ?? "admin@sesindustria.com.br";
@@ -331,6 +343,7 @@ gestao.MapGet("/cursos", async (ICatalogoRepositorio repo, CancellationToken ct)
     gestao.MapPost("/usuarios/registro-com-senha", async (
         [FromBody] CriarContaAlunoRequest request,
         GestaoArmazenamento armazenamento,
+        ResendEmailSender emailSender,
         CancellationToken ct) =>
     {
         if (string.IsNullOrWhiteSpace(request.Nome) || request.Nome.Length > 120)
@@ -346,6 +359,7 @@ gestao.MapGet("/cursos", async (ICatalogoRepositorio repo, CancellationToken ct)
         try
         {
             var usuario = await armazenamento.CriarContaAlunoAsync(request.Nome, request.Email, request.Senha, ct);
+            _ = Task.Run(() => emailSender.EnviarBoasVindasAlunoAsync(usuario.Nome, usuario.Email, CancellationToken.None));
             return Results.Ok(usuario);
         }
         catch (InvalidOperationException ex)
@@ -668,6 +682,70 @@ adminV1.MapDelete("/cursos/{slug}", async (string slug, ICatalogoRepositorio rep
 .WithSummary("Desativa um curso do catálogo")
 .Produces(StatusCodes.Status204NoContent)
 .Produces(StatusCodes.Status404NotFound);
+
+adminV1.MapGet("/categorias", async (ICatalogoRepositorio repo, CancellationToken ct) =>
+        Results.Ok(await repo.ListarCategoriasAdminAsync(ct)))
+    .WithName("ListarCategoriasAdministracao")
+    .WithSummary("Lista as categorias com traduções e quantidade de cursos")
+    .Produces<IReadOnlyList<CategoriaAdminDto>>(StatusCodes.Status200OK);
+
+adminV1.MapGet("/categorias/similares", async (
+    [FromQuery] string? nome,
+    [FromQuery] int? ignorarId,
+    ICatalogoRepositorio repo,
+    CancellationToken ct) =>
+{
+    var similares = await repo.BuscarCategoriasSimilaresAsync(nome ?? string.Empty, ignorarId, ct);
+    return Results.Ok(similares);
+})
+.WithName("ListarCategoriasSimilares")
+.WithSummary("Sugere categorias com nome parecido para evitar duplicidade")
+.Produces<IReadOnlyList<CategoriaSimilarDto>>(StatusCodes.Status200OK);
+
+adminV1.MapPost("/categorias", async ([FromBody] CategoriaSalvarRequest request, ICatalogoRepositorio repo, CancellationToken ct) =>
+{
+    try
+    {
+        var categoria = await repo.SalvarCategoriaAsync(null, request, ct);
+        return Results.Created($"/api/v1/categorias/{categoria!.Id}", categoria);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return ErroValidacao(ex);
+    }
+})
+.WithName("CriarCategoria")
+.WithSummary("Cria uma categoria com cor e traduções")
+.Produces<CategoriaAdminDto>(StatusCodes.Status201Created)
+.Produces(StatusCodes.Status400BadRequest);
+
+adminV1.MapPut("/categorias/{id:int}", async (int id, [FromBody] CategoriaSalvarRequest request, ICatalogoRepositorio repo, CancellationToken ct) =>
+{
+    try
+    {
+        var categoria = await repo.SalvarCategoriaAsync(id, request, ct);
+        return categoria is null ? Results.NotFound() : Results.Ok(categoria);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return ErroValidacao(ex);
+    }
+})
+.WithName("AtualizarCategoria")
+.WithSummary("Atualiza nome, cor, ordem e traduções de uma categoria")
+.Produces<CategoriaAdminDto>(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status400BadRequest)
+.Produces(StatusCodes.Status404NotFound);
+
+adminV1.MapDelete("/categorias/{id:int}", async (int id, ICatalogoRepositorio repo, CancellationToken ct) =>
+{
+    var erro = await repo.ExcluirCategoriaAsync(id, ct);
+    return erro is null ? Results.NoContent() : Results.BadRequest(new { erro });
+})
+.WithName("ExcluirCategoria")
+.WithSummary("Exclui uma categoria sem cursos vinculados")
+.Produces(StatusCodes.Status204NoContent)
+.Produces(StatusCodes.Status400BadRequest);
 
 adminV1.MapGet("/cursos/{slug}/perguntas", async (string slug, ICatalogoRepositorio repo, CancellationToken ct) =>
 {

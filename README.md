@@ -35,7 +35,7 @@
 - **AVA** em `/area-do-aluno/curso/:slug`, em duas colunas, com introdução, seis módulos, busca, progresso e conteúdo.
 - **Página de curso SCORM** em `/curso/:slug/scorm`, compartilhando hero, benefícios, módulos/FAQ, depoimentos, suporte e matrícula com cursos em blocos; textos e imagens por URL são configuráveis no admin.
 - **Upload e player SCORM 1.2/2004** em `/curso/:slug/scorm/player`, com progresso persistente, preferências de acessibilidade sincronizadas com o AVA, um pacote ativo por curso, download do ZIP publicado e substituição validada; o player mantém o header e retorno aos detalhes.
-- **Painel administrativo** para cursos e limite global de upload SCORM (20/50/80/100/200 MB; padrão 100 MB), com editor de módulos/aulas e blocos (texto, vídeo, imagem e quiz).
+- **Painel administrativo** para cursos, categorias e limite global de upload SCORM (20/50/80/100/200 MB; padrão 100 MB), com editor de módulos/aulas e blocos (texto, vídeo, imagem e quiz). A gestão de categorias permite criar, renomear, traduzir, trocar a cor do badge, reordenar e excluir categorias sem cursos vinculados; ao digitar um nome, a API sugere categorias parecidas para evitar duplicidade.
 - **Fluxo interno de cursos** com Rascunho, Homologado e Publicado. Somente cursos publicados e dentro da data programada aparecem no catálogo; as datas de publicação, liberação de matrícula e disponibilização controlam a oferta.
 - **Acessibilidade** com modal de ajustes, rolagem interna, filtros de visão, **slider de fonte em passos fixos**, modo dislexia, **VLibras opcional** e seletor de idioma.
 - **Consentimento de cookies** persistido em `localStorage` e no cookie `sesi_cookies`; o banner não reaparece após a decisão.
@@ -172,7 +172,7 @@ projeto — a verificação estática é feita por `npm run typecheck`.
 | `/curso/:slug/scorm` | Página padronizada do curso SCORM, progresso e player |
 | `/area-do-aluno` | Login modal e dashboard do aluno (perfil, matrículas, certificados, calendário) |
 | `/area-do-aluno/curso/:slug` | AVA do curso: introdução, seis módulos, busca e progresso |
-| `/admin/cursos` | CRUD de cursos, configuração do limite de upload e gestão do pacote SCORM ativo |
+| `/admin/cursos` | CRUD de cursos, gestão de categorias, configuração do limite de upload e gestão do pacote SCORM ativo |
 | `/sobre` | Página institucional com história, valores, pilares e vídeos |
 | `*` | Página 404 |
 
@@ -192,6 +192,11 @@ projeto — a verificação estática é feita por `npm run typecheck`.
 | `POST` | `/api/v1/matriculas` | Matricula o aluno em uma turma |
 | `GET` | `/api/v1/matriculas?usuarioId=...` | Lista as matrículas do aluno |
 | `GET` | `/api/v1/facetas` | Categorias, modalidades e status para os filtros |
+| `GET` | `/api/v1/categorias` | Lista categorias com traduções e quantidade de cursos (admin) |
+| `GET` | `/api/v1/categorias/similares?nome=...` | Sugere categorias com nome parecido para evitar duplicidade |
+| `POST` | `/api/v1/categorias` | Cria categoria com cor, ordem e traduções |
+| `PUT` | `/api/v1/categorias/{id}` | Atualiza a categoria |
+| `DELETE` | `/api/v1/categorias/{id}` | Exclui categoria sem cursos vinculados |
 | `GET` | `/api/v1/cursos/{slug}/progresso` | Progresso do aluno (header `X-Usuario-Id`) |
 | `POST` | `/api/v1/sessoes-scorm` | Commit de sessão SCORM |
 | `GET` | `/api/v1/sessoes-scorm?sessaoId=...` | Recupera sessão SCORM |
@@ -361,6 +366,7 @@ repo/
   Database__Provider=Npgsql
   ConnectionStrings__Catalogo=Host=...;Database=...;Username=...;Password=...
   Cors__AllowedOrigins__0=https://frontend-ezequiel-reginos-projects.vercel.app
+  Cors__AllowedOrigins__1=https://frontend-lovat-iota-wvh45bt95b.vercel.app
   Gestao__Admin__Email=admin@sesindustria.com.br
   Gestao__Admin__Senha=<segredo-forte-configurado-no-Render>
   Gestao__DiretorioDados=/var/data/gestao
@@ -371,7 +377,8 @@ repo/
 - Em desenvolvimento, o padrão é SQLite (`Data Source=catalogo.db`), sem configuração extra.
 - Configure `Gestao__Admin__Senha` como segredo no painel do Render; não use a senha demonstrativa nem a versione no repositório. O e-mail configurado precisa corresponder a um usuário ativo com papel `Administrador`.
 - Anexe um disco persistente do Render montado em `/var/data`. A gestão e os pacotes/progresso SCORM ainda usam arquivos; sem o disco, esses dados podem ser perdidos em novos deploys ou reinicializações.
-- `Cors__AllowedOrigins__0` deve conter a origem exata do front-end publicado. A API rejeita curingas de origem fora de Development para impedir que outros sites compartilhem a sessão administrativa.
+- `Cors__AllowedOrigins__0` deve conter a origem exata do front-end publicado. Use `__1`, `__2`… para mais origens (produção e previews) ou uma única chave com a lista separada por vírgula. A API rejeita curingas de origem fora de Development para impedir que outros sites compartilhem a sessão administrativa. Cada nova URL de preview da Vercel precisa ser adicionada explicitamente: o domínio com hash muda a cada deploy.
+- No log de inicialização, a API imprime `[CORS] Origens permitidas: ...`. Se a origem do frontend não estiver nessa lista, o navegador bloqueia a resposta mesmo com HTTP 200.
 
 ---
 

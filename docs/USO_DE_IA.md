@@ -60,6 +60,7 @@ Os prompts abaixo registram os pedidos usados para acionar a validação. Eles d
 | Ajuda e gestão de chamados | "Valide o modal 'Fale com a gente' registrando curso, URL e usuário, e a gestão de chamados com mudança de status e notificação ao aluno." |
 | Avaliação de curso | "Valide a avaliação do curso: envio pelo aluno logado com nota, depoimento e as cinco perguntas da pesquisa; exibição no detalhe e na home; média e total; comportamento em pt-BR, en-US e es-ES; e bloqueio para visitante." |
 | Documentação | "Revise a documentação e confira números de testes, rotas, comandos e referências citadas." |
+| Categorias e CORS (24/10/2026) | "Valide a gestão de categorias: cor lilás `#DEC8F8` no badge de Ciências da Natureza, criação com sugestão de nomes parecidos, edição de cor, exclusão bloqueada quando há cursos e atualização do catálogo. Valide também o CORS da API em produção para a origem publicada na Vercel, conferindo preflight e cabeçalhos." |
 
 ## Exemplos de solicitações de apoio
 

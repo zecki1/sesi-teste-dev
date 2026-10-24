@@ -757,3 +757,33 @@ aplicarNaRaiz(lerConfig())
 - **Motivo:** refletir o processo real de trabalho e evitar que o apoio de validação seja confundido com autoria.
 - **Impacto/limitação:** o registro histórico do incidente de commit de 23/10/2026 permanece, sem identificar a ferramenta. Os resultados de build/teste continuam vinculados ao checkpoint em que foram executados.
 - **Validação:** conferência por busca textual de nomes de produtos de IA nos documentos; revisão dos textos e commit autorizado pelo autor nesta rodada.
+
+### D045 - Gestão de categorias com cor editável e prevenção de duplicidade
+
+- **Data:** 24/10/2026
+- **Problema:** as categorias eram fixas no seeder. O badge de Ciências da Natureza usava azul (`#0EA5E9`), diferente do lilás do design (`#DEC8F8`), e não havia como criar, renomear, traduzir, reordenar, trocar a cor ou excluir categorias sem alterar o código.
+- **Decisão:**
+  - O badge usa a cor da categoria como fundo, tanto no catálogo quanto na home e no detalhe. O texto continua calculado por luminância.
+  - A cor de Ciências da Natureza passa a ser `#DEC8F8` no seeder. Em bancos existentes, a atualização é idempotente e só ocorre se o valor antigo (`#0EA5E9`) ainda estiver gravado, para não sobrescrever uma cor escolhida na gestão.
+  - A API expõe `GET/POST /api/v1/categorias`, `PUT/DELETE /api/v1/categorias/{id}` e `GET /api/v1/categorias/similares`.
+  - O slug é gerado a partir do nome quando não informado; nomes iguais (sem diferenciar acento/caixa) e slugs repetidos são recusados.
+  - A exclusão é bloqueada quando a categoria tem cursos vinculados, com mensagem indicando quantos cursos precisam ser movidos.
+  - A similaridade usa distância de Levenshtein normalizada, com bônus para nomes que contêm um ao outro, e retorna até cinco sugestões acima de 45%.
+  - No admin, a tela de categorias abre pelo botão “Categorias” em `/admin/cursos` e oferece seletor de cor, entrada hexadecimal, prévia do badge, nomes em EN/ES, ordem e ícone opcional.
+- **Motivo:** permitir que o catálogo seja mantido pelo painel, padronizar o badge com o design e evitar categorias redundantes.
+- **Impacto/limitação:** sem migrations, a estrutura de categorias já existente é reutilizada; as traduções continuam em `CategoriasTraducoes`. Excluir uma categoria não move cursos automaticamente.
+- **Validação:** backend **30/30** (novos testes de CRUD, similaridade, cor inválida, duplicidade, exclusão em uso e lista separada por vírgula no CORS), `typecheck`, frontend **17/17**, build e verificação em navegador do fluxo completo (sugestão de nome parecido, criação, edição de cor, exclusão e badge lilás no catálogo).
+
+### D046 - CORS de produção por origem exata e lista configurável
+
+- **Data:** 24/10/2026
+- **Problema:** após publicar o frontend em uma nova URL da Vercel (`https://frontend-lovat-iota-wvh45bt95b.vercel.app`), o navegador bloqueou todas as chamadas à API com “No 'Access-Control-Allow-Origin' header”. As respostas chegavam com HTTP 200, mas sem o cabeçalho CORS.
+- **Causa raiz:** a API respondeu corretamente para a origem antiga (`frontend-ezequiel-reginos-projects.vercel.app`) e não reconheceu a nova. A lista de produção vem de `Cors:AllowedOrigins` no Render, que ainda apontava apenas para o domínio antigo; fora de Development a API rejeita curingas por segurança, então a origem nova não era autorizada.
+- **Decisão:**
+  - Manter a exigência de origens exatas em produção, sem `*`, porque a API usa `AllowCredentials` e a sessão administrativa é um cookie.
+  - Aceitar a lista em `Cors__AllowedOrigins__0..N` e também uma única chave separada por vírgula ou ponto e vírgula, com remoção de espaços e duplicatas.
+  - Registrar no boot `[CORS] Origens permitidas: ...` para tornar o diagnóstico imediato.
+  - Reutilizar a mesma lista normalizada na validação de origem do `POST /api/v1/gestao/sessao`.
+- **Como corrigir em produção:** cadastrar a URL exata do frontend no Render (`Cors__AllowedOrigins__1=...`), salvar e redeployar. Para previews, cadastrar cada URL explicitamente, pois o hash muda a cada deploy; o ideal é usar o domínio estável de produção da Vercel.
+- **Motivo:** evitar que qualquer site Vercel compartilhe a sessão administrativa, mantendo o painel funcionando na origem publicada.
+- **Validação:** requisições reais à API em produção confirmaram `Access-Control-Allow-Origin` para a origem antiga e ausência do cabeçalho para a nova; localmente, **30/30** testes de backend, incluindo dois novos casos de CORS (lista separada por vírgula e origem não configurada sem cabeçalho).

@@ -44,12 +44,12 @@ export function AccessibilityMenu() {
   // Sobe os botões fixos quando o banner de cookies está aberto.
   useEffect(() => assinarAlturaBannerCookie(setOffsetCookies), [])
 
+  const programarOcultacao = () => {
+    if (timerOcultarRef.current) clearTimeout(timerOcultarRef.current)
+    timerOcultarRef.current = setTimeout(() => setBotoesVisiveis(false), 60000)
+  }
+
   useEffect(() => {
-    const programarOcultacao = () => {
-      if (timerOcultarRef.current) clearTimeout(timerOcultarRef.current)
-      if (botoesRef.current?.matches(":hover") || botoesRef.current?.contains(document.activeElement)) return
-      timerOcultarRef.current = setTimeout(() => setBotoesVisiveis(false), 5000)
-    }
     const aoRolar = () => {
       setBotoesVisiveis(true)
       programarOcultacao()
@@ -164,22 +164,6 @@ export function AccessibilityMenu() {
 
       <div
         ref={botoesRef}
-        onPointerEnter={() => {
-          if (timerOcultarRef.current) clearTimeout(timerOcultarRef.current)
-          setBotoesVisiveis(true)
-        }}
-        onPointerLeave={() => {
-          timerOcultarRef.current = setTimeout(() => setBotoesVisiveis(false), 5000)
-        }}
-        onFocus={() => {
-          if (timerOcultarRef.current) clearTimeout(timerOcultarRef.current)
-          setBotoesVisiveis(true)
-        }}
-        onBlur={(evento) => {
-          if (!evento.currentTarget.contains(evento.relatedTarget as Node | null)) {
-            timerOcultarRef.current = setTimeout(() => setBotoesVisiveis(false), 5000)
-          }
-        }}
         className={`pointer-events-none fixed left-4 z-[9999] flex flex-col gap-3 transition-all duration-300 ${
           botoesVisiveis
             ? "translate-x-0 opacity-100"
@@ -189,7 +173,10 @@ export function AccessibilityMenu() {
       >
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            setOpen(true)
+            setBotoesVisiveis(false)
+          }}
           aria-label={t("a11y:open")}
           title={t("a11y:open")}
           aria-expanded={open}
@@ -204,7 +191,10 @@ export function AccessibilityMenu() {
         </button>
         <button
           type="button"
-          onClick={() => window.dispatchEvent(new Event("sesi:abrir-ajuda"))}
+          onClick={() => {
+            window.dispatchEvent(new Event("sesi:abrir-ajuda"))
+            setBotoesVisiveis(false)
+          }}
           aria-label="Ajuda ao aluno"
           title="Ajuda ao aluno"
           className="pointer-events-auto grid h-12 w-12 place-items-center rounded-full border-2 border-white bg-[var(--sesi-red)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.35)] ring-1 ring-black/20 transition hover:scale-105 hover:bg-[var(--sesi-red-dark)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sesi-red)]"
@@ -220,15 +210,10 @@ export function AccessibilityMenu() {
           type="button"
           aria-label="Mostrar botões de acessibilidade e ajuda"
           title="Mostrar acessibilidade e ajuda"
-          onPointerEnter={() => {
+          onClick={() => {
             setBotoesVisiveis(true)
-            timerOcultarRef.current = setTimeout(() => setBotoesVisiveis(false), 5000)
+            programarOcultacao()
           }}
-          onTouchStart={() => {
-            setBotoesVisiveis(true)
-            timerOcultarRef.current = setTimeout(() => setBotoesVisiveis(false), 5000)
-          }}
-          onFocus={() => setBotoesVisiveis(true)}
           className="fixed left-0 z-[9999] grid h-16 w-5 place-items-center rounded-r-md border border-l-0 border-white/50 bg-[var(--sesi-black)]/65 text-xs text-white shadow-md"
           style={{ bottom: `calc(1rem + ${offsetCookies}px)` }}
         >

@@ -35,6 +35,7 @@ export function Hero() {
         fetchPriority="high"
         loading="eager"
         decoding="async"
+        sizes="100vw"
         className="absolute inset-0 -z-10 h-full w-full object-cover"
       />
       <div className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(208,6,2,0.92)_0%,rgba(208,6,2,0.86)_100%)]" />

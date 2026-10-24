@@ -3,6 +3,7 @@ import { Link } from "react-router-dom"
 import { MainLayout } from "@/components/layout/main-layout"
 import { Container } from "@/components/layout/container"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useCursos, useFacetas } from "@/hooks/use-catalogo"
 import { IconeCategoria, estiloBadgeCategoria } from "@/lib/ui/icones-categoria"
 import { imagemDoCurso } from "@/lib/ui/imagens-cursos"
@@ -77,9 +78,14 @@ export function CatalogoPage() {
             )}
           </div>
 
-          {!isLoading && (
+          {(isLoading || !data) && (
             <div className="flex items-center justify-between">
-              <p className="text-[var(--sesi-muted)]">{data ? `${data.total} resultado(s) encontrado(s)` : "0 resultado(s)"}</p>
+              <Skeleton className="h-5 w-48" />
+            </div>
+          )}
+          {!isLoading && data && (
+            <div className="flex items-center justify-between">
+              <p className="text-[var(--sesi-muted)]">{`${data.total} resultado(s) encontrado(s)`}</p>
             </div>
           )}
 
@@ -93,14 +99,14 @@ export function CatalogoPage() {
               {Array.from({ length: 6 }, (_, indice) => (
                 <div
                   key={indice}
-                  className="relative flex aspect-[4/5] animate-pulse flex-col justify-between overflow-hidden rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-[#F5F5F5] p-6"
+                  className="relative flex aspect-[4/5] flex-col justify-between overflow-hidden rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white p-6"
                 >
-                  <span className="h-7 w-28 rounded-full bg-[#E5E5E5]" />
+                  <Skeleton className="h-7 w-28 rounded-full" />
                   <div className="flex flex-col gap-3">
-                    <span className="h-7 w-full rounded bg-[#E5E5E5]" />
-                    <span className="h-4 w-4/5 rounded bg-[#E5E5E5]" />
-                    <span className="h-4 w-2/3 rounded bg-[#E5E5E5]" />
-                    <span className="mt-2 h-3 w-1/3 rounded bg-[#E5E5E5]" />
+                    <Skeleton className="h-7 w-full" />
+                    <Skeleton className="h-4 w-4/5" />
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="mt-2 h-3 w-1/3" />
                   </div>
                 </div>
               ))}

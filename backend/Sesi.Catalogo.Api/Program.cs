@@ -1,4 +1,10 @@
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
@@ -30,16 +36,20 @@ if (builder.Environment.IsDevelopment() &&
 }
 
 // CORS
-// WithOrigins não aceita curingas, por isso a comparação é feita manualmente
-// (ex.: "https://*.vercel.app" cobre produção e previews da Vercel).
+// Development pode incluir previews; em produção a lista deve usar origens exatas.
 var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-    ?? [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-        "https://*.vercel.app"
-    ];
+    ?? (builder.Environment.IsDevelopment()
+        ? [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:5174",
+            "http://127.0.0.1:5174",
+            "https://*.vercel.app"
+        ]
+        : ["https://frontend-ezequiel-reginos-projects.vercel.app"]);
+
+if (!builder.Environment.IsDevelopment() && corsOrigins.Any(origem => origem.Contains('*')))
+    throw new InvalidOperationException("Configure Cors:AllowedOrigins com origens exatas fora de Development.");
 
 static IResult ErroValidacao(InvalidOperationException ex) =>
     Results.BadRequest(new { erro = ex.Message });
@@ -64,6 +74,41 @@ builder.Services.AddCors(options =>
               .AllowCredentials();
     });
 });
+
+builder.Services
+    .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = builder.Environment.IsDevelopment() ? "sesi-admin" : "__Host-sesi-admin";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.Path = "/";
+        options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+            ? CookieSecurePolicy.SameAsRequest
+            : CookieSecurePolicy.Always;
+        options.Cookie.SameSite = builder.Environment.IsDevelopment()
+            ? SameSiteMode.Lax
+            : SameSiteMode.None;
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.SlidingExpiration = true;
+        options.Events.OnRedirectToLogin = contexto =>
+        {
+            contexto.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return Task.CompletedTask;
+        };
+        options.Events.OnRedirectToAccessDenied = contexto =>
+        {
+            contexto.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return Task.CompletedTask;
+        };
+    });
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("Administrador", policy =>
+        policy.RequireAuthenticatedUser()
+            .RequireRole("Administrador")
+            .AddRequirements(new OrigemAdminRequirement(corsOrigins)));
+});
+builder.Services.AddSingleton<IAuthorizationHandler, OrigemAdminAuthorizationHandler>();
 
 // Swagger / OpenAPI
 builder.Services.AddEndpointsApiExplorer();
@@ -104,18 +149,17 @@ app.UseStaticFiles(new StaticFileOptions
     DefaultContentType = "application/octet-stream",
 });
 
-if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Sesi.Catalogo.Api v1");
-        c.RoutePrefix = "swagger";
-    });
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Sesi.Catalogo.Api v1");
+    c.RoutePrefix = "swagger";
+});
 
 app.UseCors();
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
 
 // Health
 app.MapGet("/health", () => Results.Ok(new { status = "ok", timestamp = DateTime.UtcNow }))
@@ -182,11 +226,75 @@ v1.MapPost("/chamados", async (
 .Produces(StatusCodes.Status201Created)
 .Produces(StatusCodes.Status400BadRequest);
 
-if (app.Environment.IsDevelopment())
-{
-    var gestao = v1.MapGroup("/gestao").WithTags("Gestão local (sem autenticação real)");
+var gestao = v1.MapGroup("/gestao").WithTags("Gestão");
+if (!app.Environment.IsDevelopment())
+    gestao.RequireAuthorization("Administrador");
 
-    gestao.MapGet("/cursos", async (ICatalogoRepositorio repo, CancellationToken ct) =>
+gestao.MapPost("/sessao", async (
+    [FromBody] AutenticarAlunoRequest request,
+    HttpContext contexto,
+    IConfiguration configuracao,
+    GestaoArmazenamento armazenamento,
+    IHostEnvironment ambiente,
+    CancellationToken ct) =>
+{
+    var origens = configuracao.GetSection("Cors:AllowedOrigins").Get<string[]>()
+        ?? ["https://frontend-ezequiel-reginos-projects.vercel.app"];
+    var origem = contexto.Request.Headers.Origin.ToString();
+    if (!ambiente.IsDevelopment() && !string.IsNullOrWhiteSpace(origem) &&
+        !origens.Contains(origem, StringComparer.OrdinalIgnoreCase))
+        return Results.Forbid();
+
+    var emailAdmin = configuracao["Gestao:Admin:Email"] ?? "admin@sesindustria.com.br";
+    var senhaAdmin = configuracao["Gestao:Admin:Senha"];
+    if (string.IsNullOrWhiteSpace(senhaAdmin))
+        return Results.Problem(
+            "A autenticação administrativa não foi configurada no servidor.",
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    if (!ResendEmailSender.EmailValido(request.Email) ||
+        request.Email.Length > 254 ||
+        string.IsNullOrEmpty(request.Senha) ||
+        request.Senha.Length > 128)
+        return Results.BadRequest(new { erro = "Informe um e-mail e uma senha válidos." });
+
+    var senhaInformadaHash = SHA256.HashData(Encoding.UTF8.GetBytes(request.Senha));
+    var senhaConfiguradaHash = SHA256.HashData(Encoding.UTF8.GetBytes(senhaAdmin));
+    if (!request.Email.Equals(emailAdmin, StringComparison.OrdinalIgnoreCase) ||
+        !CryptographicOperations.FixedTimeEquals(senhaInformadaHash, senhaConfiguradaHash))
+        return Results.Json(new { erro = "E-mail ou senha inválidos." }, statusCode: StatusCodes.Status401Unauthorized);
+
+    var usuario = await armazenamento.ObterUsuarioPorEmailAsync(emailAdmin, ct);
+    if (usuario is null || !usuario.Ativo || usuario.Papel != "Administrador")
+        return Results.Json(new { erro = "A conta administrativa está inativa ou não está cadastrada." }, statusCode: StatusCodes.Status403Forbidden);
+
+    var identidade = new ClaimsIdentity(
+    [
+        new Claim(ClaimTypes.NameIdentifier, usuario.Id),
+        new Claim(ClaimTypes.Name, usuario.Nome),
+        new Claim(ClaimTypes.Email, usuario.Email),
+        new Claim(ClaimTypes.Role, usuario.Papel),
+    ], CookieAuthenticationDefaults.AuthenticationScheme);
+    await contexto.SignInAsync(
+        CookieAuthenticationDefaults.AuthenticationScheme,
+        new ClaimsPrincipal(identidade),
+        new AuthenticationProperties { IsPersistent = false });
+    return Results.Ok(usuario);
+})
+.AllowAnonymous()
+.WithName("AutenticarAdministrador")
+.WithSummary("Inicia uma sessão administrativa segura por cookie HttpOnly")
+.Produces<UsuarioGestaoDto>(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status401Unauthorized)
+.Produces(StatusCodes.Status503ServiceUnavailable);
+
+gestao.MapDelete("/sessao", async (HttpContext contexto) =>
+{
+    await contexto.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    return Results.NoContent();
+})
+.WithName("EncerrarSessaoAdministrador");
+
+gestao.MapGet("/cursos", async (ICatalogoRepositorio repo, CancellationToken ct) =>
         Results.Ok(await repo.ListarCursosAdministracaoAsync(ct)))
     .WithName("ListarCursosAdministracao")
     .WithSummary("Lista cursos ativos em qualquer etapa de desenvolvimento para o admin local")
@@ -242,7 +350,8 @@ if (app.Environment.IsDevelopment())
     .WithSummary("Cria uma conta de aluno com senha armazenada em hash")
     .Produces<UsuarioGestaoDto>(StatusCodes.Status200OK)
     .Produces(StatusCodes.Status400BadRequest)
-    .Produces(StatusCodes.Status409Conflict);
+    .Produces(StatusCodes.Status409Conflict)
+    .AllowAnonymous();
 
     gestao.MapPost("/usuarios/autenticar", async (
         [FromBody] AutenticarAlunoRequest request,
@@ -262,7 +371,8 @@ if (app.Environment.IsDevelopment())
     .WithSummary("Valida a senha de uma conta de aluno local")
     .Produces<UsuarioGestaoDto>(StatusCodes.Status200OK)
     .Produces(StatusCodes.Status400BadRequest)
-    .Produces(StatusCodes.Status401Unauthorized);
+    .Produces(StatusCodes.Status401Unauthorized)
+    .AllowAnonymous();
 
     gestao.MapGet("/usuarios/perfil", async (
         [FromQuery] string email,
@@ -307,6 +417,7 @@ if (app.Environment.IsDevelopment())
         string id,
         [FromBody] SalvarUsuarioGestaoRequest request,
         GestaoArmazenamento armazenamento,
+        IConfiguration configuracao,
         CancellationToken ct) =>
     {
         if (string.IsNullOrWhiteSpace(request.Nome) || request.Nome.Length > 120)
@@ -315,6 +426,13 @@ if (app.Environment.IsDevelopment())
             return Results.BadRequest(new { erro = "Informe um e-mail válido." });
         if (!GestaoArmazenamento.Papeis.Contains(request.Papel, StringComparer.Ordinal))
             return Results.BadRequest(new { erro = "Selecione um papel válido." });
+        var adminEmail = configuracao["Gestao:Admin:Email"] ?? "admin@sesindustria.com.br";
+        var contaAdmin = await armazenamento.ObterUsuarioPorEmailAsync(adminEmail, ct);
+        if (contaAdmin?.Id == id &&
+            (!request.Email.Equals(adminEmail, StringComparison.OrdinalIgnoreCase) ||
+             request.Papel != "Administrador" ||
+             !request.Ativo))
+            return Results.BadRequest(new { erro = "A conta administrativa configurada não pode ser desativada, removida ou rebaixada." });
 
         try
         {
@@ -331,8 +449,17 @@ if (app.Environment.IsDevelopment())
     })
     .WithName("AtualizarUsuarioGestao");
 
-    gestao.MapDelete("/usuarios/{id}", async (string id, GestaoArmazenamento armazenamento, CancellationToken ct) =>
+    gestao.MapDelete("/usuarios/{id}", async (
+        string id,
+        GestaoArmazenamento armazenamento,
+        IConfiguration configuracao,
+        CancellationToken ct) =>
     {
+        var adminEmail = configuracao["Gestao:Admin:Email"] ?? "admin@sesindustria.com.br";
+        var contaAdmin = await armazenamento.ObterUsuarioPorEmailAsync(adminEmail, ct);
+        if (contaAdmin?.Id == id)
+            return Results.BadRequest(new { erro = "A conta administrativa configurada não pode ser desativada, removida ou rebaixada." });
+
         try
         {
             return await armazenamento.ExcluirUsuarioAsync(id, ct) ? Results.NoContent() : Results.NotFound();
@@ -429,7 +556,6 @@ if (app.Environment.IsDevelopment())
         return Results.Ok(await armazenamento.RegistrarMarcoCursoAsync(request, ct));
     })
     .WithName("RegistrarMarcoCurso");
-}
 
 v1.MapGet("/facetas", async (ICatalogoRepositorio repo, CancellationToken ct) =>
 {
@@ -468,7 +594,11 @@ v1.MapGet("/cursos/{slug}/turmas", async (string slug, ICatalogoRepositorio repo
 .WithSummary("Turmas ativas do curso com data, dias, horário e modalidade")
 .Produces<IReadOnlyList<TurmaDto>>(StatusCodes.Status200OK);
 
-v1.MapPost("/cursos", async ([FromBody] CursoSalvarRequest request, ICatalogoRepositorio repo, CancellationToken ct) =>
+var adminV1 = v1.MapGroup("");
+if (!app.Environment.IsDevelopment())
+    adminV1.RequireAuthorization("Administrador");
+
+adminV1.MapPost("/cursos", async ([FromBody] CursoSalvarRequest request, ICatalogoRepositorio repo, CancellationToken ct) =>
 {
     try
     {
@@ -485,7 +615,7 @@ v1.MapPost("/cursos", async ([FromBody] CursoSalvarRequest request, ICatalogoRep
 .Produces<CursoDetalheDto>(StatusCodes.Status201Created)
 .Produces(StatusCodes.Status400BadRequest);
 
-v1.MapPut("/cursos/{slug}", async (string slug, [FromBody] CursoSalvarRequest request, ICatalogoRepositorio repo, CancellationToken ct) =>
+adminV1.MapPut("/cursos/{slug}", async (string slug, [FromBody] CursoSalvarRequest request, ICatalogoRepositorio repo, CancellationToken ct) =>
 {
     try
     {
@@ -503,7 +633,7 @@ v1.MapPut("/cursos/{slug}", async (string slug, [FromBody] CursoSalvarRequest re
 .Produces(StatusCodes.Status400BadRequest)
 .Produces(StatusCodes.Status404NotFound);
 
-v1.MapDelete("/cursos/{slug}", async (string slug, ICatalogoRepositorio repo, CancellationToken ct) =>
+adminV1.MapDelete("/cursos/{slug}", async (string slug, ICatalogoRepositorio repo, CancellationToken ct) =>
 {
     var removido = await repo.ExcluirCursoAsync(slug, ct);
     return removido ? Results.NoContent() : Results.NotFound();
@@ -583,7 +713,7 @@ v1.MapGet("/sessoes-scorm", async ([FromQuery] string sessaoId, ICatalogoReposit
 .Produces(StatusCodes.Status404NotFound);
 
 // SCORM: upload do pacote, player e progresso persistente
-v1.MapGet("/scorm/configuracoes", async (ScormArmazenamento armazenamento, CancellationToken ct) =>
+adminV1.MapGet("/scorm/configuracoes", async (ScormArmazenamento armazenamento, CancellationToken ct) =>
 {
     var configuracao = await armazenamento.ObterConfiguracaoAsync(ct);
     return Results.Ok(configuracao);
@@ -592,7 +722,7 @@ v1.MapGet("/scorm/configuracoes", async (ScormArmazenamento armazenamento, Cance
 .WithSummary("Obtém o limite configurado para pacotes SCORM")
 .Produces<ScormConfiguracaoDto>(StatusCodes.Status200OK);
 
-v1.MapPut("/scorm/configuracoes", async (
+adminV1.MapPut("/scorm/configuracoes", async (
     [FromBody] AtualizarLimiteScormRequest? request,
     ScormArmazenamento armazenamento,
     CancellationToken ct) =>
@@ -621,14 +751,14 @@ v1.MapGet("/scorm/paginas/{cursoSlug}", async (
     CancellationToken ct) =>
 {
     var configuracao = await armazenamento.ObterConfiguracaoPaginaAsync(cursoSlug, ct);
-    return configuracao is null ? Results.NotFound() : Results.Ok(configuracao);
+    return configuracao is null ? Results.NoContent() : Results.Ok(configuracao);
 })
 .WithName("ObterConfiguracaoPaginaScorm")
 .WithSummary("Obtém a configuração persistida da página pública SCORM")
 .Produces<ScormPaginaConfigDto>(StatusCodes.Status200OK)
-.Produces(StatusCodes.Status404NotFound);
+.Produces(StatusCodes.Status204NoContent);
 
-v1.MapPut("/scorm/paginas/{cursoSlug}", async (
+adminV1.MapPut("/scorm/paginas/{cursoSlug}", async (
     string cursoSlug,
     [FromBody] ScormPaginaConfigDto? configuracao,
     ScormArmazenamento armazenamento,
@@ -652,7 +782,7 @@ v1.MapPut("/scorm/paginas/{cursoSlug}", async (
 .Produces<ScormPaginaConfigDto>(StatusCodes.Status200OK)
 .Produces(StatusCodes.Status400BadRequest);
 
-v1.MapPost("/scorm/pacotes", async (HttpRequest request, ScormArmazenamento armazenamento, CancellationToken ct) =>
+adminV1.MapPost("/scorm/pacotes", async (HttpRequest request, ScormArmazenamento armazenamento, CancellationToken ct) =>
 {
     if (!request.HasFormContentType)
         return Results.BadRequest(new { erro = "Envie o pacote como multipart/form-data." });
@@ -694,14 +824,14 @@ v1.MapPost("/scorm/pacotes", async (HttpRequest request, ScormArmazenamento arma
 v1.MapGet("/scorm/pacotes/{cursoSlug}", async (string cursoSlug, ScormArmazenamento armazenamento, CancellationToken ct) =>
 {
     var pacote = await armazenamento.ObterPorCursoAsync(cursoSlug, ct);
-    return pacote is null ? Results.NotFound() : Results.Ok(pacote);
+    return pacote is null ? Results.NoContent() : Results.Ok(pacote);
 })
 .WithName("ObterPacoteScorm")
 .WithSummary("Obtém o pacote SCORM publicado para um curso")
 .Produces<ScormPacoteDto>(StatusCodes.Status200OK)
-.Produces(StatusCodes.Status404NotFound);
+.Produces(StatusCodes.Status204NoContent);
 
-v1.MapGet("/scorm/pacotes", async (ScormArmazenamento armazenamento, CancellationToken ct) =>
+adminV1.MapGet("/scorm/pacotes", async (ScormArmazenamento armazenamento, CancellationToken ct) =>
     Results.Ok(await armazenamento.ListarPacotesAsync(ct)))
 .WithName("ListarPacotesScorm")
 .WithSummary("Lista os pacotes SCORM ativos para identificação dos cursos no admin")
@@ -719,7 +849,7 @@ v1.MapGet("/scorm/pacotes/{id}/launch", async (string id, string? usuarioId, Sco
 .WithName("AbrirPlayerScorm")
 .WithSummary("Player SCORM com API 1.2/2004 e retomada de progresso");
 
-v1.MapGet("/scorm/pacotes/{id}/download", async (
+adminV1.MapGet("/scorm/pacotes/{id}/download", async (
     string id,
     ScormArmazenamento armazenamento,
     CancellationToken ct) =>
@@ -737,7 +867,7 @@ v1.MapGet("/scorm/pacotes/{id}/download", async (
 .Produces(StatusCodes.Status200OK)
 .Produces(StatusCodes.Status404NotFound);
 
-v1.MapDelete("/scorm/pacotes/{cursoSlug}", async (string cursoSlug, ScormArmazenamento armazenamento, CancellationToken ct) =>
+adminV1.MapDelete("/scorm/pacotes/{cursoSlug}", async (string cursoSlug, ScormArmazenamento armazenamento, CancellationToken ct) =>
 {
     var removido = await armazenamento.ExcluirAsync(cursoSlug, ct);
     return removido ? Results.NoContent() : Results.NotFound();

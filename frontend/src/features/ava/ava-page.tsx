@@ -7,6 +7,7 @@ import { useScormAcessibilidade } from "@/features/scorm/use-scorm-acessibilidad
 import { useBodyScrollLock } from "@/lib/ui/use-body-scroll-lock"
 import { API_URL, type CursoDetalheDto, type ModuloDto } from "@/lib/api/catalogo"
 import { Container } from "@/components/layout/container"
+import { MainLayout } from "@/components/layout/main-layout"
 import { SesiMark } from "@/components/layout/footer"
 import bannerAva from "@/assets/case/banner-ava.png"
 import logoWhite from "@/assets/logo-sesi-industria-white.svg"
@@ -425,6 +426,105 @@ export function AvaPage() {
 
   const modoScorm = Boolean(pacoteScorm)
 
+  if (!scormResolvido) {
+    return (
+      <MainLayout>
+        <Container className="flex min-h-[50vh] items-center justify-center text-sm text-[var(--sesi-muted)]">
+          {t("loading")}
+        </Container>
+      </MainLayout>
+    )
+  }
+
+  if (modoScorm && pacoteScorm) {
+    return (
+      <MainLayout>
+        {mostrarRetomada && (
+          <div
+            data-modal-retomada
+            className="fixed inset-0 z-[60] grid place-items-center bg-black/60 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titulo-retomada"
+            data-lenis-prevent
+          >
+            <div className="w-full max-w-md rounded-[var(--radius-lg)] bg-white p-6 shadow-2xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sesi-muted)]">Sua jornada</p>
+              <h2 id="titulo-retomada" className="mt-2 font-['Open_Sans_Condensed',sans-serif] text-2xl font-bold text-[var(--sesi-black)]">
+                Continuar de onde parei?
+              </h2>
+              <p className="mt-2 text-sm text-[var(--sesi-muted)]">
+                Seu progresso máximo é {progresso}%. Você pode retomar o checkpoint salvo ou reiniciar o conteúdo sem apagar esse progresso.
+              </p>
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={continuarDeOndeParei}
+                  disabled={reiniciandoScorm}
+                  className="flex-1 rounded-[var(--radius-lg)] bg-[var(--sesi-red)] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--sesi-red-dark)]"
+                >
+                  Continuar de onde parei
+                </button>
+                <button
+                  type="button"
+                  onClick={comecarDoInicio}
+                  disabled={reiniciandoScorm}
+                  className="flex-1 rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] px-4 py-2.5 text-sm font-semibold text-[var(--sesi-black)] transition hover:bg-[var(--sesi-gray)]"
+                >
+                  {reiniciandoScorm ? "Reiniciando..." : "Começar do início"}
+                </button>
+              </div>
+              {erroScorm && (
+                <p role="alert" className="mt-3 text-sm font-medium text-[var(--sesi-red)]">
+                  {erroScorm}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="min-h-[calc(100svh-72px)] bg-[var(--sesi-white)] py-6 lg:py-8">
+          <Container>
+            <Link
+              to="/area-do-aluno"
+              className="mb-5 inline-flex text-xs font-semibold text-[var(--sesi-muted)] underline-offset-4 transition hover:text-[var(--sesi-black)] hover:underline"
+            >
+              ← {t("backToArea")}
+            </Link>
+            <section className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--sesi-gray)] px-4 py-3">
+                <div>
+                  <h2 className="font-semibold text-[var(--sesi-black)]">Conteúdo original do curso</h2>
+                  <p className="mt-1 text-xs text-[var(--sesi-muted)]">SCORM {pacoteScorm.versao} · Seu progresso é salvo automaticamente.</p>
+                </div>
+                <strong className="text-sm text-[var(--sesi-black)]">{progresso}% concluído</strong>
+              </div>
+              {erroScorm && (
+                <p role="alert" className="border-b border-[var(--sesi-gray)] px-4 py-3 text-sm text-[var(--sesi-red)]">
+                  {erroScorm}
+                </p>
+              )}
+              {!playerScormAtivo ? (
+                <div className="grid min-h-[420px] place-items-center text-sm text-[var(--sesi-muted)]">
+                  {reiniciandoScorm ? "Reiniciando o conteúdo SCORM..." : "Carregando o conteúdo SCORM..."}
+                </div>
+              ) : (
+                <iframe
+                  key={versaoPlayerScorm}
+                  data-player-scorm
+                  src={urlPlayerScorm(pacoteScorm, perfil.email)}
+                  title={`Conteúdo SCORM do curso ${curso?.nomeBreve ?? "do aluno"}`}
+                  className="h-[75vh] min-h-[500px] w-full border-0"
+                  allow="fullscreen"
+                />
+              )}
+            </section>
+          </Container>
+        </div>
+      </MainLayout>
+    )
+  }
+
   return (
     <div className="grid min-h-screen grid-cols-1 bg-[var(--sesi-white)] lg:grid-cols-12">
       {mostrarRetomada && (
@@ -442,15 +542,12 @@ export function AvaPage() {
               Continuar de onde parei?
             </h2>
             <p className="mt-2 text-sm text-[var(--sesi-muted)]">
-              {pacoteScorm
-                ? `Seu progresso máximo é ${progresso}%. Você pode retomar o checkpoint salvo ou reiniciar o conteúdo sem apagar esse progresso.`
-                : `Você já visitou ${visitados.size} de ${itens.length} conteúdos deste curso. Retome do último ponto ou volte ao início sem perder o progresso.`}
+              Você já visitou {visitados.size} de {itens.length} conteúdos deste curso. Retome do último ponto ou volte ao início sem perder o progresso.
             </p>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
                 onClick={continuarDeOndeParei}
-                disabled={reiniciandoScorm}
                 className="flex-1 rounded-[var(--radius-lg)] bg-[var(--sesi-red)] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--sesi-red-dark)]"
               >
                 Continuar de onde parei
@@ -458,22 +555,15 @@ export function AvaPage() {
               <button
                 type="button"
                 onClick={comecarDoInicio}
-                disabled={reiniciandoScorm}
                 className="flex-1 rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] px-4 py-2.5 text-sm font-semibold text-[var(--sesi-black)] transition hover:bg-[var(--sesi-gray)]"
               >
-                {reiniciandoScorm ? "Reiniciando..." : "Começar do início"}
+                Começar do início
               </button>
             </div>
-            {erroScorm && (
-              <p role="alert" className="mt-3 text-sm font-medium text-[var(--sesi-red)]">
-                {erroScorm}
-              </p>
-            )}
           </div>
         </div>
       )}
 
-      {!modoScorm && (
       <aside className="flex flex-col border-r border-[var(--sesi-gray)] lg:sticky lg:top-0 lg:col-span-2 lg:h-screen lg:overflow-y-auto">
         <div className="bg-[var(--sesi-black)] px-5 py-6 text-white">
           <SesiMark />
@@ -502,79 +592,71 @@ export function AvaPage() {
         </div>
 
         <div className="flex flex-1 flex-col bg-white px-4 py-5">
-          {pacoteScorm ? (
-            <p className="rounded-lg bg-[var(--sesi-gray)] px-3 py-3 text-sm leading-relaxed text-[var(--sesi-muted)]">
-              Navegue pelos módulos e atividades no conteúdo SCORM ao lado.
-            </p>
-          ) : (
-            <>
-              <div className="relative">
-                <svg
-                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--sesi-muted)]"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
-                  <path d="m20 20-3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-                <input
-                  type="search"
-                  value={busca}
-                  onChange={(evento) => setBusca(evento.target.value)}
-                  placeholder={t("searchLessons")}
-                  aria-label={t("searchLessons")}
-                  className="w-full rounded-lg border border-[var(--sesi-gray)] bg-white py-2 pl-9 pr-3 text-sm text-[var(--sesi-black)] placeholder:text-[var(--sesi-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sesi-black)]"
-                />
-              </div>
+          <div className="relative">
+            <svg
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--sesi-muted)]"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+              <path d="m20 20-3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+            <input
+              type="search"
+              value={busca}
+              onChange={(evento) => setBusca(evento.target.value)}
+              placeholder={t("searchLessons")}
+              aria-label={t("searchLessons")}
+              className="w-full rounded-lg border border-[var(--sesi-gray)] bg-white py-2 pl-9 pr-3 text-sm text-[var(--sesi-black)] placeholder:text-[var(--sesi-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sesi-black)]"
+            />
+          </div>
 
-              <nav className="mt-5" aria-label={t("title")}>
-                {buscaNormalizada ? (
-                  itensFiltrados.length > 0 ? (
-                    <ul className="flex flex-col gap-1">
-                      {itensFiltrados.map((item) => (
-                        <ItemNavegacao
-                          key={item.id}
-                          item={item}
-                          ativo={itemSelecionado.id === item.id}
-                          visitado={visitados.has(item.id)}
-                          onSelect={() => selecionarItem(item.id)}
-                        />
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="px-3 text-sm text-[var(--sesi-muted)]">Nenhum item encontrado.</p>
-                  )
-                ) : (
-                  <>
-                    <p className="px-3 text-sm font-bold text-[var(--sesi-black)]">1. Introdução</p>
-                    <ul className="mt-1 flex flex-col gap-1">
-                      {itensIntroducaoFiltrados.map((item) => (
-                        <ItemNavegacao
-                          key={item.id}
-                          item={item}
-                          ativo={itemSelecionado.id === item.id}
-                          visitado={visitados.has(item.id)}
-                          onSelect={() => selecionarItem(item.id)}
-                        />
-                      ))}
-                    </ul>
-                    <ul className="mt-3 flex flex-col gap-1">
-                      {itensModulosFiltrados.map((item) => (
-                        <ItemNavegacao
-                          key={item.id}
-                          item={item}
-                          ativo={itemSelecionado.id === item.id}
-                          visitado={visitados.has(item.id)}
-                          onSelect={() => selecionarItem(item.id)}
-                        />
-                      ))}
-                    </ul>
-                  </>
-                )}
-              </nav>
-            </>
-          )}
+          <nav className="mt-5" aria-label={t("title")}>
+            {buscaNormalizada ? (
+              itensFiltrados.length > 0 ? (
+                <ul className="flex flex-col gap-1">
+                  {itensFiltrados.map((item) => (
+                    <ItemNavegacao
+                      key={item.id}
+                      item={item}
+                      ativo={itemSelecionado.id === item.id}
+                      visitado={visitados.has(item.id)}
+                      onSelect={() => selecionarItem(item.id)}
+                    />
+                  ))}
+                </ul>
+              ) : (
+                <p className="px-3 text-sm text-[var(--sesi-muted)]">Nenhum item encontrado.</p>
+              )
+            ) : (
+              <>
+                <p className="px-3 text-sm font-bold text-[var(--sesi-black)]">1. Introdução</p>
+                <ul className="mt-1 flex flex-col gap-1">
+                  {itensIntroducaoFiltrados.map((item) => (
+                    <ItemNavegacao
+                      key={item.id}
+                      item={item}
+                      ativo={itemSelecionado.id === item.id}
+                      visitado={visitados.has(item.id)}
+                      onSelect={() => selecionarItem(item.id)}
+                    />
+                  ))}
+                </ul>
+                <ul className="mt-3 flex flex-col gap-1">
+                  {itensModulosFiltrados.map((item) => (
+                    <ItemNavegacao
+                      key={item.id}
+                      item={item}
+                      ativo={itemSelecionado.id === item.id}
+                      visitado={visitados.has(item.id)}
+                      onSelect={() => selecionarItem(item.id)}
+                    />
+                  ))}
+                </ul>
+              </>
+            )}
+          </nav>
 
           <Link
             to="/area-do-aluno"
@@ -584,59 +666,17 @@ export function AvaPage() {
           </Link>
         </div>
       </aside>
-      )}
 
-      <main className={modoScorm ? "lg:col-span-12" : "lg:col-span-10"}>
+      <main className="lg:col-span-10">
         <Container className="py-6 lg:py-8">
-          {pacoteScorm ? (
-            <>
-              <Link
-                to="/area-do-aluno"
-                className="mb-5 inline-flex text-xs font-semibold text-[var(--sesi-muted)] underline-offset-4 transition hover:text-[var(--sesi-black)] hover:underline"
-              >
-                ← {t("backToArea")}
-              </Link>
-              <section className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--sesi-gray)] px-4 py-3">
-                  <div>
-                    <h2 className="font-semibold text-[var(--sesi-black)]">Conteúdo original do curso</h2>
-                    <p className="mt-1 text-xs text-[var(--sesi-muted)]">SCORM {pacoteScorm.versao} · Seu progresso é salvo automaticamente.</p>
-                  </div>
-                  <strong className="text-sm text-[var(--sesi-black)]">{progresso}% concluído</strong>
-                </div>
-                {erroScorm && (
-                  <p role="alert" className="border-b border-[var(--sesi-gray)] px-4 py-3 text-sm text-[var(--sesi-red)]">
-                    {erroScorm}
-                  </p>
-                )}
-                {!scormResolvido || !playerScormAtivo ? (
-                  <div className="grid min-h-[420px] place-items-center text-sm text-[var(--sesi-muted)]">
-                    {reiniciandoScorm ? "Reiniciando o conteúdo SCORM..." : "Carregando o conteúdo SCORM..."}
-                  </div>
-                ) : (
-                  <iframe
-                    key={versaoPlayerScorm}
-                    data-player-scorm
-                    src={urlPlayerScorm(pacoteScorm, perfil.email)}
-                    title={`Conteúdo SCORM do curso ${curso?.nomeBreve ?? "do aluno"}`}
-                    className="h-[70vh] min-h-[420px] w-full border-0"
-                    allow="fullscreen"
-                  />
-                )}
-              </section>
-            </>
-          ) : erroScorm ? (
-            <div role="alert" className="rounded-[var(--radius-lg)] border border-red-200 bg-red-50 p-6 text-sm text-red-800">
+          {erroScorm && (
+            <div role="alert" className="mb-6 rounded-[var(--radius-lg)] border border-red-200 bg-red-50 p-6 text-sm text-red-800">
               Não foi possível verificar se este curso tem conteúdo SCORM. {erroScorm}
             </div>
-          ) : !scormResolvido ? (
-            <div className="grid min-h-[320px] place-items-center text-sm text-[var(--sesi-muted)]">
-              Verificando conteúdo do curso...
-            </div>
-          ) : (
-            <>
-              <div data-banner-ava className="relative overflow-hidden rounded-lg">
-                <img src={bannerAva} alt="" className="h-[140px] w-full object-cover sm:h-[220px] lg:h-[320px]" />
+          )}
+
+          <div data-banner-ava className="relative overflow-hidden rounded-lg">
+            <img src={bannerAva} alt="" className="h-[140px] w-full object-cover sm:h-[220px] lg:h-[320px]" />
                 <img
                   src={logoWhite}
                   alt="SESI Indústria"
@@ -704,8 +744,6 @@ export function AvaPage() {
               </>
             )}
               </article>
-            </>
-          )}
         </Container>
       </main>
     </div>

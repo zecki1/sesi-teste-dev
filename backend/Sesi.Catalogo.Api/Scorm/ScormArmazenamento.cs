@@ -250,6 +250,7 @@ public sealed class ScormArmazenamento
             File.Move(zipTemporario, caminhoZip);
 
             entryFile = AjustarEntryFile(destino, entryFile);
+            ReescreverCaminhosAbsolutos(destino, entryFile);
 
             var pacote = new ScormPacoteDto(
                 id,
@@ -654,6 +655,29 @@ public sealed class ScormArmazenamento
         return primeiroHtml is null
             ? entryFile
             : Path.GetRelativePath(raiz, primeiroHtml).Replace(Path.DirectorySeparatorChar, '/');
+    }
+
+    /// <summary>
+    /// Reescreve referências absolutas (/assets/..., /vite.svg) para relativas (./assets/...),
+    /// evitando 404 quando o pacote é servido sob /scorm/{id}/.
+    /// </summary>
+    private static void ReescreverCaminhosAbsolutos(string raiz, string entryFile)
+    {
+        var caminho = Path.Combine(raiz, entryFile.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(caminho)) return;
+
+        string html;
+        try { html = File.ReadAllText(caminho); }
+        catch { return; }
+
+        if (!html.Contains("src=\"/") && !html.Contains("href=\"/")) return;
+
+        var reescrito = html
+            .Replace("src=\"/", "src=\"./")
+            .Replace("href=\"/", "href=\"./");
+
+        try { File.WriteAllText(caminho, reescrito); }
+        catch { /* ignora falhas de escrita */ }
     }
 
     private static string NormalizarSlug(string? slug) =>

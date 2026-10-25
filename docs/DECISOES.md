@@ -794,3 +794,9 @@ aplicarNaRaiz(lerConfig())
 - **E-mail Resend:** `ResendEmailSender` envia e-mails transacionais (chamados de suporte, certificado emitido) via API Resend. A chave é lida exclusivamente de `Resend:ApiKey` (configuração/variável de ambiente); nunca embutida no código. Remetente e destinatário de suporte configuráveis (`Resend:FromEmail`, `Support:Email`).
 - **Cadastro de usuário (aluno):** `CriarContaAlunoAsync` cria/atualiza o usuário Aluno e grava a credencial com `IPasswordHasher` (BCrypt/ASP.NET). E-mail normalizado para minúsculas; duplicidade de credencial impede re-cadastro. Autenticação via `AutenticarAlunoAsync` exige usuário ativo e papel Aluno.
 - **Segurança:** sem chaves no frontend (`.env`/`.vercel` com token removidos, `.env.production` contém apenas `VITE_API_URL`); SQL apenas via EF Core (sem concatenação de entrada do usuário); endpoints admin protegidos por política `Administrador` com origem validada; CORS com origens exatas em produção (sem curingas).
+
+### D048 - Reescrita de caminhos absolutos em pacotes SCORM
+
+- **Problema:** pacotes SCORM gerados com base absoluta (`/assets/...`) quebravam ao serem servidos sob `/scorm/{id}/` (404 nos assets). Pacotes com base relativa (`./assets/...`) funcionavam.
+- **Decisão:** após a extração, o backend reescreve `src="/` → `src="./` e `href="/` → `href="./"` no HTML de entrada, cobrindo ambos os casos sem exigir rebuild do pacote.
+- **Impacto:** pacotes antigos (enviados antes da correção) mantêm paths absolutos e precisam ser reenviados.

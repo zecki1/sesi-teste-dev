@@ -382,6 +382,22 @@ repo/
 
 ---
 
+## Entregáveis
+
+Os entregáveis do desafio estão na pasta [`entregaveis/`](./entregaveis/):
+
+| # | Arquivo | Descrição |
+|---|---|---|
+| 1 | `1-link-repositorio.txt` | Link do repositório no GitHub |
+| 2 | `2-link-aplicacao-publicada.txt` | Links da aplicação publicada (front + API) |
+| 3 | `3-codigo-fonte-frontend.zip` | Código-fonte do front-end |
+| 4 | `4-codigo-fonte-backend.zip` | Código-fonte do back-end |
+| 5 | `5-banco-de-dados.txt` | Scripts/migrations/arquivo do banco |
+| 6 | `6-README.md` | Documentação (README) |
+| 7 | `7-USO_DE_IA.md` | Registro de uso de IA |
+| 8 | `8-arquivos-publicacao.zip` | Arquivos de publicação (build do front) |
+| 9 | `9-limitacoes.md` | Limitações e itens não concluídos |
+
 ## Links
 
 - **Produção:** https://frontend-ezequiel-reginos-projects.vercel.app

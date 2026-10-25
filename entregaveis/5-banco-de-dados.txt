@@ -1,0 +1,5 @@
+Scripts/migrations/arquivo do banco:
+- O banco SQLite (catalogo.db) e o diretorio App_Data/ sao gerados automaticamente pela API na primeira execucao (InicializacaoBancoHostedService).
+- O seeder idempotente esta em backend/Sesi.Catalogo.Infrastructure/Data/CatalogoSeeder.cs (incluido no zip do backend).
+- Migrations nao sao usadas; a API usa EnsureCreated + DDL idempotente para tabelas de traducao.
+- Provider configuravel via Database__Provider (Sqlite ou Npgsql/Postgres).

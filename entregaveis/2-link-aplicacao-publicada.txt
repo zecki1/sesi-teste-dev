@@ -1,0 +1,2 @@
+Aplicacao publicada (frontend): https://frontend-lovat-iota-wvh45bt95b.vercel.app
+API publicada (backend): https://sesi-teste-dev.onrender.com

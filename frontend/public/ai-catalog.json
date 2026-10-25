@@ -1,0 +1,34 @@
+{
+  "name": "SESI Indústria — Catálogo de Cursos",
+  "version": "1.0.0",
+  "description": "Plataforma de capacitação profissional do SESI Indústria.",
+  "url": "https://frontend-ezequiel-reginos-projects.vercel.app",
+  "api": "https://sesi-teste-dev.onrender.com",
+  "resources": [
+    {
+      "name": "Home",
+      "url": "https://frontend-ezequiel-reginos-projects.vercel.app/",
+      "type": "page"
+    },
+    {
+      "name": "Catálogo de cursos",
+      "url": "https://frontend-ezequiel-reginos-projects.vercel.app/catalogo",
+      "type": "page"
+    },
+    {
+      "name": "Sobre",
+      "url": "https://frontend-ezequiel-reginos-projects.vercel.app/sobre",
+      "type": "page"
+    },
+    {
+      "name": "API de cursos",
+      "url": "https://sesi-teste-dev.onrender.com/api/v1/cursos",
+      "type": "api"
+    },
+    {
+      "name": "Facetas",
+      "url": "https://sesi-teste-dev.onrender.com/api/v1/facetas",
+      "type": "api"
+    }
+  ]
+}

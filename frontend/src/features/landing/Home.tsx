@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { useCursos } from "@/hooks/use-catalogo"
 import { ArrowLeft, ArrowRight } from "@/components/ui/arrow-icons"
 import { IconeCategoria, estiloBadgeCategoria } from "@/lib/ui/icones-categoria"
-import { imagemDoCurso } from "@/lib/ui/imagens-cursos"
+import { imagemDoCurso, srcSetDoCurso } from "@/lib/ui/imagens-cursos"
 import { useSliderArrastavel } from "@/hooks/use-slider-arrastavel"
 
 export function Home() {
@@ -102,6 +102,8 @@ export function Home() {
                   <img
                     data-capa
                     src={imagemDoCurso(curso)}
+                    srcSet={srcSetDoCurso(curso.slug)}
+                    sizes="(max-width: 640px) 85vw, (max-width: 1024px) 50vw, 25vw"
                     alt=""
                     loading="lazy"
                     decoding="async"

@@ -70,10 +70,8 @@ html[data-vlibras="off"] [vw-plugin-wrapper] {
 [vw-access-button] img,
 img[src*="vlibras-popup"] {
   aspect-ratio: 450 / 120 !important;
-  width: auto !important;
-  max-width: 150px !important;
-  height: auto !important;
-  max-height: 40px !important;
+  width: 150px !important;
+  height: 40px !important;
   object-fit: contain !important;
 }
 

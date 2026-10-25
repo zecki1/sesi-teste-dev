@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCursos, useFacetas } from "@/hooks/use-catalogo"
 import { IconeCategoria, estiloBadgeCategoria } from "@/lib/ui/icones-categoria"
-import { imagemDoCurso } from "@/lib/ui/imagens-cursos"
+import { imagemDoCurso, srcSetDoCurso } from "@/lib/ui/imagens-cursos"
 
 export function CatalogoPage() {
   const { t } = useTranslation("catalog")
@@ -141,6 +141,8 @@ export function CatalogoPage() {
                   <img
                     data-capa
                     src={imagemDoCurso(curso)}
+                    srcSet={srcSetDoCurso(curso.slug)}
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                     alt=""
                     loading="lazy"
                     decoding="async"

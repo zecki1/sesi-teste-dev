@@ -40,8 +40,10 @@
           popups.forEach((popup) => {
             popup.setAttribute('width', '150');
             popup.setAttribute('height', '40');
-            popup.style.aspectRatio = '450 / 120';
-            popup.style.objectFit = 'contain';
+            popup.style.setProperty('width', '150px', 'important');
+            popup.style.setProperty('height', '40px', 'important');
+            popup.style.setProperty('aspect-ratio', '450 / 120', 'important');
+            popup.style.setProperty('object-fit', 'contain', 'important');
           });
         };
 

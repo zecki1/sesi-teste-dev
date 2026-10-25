@@ -1,0 +1,23 @@
+# SESI Indústria — Catálogo de Cursos
+
+> Plataforma de capacitação profissional do SESI Indústria. Consulta, pesquisa e filtros de cursos, detalhes, matrícula, AVA (Ambiente Virtual de Aprendizagem) e certificados.
+
+## Páginas principais
+
+- [Home](https://frontend-ezequiel-reginos-projects.vercel.app/): página inicial com destaques e impacto.
+- [Catálogo de cursos](https://frontend-ezequiel-reginos-projects.vercel.app/catalogo): listagem com busca e filtros.
+- [Sobre](https://frontend-ezequiel-reginos-projects.vercel.app/sobre): informações institucionais.
+- [Área do aluno](https://frontend-ezequiel-reginos-projects.vercel.app/area-do-aluno): matrículas, progresso e certificados.
+
+## API
+
+- [Health check](https://sesi-teste-dev.onrender.com/health)
+- [Cursos](https://sesi-teste-dev.onrender.com/api/v1/cursos)
+- [Facetas](https://sesi-teste-dev.onrender.com/api/v1/facetas)
+
+## Documentação
+
+- [README](https://github.com/zecki1/sesi-teste-dev/blob/main/README.md)
+- [Decisões](https://github.com/zecki1/sesi-teste-dev/blob/main/docs/DECISOES.md)
+- [Uso de IA](https://github.com/zecki1/sesi-teste-dev/blob/main/docs/USO_DE_IA.md)
+- [Limitações](https://github.com/zecki1/sesi-teste-dev/blob/main/docs/LIMITACOES.md)

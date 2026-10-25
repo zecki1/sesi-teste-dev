@@ -325,6 +325,7 @@ gestao.MapDelete("/sessao", async (HttpContext contexto) =>
     await contexto.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     return Results.NoContent();
 })
+.AllowAnonymous()
 .WithName("EncerrarSessaoAdministrador");
 
 gestao.MapGet("/cursos", async (ICatalogoRepositorio repo, CancellationToken ct) =>

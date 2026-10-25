@@ -20,8 +20,8 @@ export function AdminDashboardGraficos({ cursos, usuarios = [] }: AdminDashboard
     const cargaHorariaMedia = totalCursos > 0 ? Math.round(cargaHorariaTotal / totalCursos) : 0
 
     const alunosCadastrados = usuarios.filter((u) => u.papel === "Aluno")
-    const totalAlunos = Math.max(alunosCadastrados.length, 42)
-    const totalUsuarios = Math.max(usuarios.length, 56)
+    const totalAlunos = alunosCadastrados.length
+    const totalUsuarios = usuarios.length
 
     const cursosEstatisticas = cursos.map((curso, index) => {
       const hash = Math.abs(curso.slug.split("").reduce((acc, ch) => (acc << 5) - acc + ch.charCodeAt(0), index + 1))

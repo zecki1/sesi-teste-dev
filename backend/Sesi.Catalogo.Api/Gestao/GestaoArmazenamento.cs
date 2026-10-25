@@ -437,8 +437,47 @@ public sealed class GestaoArmazenamento
         File.Move(temporario, destino, true);
     }
 
-    private sealed record CredencialUsuario(string UsuarioId, string PasswordHash);
-    private sealed record TokenRedefinicao(string UsuarioId, string Token, DateTime ExpiraEm);
+    public async Task SemearAlunosDemoAsync(CancellationToken ct)
+    {
+        var demo = new (string nome, string email)[]
+        {
+            ("Ana Souza", "ana.souza@exemplo.com"),
+            ("Bruno Lima", "bruno.lima@exemplo.com"),
+            ("Carla Mendes", "carla.mendes@exemplo.com"),
+            ("Diego Rocha", "diego.rocha@exemplo.com"),
+            ("Eduarda Silva", "eduarda.silva@exemplo.com"),
+            ("Felipe Costa", "felipe.costa@exemplo.com"),
+            ("Gabriela Alves", "gabriela.alves@exemplo.com"),
+            ("Henrique Dias", "henrique.dias@exemplo.com"),
+            ("Isabela Martins", "isabela.martins@exemplo.com"),
+            ("Joao Pedro", "joao.pedro@exemplo.com"),
+        };
+        const string senha = "Sesi@2026";
+
+        foreach (var (nome, email) in demo)
+        {
+            await _semaphore.WaitAsync(ct);
+            try
+            {
+                var usuarios = (await CarregarUsuariosAsync(ct)).ToList();
+                var existente = usuarios.FirstOrDefault(u => u.Email.Equals(email, StringComparison.OrdinalIgnoreCase));
+                if (existente is not null) continue;
+
+                var usuario = new UsuarioGestaoDto(
+                    Guid.NewGuid().ToString("N"), nome, email.ToLowerInvariant(), "Aluno", true, DateTime.UtcNow);
+                usuarios.Add(usuario);
+                await GravarAsync("usuarios.json", usuarios, ct);
+
+                var credenciais = (await LerAsync<CredencialUsuario[]>("credenciais.json", [], ct)).ToList();
+                credenciais.Add(new CredencialUsuario(usuario.Id, _passwordHasher.HashPassword(usuario, senha)));
+                await GravarAsync("credenciais.json", credenciais, ct);
+            }
+            finally
+            {
+                _semaphore.Release();
+            }
+        }
+    }
 
     public async Task<(UsuarioGestaoDto? usuario, string? token)> SolicitarRedefinicaoSenhaAsync(string email, CancellationToken ct)
     {
@@ -495,4 +534,6 @@ public sealed class GestaoArmazenamento
         }
     }
 
+    private sealed record CredencialUsuario(string UsuarioId, string PasswordHash);
+    private sealed record TokenRedefinicao(string UsuarioId, string Token, DateTime ExpiraEm);
 }

@@ -334,6 +334,36 @@ export function ScormCursoPage() {
       />
       <BeneficiosCurso />
 
+      <section className="py-6">
+        <Container>
+          <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white p-4">
+            <span className="text-sm font-semibold text-[var(--sesi-black)]">Idioma do conteúdo:</span>
+            {(["pt-BR", "en-US", "es-ES"] as const).map((codigo) => {
+              const disponivel = idiomasDoPacote.includes(codigo)
+              const ativo = idiomaAtual === codigo
+              return (
+                <button
+                  key={codigo}
+                  type="button"
+                  onClick={() => i18n.changeLanguage(codigo)}
+                  className={`inline-flex items-center gap-2 rounded-[var(--radius-pill)] border px-4 py-2 text-sm font-semibold transition ${
+                    ativo
+                      ? "border-[var(--sesi-red)] bg-[var(--sesi-red)] text-white"
+                      : disponivel
+                      ? "border-[var(--sesi-gray)] bg-white text-[var(--sesi-black)] hover:border-[var(--sesi-red)]"
+                      : "border-[var(--sesi-gray)] bg-[#F5F5F5] text-[var(--sesi-muted)]"
+                  }`}
+                  title={disponivel ? "Disponível no pacote" : "Não disponível no pacote"}
+                >
+                  {codigo === "pt-BR" ? "🇧🇷 Português" : codigo === "en-US" ? "🇺🇸 English" : "🇪🇸 Español"}
+                  {!disponivel && <span className="text-xs">(indisponível)</span>}
+                </button>
+              )
+            })}
+          </div>
+        </Container>
+      </section>
+
       <section id="conteudo-scorm" className="scroll-mt-[88px] py-12 sm:py-16">
         <Container className="grid gap-10 lg:grid-cols-12">
           <div className="lg:col-span-8">

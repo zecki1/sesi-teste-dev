@@ -2,16 +2,16 @@ import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
-import type { CursoDetalheDto } from "@/lib/api/catalogo"
 import { criarAvaliacao } from "@/lib/api/catalogo"
 import { usePerfil } from "@/lib/auth/perfil"
 import { useBodyScrollLock } from "@/lib/ui/use-body-scroll-lock"
 import { Button } from "@/components/ui/button"
 
 interface AvaliacaoCursoModalProps {
-  curso: CursoDetalheDto
+  curso: { slug: string; nomeCompleto: string }
   aberto: boolean
   onFechar: () => void
+  onConcluido?: () => void
 }
 
 interface SeletorNotaProps {
@@ -59,7 +59,7 @@ function SeletorNota({ id, pergunta, valor, onChange }: SeletorNotaProps) {
  * Modal de avaliação do curso: nota geral, depoimento e pesquisa de satisfação
  * com cinco perguntas. Envia apenas para o usuário logado.
  */
-export function AvaliacaoCursoModal({ curso, aberto, onFechar }: AvaliacaoCursoModalProps) {
+export function AvaliacaoCursoModal({ curso, aberto, onFechar, onConcluido }: AvaliacaoCursoModalProps) {
   const { t } = useTranslation("course")
   const perfil = usePerfil()
   const queryClient = useQueryClient()
@@ -86,8 +86,10 @@ export function AvaliacaoCursoModal({ curso, aberto, onFechar }: AvaliacaoCursoM
   }, [aberto, onFechar])
 
   function fechar() {
+    const eraEnviado = enviado
     setEnviado(false)
     setEnviando(false)
+    if (eraEnviado) onConcluido?.()
     onFechar()
   }
 

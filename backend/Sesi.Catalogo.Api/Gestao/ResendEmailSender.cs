@@ -9,12 +9,12 @@ public sealed record ResultadoEnvioChamado(bool SuporteEnviado, bool AlunoEnviad
 
 public sealed class ResendEmailSender(HttpClient httpClient, IConfiguration configuracao)
 {
-    private const string ApiKeyPadrao = "re_Rnx3wjrS_DHhiGBMNjoeLW2Kz4z2H7oGj";
+    // Chave lida apenas de configuracao (Resend:ApiKey). Nunca embutir no codigo.
     private const string BaseUrlPlataforma = "https://frontend-ezequiel-reginos-projects.vercel.app";
 
     public async Task<ResultadoEnvioChamado> EnviarChamadoAsync(ChamadoDto chamado, CancellationToken ct)
     {
-        var chave = configuracao["Resend:ApiKey"] ?? ApiKeyPadrao;
+        var chave = configuracao["Resend:ApiKey"];
         if (string.IsNullOrWhiteSpace(chave))
             return new(false, false, "Resend:ApiKey não está configurada na API.");
 
@@ -79,7 +79,7 @@ public sealed class ResendEmailSender(HttpClient httpClient, IConfiguration conf
 
     public async Task<ResultadoEnvioChamado> EnviarAtualizacaoChamadoAsync(ChamadoDto chamado, CancellationToken ct)
     {
-        var chave = configuracao["Resend:ApiKey"] ?? ApiKeyPadrao;
+        var chave = configuracao["Resend:ApiKey"];
         if (string.IsNullOrWhiteSpace(chave))
             return new(false, false, "Resend:ApiKey não está configurada na API.");
 
@@ -117,7 +117,7 @@ public sealed class ResendEmailSender(HttpClient httpClient, IConfiguration conf
 
     public async Task<bool> EnviarBoasVindasAlunoAsync(string nome, string email, CancellationToken ct)
     {
-        var chave = configuracao["Resend:ApiKey"] ?? ApiKeyPadrao;
+        var chave = configuracao["Resend:ApiKey"];
         if (string.IsNullOrWhiteSpace(chave))
             return false;
 
@@ -158,7 +158,7 @@ public sealed class ResendEmailSender(HttpClient httpClient, IConfiguration conf
         string turmaCodigo,
         CancellationToken ct)
     {
-        var chave = configuracao["Resend:ApiKey"] ?? ApiKeyPadrao;
+        var chave = configuracao["Resend:ApiKey"];
         if (string.IsNullOrWhiteSpace(chave))
             return false;
 
@@ -207,7 +207,7 @@ public sealed class ResendEmailSender(HttpClient httpClient, IConfiguration conf
         string codigoCertificado,
         CancellationToken ct)
     {
-        var chave = configuracao["Resend:ApiKey"] ?? ApiKeyPadrao;
+        var chave = configuracao["Resend:ApiKey"];
         if (string.IsNullOrWhiteSpace(chave))
             return false;
 
@@ -370,6 +370,100 @@ public sealed class ResendEmailSender(HttpClient httpClient, IConfiguration conf
         {
             return false;
         }
+    }
+
+    public async Task<bool> EnviarRedefinicaoSenhaAsync(string email, string nome, string link, CancellationToken ct)
+    {
+        var chave = configuracao["Resend:ApiKey"];
+        if (string.IsNullOrWhiteSpace(chave))
+            return false;
+
+        var remetente = configuracao["Resend:FromEmail"]
+            ?? "SESI Indústria <noreply@zecki1.com.br>";
+
+        var html = ConstruirEmailSesi(
+            "Redefinição de Senha",
+            "Redefina sua senha",
+            $"""
+            <p style="font-size: 17px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">Olá, {WebUtility.HtmlEncode(nome)}!</p>
+            <p style="margin: 0 0 16px 0;">Recebemos uma solicitação para redefinir a senha da sua conta SESI. Clique no botão abaixo para criar uma nova senha. O link é válido por 1 hora.</p>
+            <p style="margin: 0 0 24px 0; color: #4b5563; font-size: 13px;">Se você não solicitou essa alteração, ignore este e-mail — sua senha permanece a mesma.</p>
+            """,
+            "Redefinir Senha",
+            link);
+
+        return await EnviarAsync(
+            chave, remetente, [email],
+            "Redefinição de Senha - SESI Indústria",
+            html, null, null, ct);
+    }
+
+    public async Task<bool> EnviarCopiaCadastroAsync(string nome, string email, CancellationToken ct)
+    {
+        var chave = configuracao["Resend:ApiKey"];
+        if (string.IsNullOrWhiteSpace(chave))
+            return false;
+
+        var remetente = configuracao["Resend:FromEmail"]
+            ?? "SESI Indústria <noreply@zecki1.com.br>";
+        var destinatarioMonitor = configuracao["Monitor:Email"]
+            ?? configuracao["Support:Email"]
+            ?? "zecki1@hotmail.com";
+
+        var html = ConstruirEmailSesi(
+            "Monitoramento · Novo Cadastro",
+            "Novo aluno cadastrado",
+            $"""
+            <p style="margin: 0 0 16px 0;">Um novo aluno criou conta na plataforma:</p>
+            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 0 0 20px 0;">
+              <table style="width: 100%; font-size: 14px; border-collapse: collapse;">
+                <tr><td style="padding: 6px 0; color: #64748b; width: 120px;">Nome:</td><td style="padding: 6px 0; font-weight: 600; color: #0f172a;">{WebUtility.HtmlEncode(nome)}</td></tr>
+                <tr><td style="padding: 6px 0; color: #64748b;">E-mail:</td><td style="padding: 6px 0; font-weight: 600; color: #0f172a;">{WebUtility.HtmlEncode(email)}</td></tr>
+                <tr><td style="padding: 6px 0; color: #64748b;">Data:</td><td style="padding: 6px 0;">{DateTime.UtcNow:dd/MM/yyyy HH:mm} UTC</td></tr>
+              </table>
+            </div>
+            """,
+            "Acessar Painel Admin",
+            $"{BaseUrlPlataforma}/admin/gestao");
+
+        return await EnviarAsync(
+            chave, remetente, [destinatarioMonitor],
+            $"Novo Cadastro: {nome}",
+            html, null, null, ct);
+    }
+
+    public async Task<bool> EnviarCopiaAcessoAsync(string nome, string email, CancellationToken ct)
+    {
+        var chave = configuracao["Resend:ApiKey"];
+        if (string.IsNullOrWhiteSpace(chave))
+            return false;
+
+        var remetente = configuracao["Resend:FromEmail"]
+            ?? "SESI Indústria <noreply@zecki1.com.br>";
+        var destinatarioMonitor = configuracao["Monitor:Email"]
+            ?? configuracao["Support:Email"]
+            ?? "zecki1@hotmail.com";
+
+        var html = ConstruirEmailSesi(
+            "Monitoramento · Novo Acesso",
+            "Acesso à conta",
+            $"""
+            <p style="margin: 0 0 16px 0;">Um aluno acessou a plataforma:</p>
+            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 0 0 20px 0;">
+              <table style="width: 100%; font-size: 14px; border-collapse: collapse;">
+                <tr><td style="padding: 6px 0; color: #64748b; width: 120px;">Nome:</td><td style="padding: 6px 0; font-weight: 600; color: #0f172a;">{WebUtility.HtmlEncode(nome)}</td></tr>
+                <tr><td style="padding: 6px 0; color: #64748b;">E-mail:</td><td style="padding: 6px 0; font-weight: 600; color: #0f172a;">{WebUtility.HtmlEncode(email)}</td></tr>
+                <tr><td style="padding: 6px 0; color: #64748b;">Data:</td><td style="padding: 6px 0;">{DateTime.UtcNow:dd/MM/yyyy HH:mm} UTC</td></tr>
+              </table>
+            </div>
+            """,
+            "Acessar Painel Admin",
+            $"{BaseUrlPlataforma}/admin/gestao");
+
+        return await EnviarAsync(
+            chave, remetente, [destinatarioMonitor],
+            $"Acesso: {nome}",
+            html, null, null, ct);
     }
 
     public static bool EmailValido(string? email) =>

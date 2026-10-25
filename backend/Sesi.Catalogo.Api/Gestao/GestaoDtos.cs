@@ -20,6 +20,10 @@ public sealed record CriarContaAlunoRequest(string Nome, string Email, string Se
 
 public sealed record AutenticarAlunoRequest(string Email, string Senha);
 
+public sealed record SolicitarRedefinicaoRequest(string Email);
+
+public sealed record ConfirmarRedefinicaoRequest(string Token, string NovaSenha);
+
 public sealed record PermissaoPapelDto(
     string Papel,
     bool Criar,

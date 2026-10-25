@@ -1,19 +1,23 @@
 import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { useBodyScrollLock } from "@/lib/ui/use-body-scroll-lock"
+import { AvaliacaoCursoModal } from "@/features/curso/components/avaliacao-curso-modal"
 
 interface ConclusaoCurso {
   slug: string
   titulo: string
   aluno: string
   concluidoEm: string
+  revisao?: boolean
 }
 
 export function StudentCertificateCelebration() {
   const [conclusao, setConclusao] = useState<ConclusaoCurso | null>(null)
+  const [emAvaliacao, setEmAvaliacao] = useState(false)
+  const [mostrarCertificado, setMostrarCertificado] = useState(false)
   const [copiado, setCopiado] = useState(false)
   const fecharRef = useRef<HTMLButtonElement>(null)
-  useBodyScrollLock(Boolean(conclusao))
+  useBodyScrollLock(Boolean(conclusao && (emAvaliacao || mostrarCertificado)))
 
   useEffect(() => {
     const aoConcluir = (evento: Event) => {
@@ -21,6 +25,13 @@ export function StudentCertificateCelebration() {
       if (detalhe?.slug && detalhe?.titulo) {
         setConclusao(detalhe)
         setCopiado(false)
+        if (detalhe.revisao) {
+          setEmAvaliacao(false)
+          setMostrarCertificado(true)
+        } else {
+          setEmAvaliacao(true)
+          setMostrarCertificado(false)
+        }
       }
     }
     window.addEventListener("sesi:curso-concluido", aoConcluir)
@@ -28,20 +39,42 @@ export function StudentCertificateCelebration() {
   }, [])
 
   useEffect(() => {
-    if (!conclusao) return
+    if (!mostrarCertificado || !conclusao) return
     const focoAnterior = document.activeElement as HTMLElement | null
     fecharRef.current?.focus()
     const aoTeclar = (evento: KeyboardEvent) => {
-      if (evento.key === "Escape") setConclusao(null)
+      if (evento.key === "Escape") {
+        setMostrarCertificado(false)
+        setConclusao(null)
+      }
     }
     document.addEventListener("keydown", aoTeclar)
     return () => {
       document.removeEventListener("keydown", aoTeclar)
       focoAnterior?.focus()
     }
-  }, [conclusao])
+  }, [mostrarCertificado, conclusao])
 
   if (!conclusao) return null
+
+  if (emAvaliacao) {
+    return (
+      <AvaliacaoCursoModal
+        curso={{ slug: conclusao.slug, nomeCompleto: conclusao.titulo }}
+        aberto={emAvaliacao}
+        onFechar={() => {
+          setEmAvaliacao(false)
+          setMostrarCertificado(true)
+        }}
+        onConcluido={() => {
+          setEmAvaliacao(false)
+          setMostrarCertificado(true)
+        }}
+      />
+    )
+  }
+
+  if (!mostrarCertificado) return null
 
   const dataFormatada = new Date(conclusao.concluidoEm).toLocaleDateString("pt-BR", {
     day: "2-digit",
@@ -197,7 +230,10 @@ export function StudentCertificateCelebration() {
 
           <Link
             to="/area-do-aluno"
-            onClick={() => setConclusao(null)}
+            onClick={() => {
+              setMostrarCertificado(false)
+              setConclusao(null)
+            }}
             className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white px-4 py-2.5 text-sm font-semibold text-[var(--sesi-black)] hover:bg-gray-50 transition"
           >
             Ver meus cursos
@@ -206,7 +242,10 @@ export function StudentCertificateCelebration() {
           <button
             ref={fecharRef}
             type="button"
-            onClick={() => setConclusao(null)}
+            onClick={() => {
+              setMostrarCertificado(false)
+              setConclusao(null)
+            }}
             className="rounded-[var(--radius-lg)] px-4 py-2.5 text-sm font-semibold text-[var(--sesi-muted)] hover:text-[var(--sesi-black)] transition"
           >
             Fechar

@@ -402,6 +402,36 @@ export function excluirCategoria(id: number): Promise<void> {
   return requisitar<void>(`${API_URL}/api/v1/categorias/${id}`, { method: "DELETE" })
 }
 
+/**
+ * Faz upload de uma imagem (PNG, JPG, WebP, SVG...) e retorna sua URL pública.
+ * Usa o endpoint administrativo `/api/v1/imagens`.
+ */
+export async function enviarImagem(arquivo: File): Promise<string> {
+  const formulario = new FormData()
+  formulario.append("arquivo", arquivo)
+
+  const resposta = await fetch(`${API_URL}/api/v1/imagens`, {
+    method: "POST",
+    body: formulario,
+    credentials: "include",
+  })
+
+  if (!resposta.ok) {
+    let mensagem = "Falha ao enviar a imagem."
+    try {
+      const dados = await resposta.json()
+      if (dados?.erro) mensagem = dados.erro
+    } catch {
+      // ignore
+    }
+    throw new Error(mensagem)
+  }
+
+  const dados = (await resposta.json()) as { url: string }
+  if (!dados?.url) throw new Error("Resposta inválida do servidor.")
+  return dados.url.startsWith("http") ? dados.url : `${API_URL}${dados.url}`
+}
+
 export function buscarCategoriasSimilares(
   nome: string,
   ignorarId?: number,

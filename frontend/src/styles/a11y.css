@@ -63,3 +63,17 @@ html[data-vlibras="off"] [vw-access-button],
 html[data-vlibras="off"] [vw-plugin-wrapper] {
   display: none !important;
 }
+
+/* Correção de proporção do VLibras para conformidade Lighthouse (image-aspect-ratio) */
+#vlibras-popup,
+[vw] img#vlibras-popup,
+[vw-access-button] img,
+img[src*="vlibras-popup"] {
+  aspect-ratio: 450 / 120 !important;
+  width: auto !important;
+  max-width: 150px !important;
+  height: auto !important;
+  max-height: 40px !important;
+  object-fit: contain !important;
+}
+

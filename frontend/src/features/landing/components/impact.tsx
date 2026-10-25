@@ -1,8 +1,8 @@
 import { useTranslation } from "react-i18next"
 import { Container } from "@/components/layout/container"
-import cert from "@/assets/01-certificacao-red.svg"
-import prof from "@/assets/02-professores-red.svg"
-import support from "@/assets/03-suporte-red.svg"
+import cert from "@/assets/icons/01-certificacao-red.svg"
+import prof from "@/assets/icons/02-professores-red.svg"
+import support from "@/assets/icons/03-suporte-red.svg"
 
 const indicators = [
   { value: "25.000+", labelKey: "impactIndicatorGraduated" },

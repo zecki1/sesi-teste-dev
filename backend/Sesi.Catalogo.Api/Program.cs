@@ -167,6 +167,15 @@ app.UseStaticFiles(new StaticFileOptions
     DefaultContentType = "application/octet-stream",
 });
 
+// Imagens enviadas pelo admin (capas, banners, blocos).
+var raizUploads = Path.Combine(app.Environment.ContentRootPath, "uploads");
+Directory.CreateDirectory(Path.Combine(raizUploads, "imagens"));
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(raizUploads),
+    RequestPath = "/uploads",
+});
+
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
@@ -365,6 +374,7 @@ gestao.MapGet("/cursos", async (ICatalogoRepositorio repo, CancellationToken ct)
         {
             var usuario = await armazenamento.CriarContaAlunoAsync(request.Nome, request.Email, request.Senha, ct);
             _ = Task.Run(() => emailSender.EnviarBoasVindasAlunoAsync(usuario.Nome, usuario.Email, CancellationToken.None));
+            _ = Task.Run(() => emailSender.EnviarCopiaCadastroAsync(usuario.Nome, usuario.Email, CancellationToken.None));
             return Results.Ok(usuario);
         }
         catch (InvalidOperationException ex)
@@ -382,6 +392,7 @@ gestao.MapGet("/cursos", async (ICatalogoRepositorio repo, CancellationToken ct)
     gestao.MapPost("/usuarios/autenticar", async (
         [FromBody] AutenticarAlunoRequest request,
         GestaoArmazenamento armazenamento,
+        ResendEmailSender emailSender,
         CancellationToken ct) =>
     {
         if (!ResendEmailSender.EmailValido(request.Email) || request.Email.Length > 254 ||
@@ -389,6 +400,8 @@ gestao.MapGet("/cursos", async (ICatalogoRepositorio repo, CancellationToken ct)
             return Results.BadRequest(new { erro = "Informe um e-mail e uma senha válidos." });
 
         var usuario = await armazenamento.AutenticarAlunoAsync(request.Email, request.Senha, ct);
+        if (usuario is not null)
+            _ = Task.Run(() => emailSender.EnviarCopiaAcessoAsync(usuario.Nome, usuario.Email, CancellationToken.None));
         return usuario is null
             ? Results.Json(new { erro = "E-mail ou senha inválidos." }, statusCode: StatusCodes.Status401Unauthorized)
             : Results.Ok(usuario);
@@ -398,6 +411,51 @@ gestao.MapGet("/cursos", async (ICatalogoRepositorio repo, CancellationToken ct)
     .Produces<UsuarioGestaoDto>(StatusCodes.Status200OK)
     .Produces(StatusCodes.Status400BadRequest)
     .Produces(StatusCodes.Status401Unauthorized)
+    .AllowAnonymous();
+
+    // Redefinição de senha (solicitação por e-mail).
+    gestao.MapPost("/usuarios/redefinir-senha/solicitar", async (
+        [FromBody] SolicitarRedefinicaoRequest request,
+        GestaoArmazenamento armazenamento,
+        ResendEmailSender emailSender,
+        IConfiguration configuracao,
+        CancellationToken ct) =>
+    {
+        if (!ResendEmailSender.EmailValido(request.Email) || request.Email.Length > 254)
+            return Results.BadRequest(new { erro = "Informe um e-mail válido." });
+
+        var (usuario, token) = await armazenamento.SolicitarRedefinicaoSenhaAsync(request.Email, ct);
+        if (usuario is not null && token is not null)
+        {
+            var plataformaUrl = configuracao["Plataforma:Url"] ?? "https://frontend-ezequiel-reginos-projects.vercel.app";
+            var link = $"{plataformaUrl}/redefinir-senha?token={token}";
+            _ = Task.Run(() => emailSender.EnviarRedefinicaoSenhaAsync(usuario.Email, usuario.Nome, link, CancellationToken.None));
+        }
+        // Sempre responde sucesso para não revelar se o e-mail existe.
+        return Results.Ok(new { mensagem = "Se o e-mail estiver cadastrado, você receberá um link de redefinição." });
+    })
+    .WithName("SolicitarRedefinicaoSenha")
+    .WithSummary("Solicita redefinição de senha por e-mail")
+    .Produces(StatusCodes.Status200OK)
+    .Produces(StatusCodes.Status400BadRequest)
+    .AllowAnonymous();
+
+    gestao.MapPost("/usuarios/redefinir-senha/confirmar", async (
+        [FromBody] ConfirmarRedefinicaoRequest request,
+        GestaoArmazenamento armazenamento,
+        CancellationToken ct) =>
+    {
+        if (string.IsNullOrWhiteSpace(request.Token) || request.NovaSenha.Length is < 8 or > 128)
+            return Results.BadRequest(new { erro = "Token e nova senha (8 a 128 caracteres) são obrigatórios." });
+
+        var ok = await armazenamento.RedefinirSenhaAsync(request.Token, request.NovaSenha, ct);
+        return ok ? Results.Ok(new { mensagem = "Senha redefinida com sucesso." })
+                  : Results.BadRequest(new { erro = "Token inválido ou expirado." });
+    })
+    .WithName("ConfirmarRedefinicaoSenha")
+    .WithSummary("Confirma a redefinição de senha com o token recebido por e-mail")
+    .Produces(StatusCodes.Status200OK)
+    .Produces(StatusCodes.Status400BadRequest)
     .AllowAnonymous();
 
     gestao.MapGet("/usuarios/perfil", async (
@@ -782,6 +840,46 @@ adminV1.MapDelete("/categorias/{id:int}", async (int id, ICatalogoRepositorio re
 .WithName("ExcluirCategoria")
 .WithSummary("Exclui uma categoria sem cursos vinculados")
 .Produces(StatusCodes.Status204NoContent)
+.Produces(StatusCodes.Status400BadRequest);
+
+// Upload de imagens para capas, banners e blocos do curso.
+adminV1.MapPost("/imagens", async (HttpRequest request, IWebHostEnvironment ambiente, CancellationToken ct) =>
+{
+    if (!request.HasFormContentType)
+        return Results.BadRequest(new { erro = "Envie a imagem como multipart/form-data." });
+
+    var form = await request.ReadFormAsync(ct);
+    var arquivo = form.Files.GetFile("arquivo") ?? form.Files.FirstOrDefault();
+    if (arquivo is null || arquivo.Length == 0)
+        return Results.BadRequest(new { erro = "Anexe uma imagem." });
+
+    if (string.IsNullOrWhiteSpace(arquivo.ContentType) || !arquivo.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        return Results.BadRequest(new { erro = "O arquivo deve ser uma imagem (PNG, JPG, WebP, SVG...)." });
+
+    const long limiteBytes = 5L * 1024 * 1024;
+    if (arquivo.Length > limiteBytes)
+        return Results.BadRequest(new { erro = "A imagem deve ter no máximo 5 MB." });
+
+    var raiz = Path.Combine(ambiente.ContentRootPath, "uploads", "imagens");
+    Directory.CreateDirectory(raiz);
+
+    var extensao = Path.GetExtension(arquivo.FileName);
+    if (string.IsNullOrWhiteSpace(extensao)) extensao = ".png";
+    extensao = extensao.ToLowerInvariant();
+    var nome = $"{Guid.NewGuid():N}{extensao}";
+    var caminho = Path.Combine(raiz, nome);
+
+    await using (var stream = File.Create(caminho))
+    {
+        await arquivo.CopyToAsync(stream, ct);
+    }
+
+    return Results.Ok(new { url = $"/uploads/imagens/{nome}" });
+})
+.DisableAntiforgery()
+.WithName("EnviarImagem")
+.WithSummary("Faz upload de uma imagem (PNG, JPG, WebP, SVG) e retorna sua URL pública")
+.Produces(StatusCodes.Status200OK)
 .Produces(StatusCodes.Status400BadRequest);
 
 adminV1.MapGet("/cursos/{slug}/perguntas", async (string slug, ICatalogoRepositorio repo, CancellationToken ct) =>
@@ -1268,6 +1366,8 @@ app.MapPost("/api/v1/debug/i18n/seed", async (CatalogoDbContext db, Cancellation
     return Results.Ok(new { ok = true });
 });
 
+app.Logger.LogInformation("[API] Iniciando em http://localhost:5077");
+app.Logger.LogInformation("[API] Swagger: http://localhost:5077/swagger");
 app.Run();
 
 /// <summary>

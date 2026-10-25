@@ -658,30 +658,62 @@ export function AlunoPage() {
               ) : (
                 <ul className="flex flex-col gap-4">
                   {perfil.certificados.map((certificado) => (
-                    <li key={certificado.id} className="flex gap-3 border-b border-[var(--sesi-gray)] pb-4 last:border-0 last:pb-0">
-                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--sesi-beige)] text-lg" aria-hidden="true">
-                        ★
-                      </span>
-                      <div>
-                        <p className="text-sm font-semibold leading-tight text-[var(--sesi-black)]">{certificado.curso}</p>
-                        <p className="text-xs text-[var(--sesi-muted)]">
-                          {t("student:certificates.hours", { count: certificado.cargaHoraria })} ·{" "}
-                          {t("student:certificates.issued", { data: formatarData(certificado.concluidoEm, i18n.language) })}
-                        </p>
-                      </div>
+                    <li key={certificado.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          window.dispatchEvent(new CustomEvent("sesi:curso-concluido", {
+                            detail: {
+                              slug: certificado.id,
+                              titulo: certificado.curso,
+                              aluno: `${perfil.nome} ${perfil.sobrenome}`.trim(),
+                              concluidoEm: certificado.concluidoEm,
+                              revisao: true,
+                            },
+                          }))
+                        }}
+                        className="flex w-full gap-3 border-b border-[var(--sesi-gray)] pb-4 last:border-0 last:pb-0 text-left transition hover:bg-[var(--sesi-beige)]/40 rounded-[var(--radius-lg)] px-2 -mx-2"
+                      >
+                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--sesi-beige)] text-lg" aria-hidden="true">
+                          ★
+                        </span>
+                        <div>
+                          <p className="text-sm font-semibold leading-tight text-[var(--sesi-black)]">{certificado.curso}</p>
+                          <p className="text-xs text-[var(--sesi-muted)]">
+                            {t("student:certificates.hours", { count: certificado.cargaHoraria })} ·{" "}
+                            {t("student:certificates.issued", { data: formatarData(certificado.concluidoEm, i18n.language) })}
+                          </p>
+                        </div>
+                      </button>
                     </li>
                   ))}
                   {matriculas.filter((matricula) => matricula.concluidoEm).map((matricula) => {
                     const curso = porSlug.get(matricula.slug)
                     return (
-                      <li key={`marco-${matricula.slug}`} className="flex gap-3 border-b border-[var(--sesi-gray)] pb-4 last:border-0 last:pb-0">
-                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--sesi-beige)] text-lg" aria-hidden="true">★</span>
-                        <div>
-                          <p className="text-sm font-semibold leading-tight text-[var(--sesi-black)]">{curso?.nomeBreve ?? matricula.slug}</p>
-                          <p className="text-xs text-[var(--sesi-muted)]">
-                            {t("student:certificates.hours", { count: curso?.cargaHoraria ?? 0 })} · {t("student:certificates.issued", { data: formatarData(matricula.concluidoEm ?? "", i18n.language) })}
-                          </p>
-                        </div>
+                      <li key={`marco-${matricula.slug}`}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            window.dispatchEvent(new CustomEvent("sesi:curso-concluido", {
+                              detail: {
+                                slug: matricula.slug,
+                                titulo: curso?.nomeBreve ?? matricula.slug,
+                                aluno: `${perfil.nome} ${perfil.sobrenome}`.trim(),
+                                concluidoEm: matricula.concluidoEm ?? new Date().toISOString(),
+                                revisao: true,
+                              },
+                            }))
+                          }}
+                          className="flex w-full gap-3 border-b border-[var(--sesi-gray)] pb-4 last:border-0 last:pb-0 text-left transition hover:bg-[var(--sesi-beige)]/40 rounded-[var(--radius-lg)] px-2 -mx-2"
+                        >
+                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--sesi-beige)] text-lg" aria-hidden="true">★</span>
+                          <div>
+                            <p className="text-sm font-semibold leading-tight text-[var(--sesi-black)]">{curso?.nomeBreve ?? matricula.slug}</p>
+                            <p className="text-xs text-[var(--sesi-muted)]">
+                              {t("student:certificates.hours", { count: curso?.cargaHoraria ?? 0 })} · {t("student:certificates.issued", { data: formatarData(matricula.concluidoEm ?? "", i18n.language) })}
+                            </p>
+                          </div>
+                        </button>
                       </li>
                     )
                   })}

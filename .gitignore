@@ -48,6 +48,7 @@ obj/
 *.db-shm
 *.db-wal
 /backend/Sesi.Catalogo.Api/App_Data/
+/backend/Sesi.Catalogo.Api/uploads/
 
 # Test coverage
 coverage/

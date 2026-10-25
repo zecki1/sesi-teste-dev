@@ -1,9 +1,9 @@
 import { useTranslation } from "react-i18next"
 import { Container } from "@/components/layout/container"
-import certificacao from "@/assets/beneficios/certificacao.svg"
-import professores from "@/assets/beneficios/professores.svg"
-import suporte from "@/assets/beneficios/suporte.svg"
-import flexibilidade from "@/assets/beneficios/flexibilidade.svg"
+import certificacao from "@/assets/icons/certificacao.svg"
+import professores from "@/assets/icons/professores.svg"
+import suporte from "@/assets/icons/suporte.svg"
+import flexibilidade from "@/assets/icons/flexibilidade.svg"
 
 const BENEFICIOS = [
   {

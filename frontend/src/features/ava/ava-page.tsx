@@ -9,8 +9,8 @@ import { API_URL, type CursoDetalheDto, type ModuloDto } from "@/lib/api/catalog
 import { Container } from "@/components/layout/container"
 import { MainLayout } from "@/components/layout/main-layout"
 import { SesiMark } from "@/components/layout/footer"
-import bannerAva from "@/assets/case/banner-ava.png"
-import logoWhite from "@/assets/logo-sesi-industria-white.svg"
+import bannerAva from "@/assets/banner-ava.png"
+import logoSesi from "@/assets/logo-sesi.svg"
 import { calcularPercentualAva, carregarProgressoAva, salvarProgressoAva } from "./progresso-ava"
 import {
   obterPacoteScorm,
@@ -160,7 +160,7 @@ export function AvaPage() {
   const perfil = usePerfil()
   const { data: curso } = useCurso(slug)
   const [busca, setBusca] = useState("")
-  const [itemAtivo, setItemAtivo] = useState("boas-praticas")
+  const [itemAtivo, setItemAtivo] = useState("introducao")
   const [visitados, setVisitados] = useState<Set<string>>(() => new Set())
   const [percentualMaximo, setPercentualMaximo] = useState(0)
   const [mostrarRetomada, setMostrarRetomada] = useState(false)
@@ -383,7 +383,7 @@ export function AvaPage() {
   const itens = [...ITENS_INTRODUCAO, ...itensModulos]
   const boasPraticas = textosBoasPraticas(curso)
   const recomendacoes = textosRecomendacoes(curso)
-  const itemSelecionado = itens.find((item) => item.id === itemAtivo) ?? ITENS_INTRODUCAO[1]
+  const itemSelecionado = itens.find((item) => item.id === itemAtivo) ?? ITENS_INTRODUCAO[0]
   const progresso = pacoteScorm ? Math.round(progressoScorm?.percentual ?? 0) : percentualMaximo
   const buscaNormalizada = busca.trim().toLowerCase()
   const itensFiltrados = itens.filter((item) =>
@@ -483,15 +483,15 @@ export function AvaPage() {
           </div>
         )}
 
-        <div className="min-h-[calc(100svh-72px)] bg-[var(--sesi-white)] py-6 lg:py-8">
-          <Container>
+        <div className="bg-[var(--sesi-white)] py-4 sm:py-6">
+          <Container className="flex flex-col">
             <Link
               to="/area-do-aluno"
-              className="mb-5 inline-flex text-xs font-semibold text-[var(--sesi-muted)] underline-offset-4 transition hover:text-[var(--sesi-black)] hover:underline"
+              className="mb-3 inline-flex text-xs font-semibold text-[var(--sesi-muted)] underline-offset-4 transition hover:text-[var(--sesi-black)] hover:underline"
             >
               ← {t("backToArea")}
             </Link>
-            <section className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white shadow-sm">
+            <section className="flex flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--sesi-gray)] px-4 py-3">
                 <div>
                   <h2 className="font-semibold text-[var(--sesi-black)]">Conteúdo original do curso</h2>
@@ -505,7 +505,7 @@ export function AvaPage() {
                 </p>
               )}
               {!playerScormAtivo ? (
-                <div className="grid min-h-[420px] place-items-center text-sm text-[var(--sesi-muted)]">
+                <div className="grid min-h-[500px] place-items-center text-sm text-[var(--sesi-muted)]">
                   {reiniciandoScorm ? "Reiniciando o conteúdo SCORM..." : "Carregando o conteúdo SCORM..."}
                 </div>
               ) : (
@@ -514,7 +514,7 @@ export function AvaPage() {
                   data-player-scorm
                   src={urlPlayerScorm(pacoteScorm, perfil.email)}
                   title={`Conteúdo SCORM do curso ${curso?.nomeBreve ?? "do aluno"}`}
-                  className="h-[75vh] min-h-[500px] w-full border-0"
+                  className="h-[calc(100vh-210px)] min-h-[560px] w-full border-0"
                   allow="fullscreen"
                 />
               )}
@@ -677,12 +677,12 @@ export function AvaPage() {
 
           <div data-banner-ava className="relative overflow-hidden rounded-lg">
             <img src={bannerAva} alt="" className="h-[140px] w-full object-cover sm:h-[220px] lg:h-[320px]" />
-                <img
-                  src={logoWhite}
-                  alt="SESI Indústria"
-                  className="absolute left-4 top-4 z-10 h-8 w-auto drop-shadow-md sm:left-6 sm:top-6 sm:h-10"
-                />
-              </div>
+            <img
+              src={logoSesi}
+              alt="SESI"
+              className="absolute left-4 top-4 z-10 h-8 w-auto drop-shadow-md sm:left-6 sm:top-6 sm:h-10"
+            />
+          </div>
 
               <article data-ava-texto className="mt-8 w-full">
             {itemSelecionado.id === "boas-praticas" ? (

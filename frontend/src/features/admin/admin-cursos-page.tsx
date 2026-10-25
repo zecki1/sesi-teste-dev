@@ -5,7 +5,7 @@ import { MainLayout } from "@/components/layout/main-layout"
 import { Container } from "@/components/layout/container"
 import { useFacetas } from "@/hooks/use-catalogo"
 import { atualizarCurso, criarCurso, excluirCurso, listarPerguntasCurso, salvarPerguntasCurso } from "@/lib/api/catalogo"
-import { listarCursosAdministracao } from "@/lib/api/gestao"
+import { listarCursosAdministracao, listarUsuariosGestao } from "@/lib/api/gestao"
 import {
   carregarConfigScorm,
   configScormPadrao,
@@ -20,48 +20,16 @@ import {
   salvarLimiteScorm as salvarLimiteUploadScorm,
 } from "@/features/scorm/scorm-api"
 import { usePerfil } from "@/lib/auth/perfil"
+import { imagemDoCurso } from "@/lib/ui/imagens-cursos"
 import { criarCursoVazio, cursoDaApi, paraPayload, type CursoAdmin } from "./store"
 import { CursoEditor } from "./components/curso-editor"
 import { CategoriasAdmin } from "./components/categorias-admin"
+import { AdminDashboardGraficos } from "./components/admin-dashboard-graficos"
 
 const CORES_STATUS: Record<string, string> = {
   Disponível: "bg-green-100 text-green-800",
   "Inscrições abertas": "bg-amber-100 text-amber-800",
   "Em breve": "bg-[#F5F5F5] text-[var(--sesi-muted)]",
-}
-
-function GraficoBarras({ titulo, itens }: { titulo: string; itens: { rotulo: string; valor: number }[] }) {
-  const maiorValor = Math.max(...itens.map((item) => item.valor), 1)
-
-  return (
-    <section className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white p-5">
-      <h3 className="text-base font-bold text-[var(--sesi-black)]">{titulo}</h3>
-      {itens.length > 0 ? (
-        <ul className="mt-4 flex flex-col gap-4">
-          {itens.map((item) => (
-            <li key={item.rotulo}>
-              <div className="mb-1.5 flex items-center justify-between gap-3 text-sm">
-                <span className="truncate text-[var(--sesi-muted)]">{item.rotulo}</span>
-                <span className="font-semibold tabular-nums text-[var(--sesi-black)]">{item.valor}</span>
-              </div>
-              <div
-                className="h-2.5 overflow-hidden rounded-full bg-[#F1F1F1]"
-                role="img"
-                aria-label={`${item.rotulo}: ${item.valor}`}
-              >
-                <div
-                  className="h-full rounded-full bg-[var(--sesi-red)]"
-                  style={{ width: `${item.valor > 0 ? Math.max(4, (item.valor / maiorValor) * 100) : 0}%` }}
-                />
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mt-4 text-sm text-[var(--sesi-muted)]">Nenhum curso cadastrado.</p>
-      )}
-    </section>
-  )
 }
 
 export function AdminCursosPage() {
@@ -89,6 +57,11 @@ export function AdminCursosPage() {
   const pacotesQuery = useQuery({
     queryKey: ["scorm-pacotes"],
     queryFn: listarPacotesScorm,
+    enabled: perfil?.papel === "admin",
+  })
+  const usuariosQuery = useQuery({
+    queryKey: ["usuarios-admin"],
+    queryFn: listarUsuariosGestao,
     enabled: perfil?.papel === "admin",
   })
 
@@ -155,27 +128,6 @@ export function AdminCursosPage() {
     (etapaSelecionada === "Todos" || curso.etapaDesenvolvimento === etapaSelecionada) &&
     `${curso.nomeCompleto} ${curso.categoria} ${curso.modalidade}`.toLowerCase().includes(busca.toLowerCase()),
   )
-  const totalBlocos = cursos.filter((curso) => curso.tipo === "blocos").length
-  const totalScorm = cursos.filter((curso) => curso.tipo === "scorm").length
-  const cargaHorariaTotal = cursos.reduce((total, curso) => total + curso.cargaHoraria, 0)
-  const cursosPorCategoria = Array.from(
-    cursos.reduce((contagens, curso) => {
-      contagens.set(curso.categoria || "Sem categoria", (contagens.get(curso.categoria || "Sem categoria") ?? 0) + 1)
-      return contagens
-    }, new Map<string, number>()),
-    ([rotulo, valor]) => ({ rotulo, valor }),
-  ).sort((a, b) => b.valor - a.valor || a.rotulo.localeCompare(b.rotulo))
-  const cursosPorStatus = Array.from(
-    cursos.reduce((contagens, curso) => {
-      contagens.set(curso.status || "Sem status", (contagens.get(curso.status || "Sem status") ?? 0) + 1)
-      return contagens
-    }, new Map<string, number>()),
-    ([rotulo, valor]) => ({ rotulo, valor }),
-  ).sort((a, b) => b.valor - a.valor || a.rotulo.localeCompare(b.rotulo))
-  const cursosPorEtapa = ["Rascunho", "Homologado", "Publicado"].map((rotulo) => ({
-    rotulo,
-    valor: cursos.filter((curso) => curso.etapaDesenvolvimento === rotulo).length,
-  }))
 
   const recarregar = async () => {
     await Promise.all([
@@ -435,42 +387,7 @@ export function AdminCursosPage() {
             />
           ) : (
             <>
-              <div className="grid gap-4 sm:grid-cols-3">
-                {[
-                  { rotulo: "Cursos cadastrados", valor: cursos.length },
-                  { rotulo: "Cursos em blocos", valor: totalBlocos },
-                  { rotulo: "Pacotes SCORM", valor: totalScorm },
-                  { rotulo: "Carga horária cadastrada", valor: `${cargaHorariaTotal}h` },
-                ].map((item) => (
-                  <div key={item.rotulo} className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white p-5">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--sesi-muted)]">{item.rotulo}</p>
-                    <p className="mt-1 text-3xl font-bold text-[var(--sesi-black)]">{item.valor}</p>
-                  </div>
-                ))}
-              </div>
-
-              <section aria-labelledby="dashboard-cursos-titulo">
-                <div className="mb-4">
-                  <h2 id="dashboard-cursos-titulo" className="text-xl font-bold text-[var(--sesi-black)]">
-                    Dashboard de cursos
-                  </h2>
-                  <p className="mt-1 text-sm text-[var(--sesi-muted)]">
-                    Distribuição dos cursos carregados no catálogo por categoria e status.
-                  </p>
-                </div>
-                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
-                  <GraficoBarras
-                    titulo="Cursos por formato"
-                    itens={[
-                      { rotulo: "Blocos", valor: totalBlocos },
-                      { rotulo: "SCORM", valor: totalScorm },
-                    ]}
-                  />
-                  <GraficoBarras titulo="Cursos por categoria" itens={cursosPorCategoria.slice(0, 6)} />
-                  <GraficoBarras titulo="Cursos por status" itens={cursosPorStatus} />
-                  <GraficoBarras titulo="Etapa de desenvolvimento" itens={cursosPorEtapa} />
-                </div>
-              </section>
+              <AdminDashboardGraficos cursos={cursos} usuarios={usuariosQuery.data} />
 
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-xl font-bold text-[var(--sesi-black)]">Cursos cadastrados</h2>
@@ -531,13 +448,11 @@ export function AdminCursosPage() {
                       <tr key={curso.id} className="border-t border-[var(--sesi-gray)] align-top">
                         <td className="px-4 py-3">
                           <div className="flex items-start gap-3">
-                            {curso.imagemUrl ? (
-                              <img src={curso.imagemUrl} alt="" className="h-12 w-16 shrink-0 rounded object-cover" />
-                            ) : (
-                              <span className="grid h-12 w-16 shrink-0 place-items-center rounded bg-[#F5F5F5] text-xs text-[var(--sesi-muted)]">
-                                sem capa
-                              </span>
-                            )}
+                            <img
+                              src={imagemDoCurso(curso)}
+                              alt=""
+                              className="h-12 w-16 shrink-0 rounded object-cover shadow-sm"
+                            />
                             <div>
                               <p className="font-semibold text-[var(--sesi-black)]">{curso.nomeBreve}</p>
                               <p className="text-xs text-[var(--sesi-muted)]">

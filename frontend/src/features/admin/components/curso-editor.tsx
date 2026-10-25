@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import type { FacetasDto, PerguntaAdminDto } from "@/lib/api/catalogo"
+import { enviarImagem } from "@/lib/api/catalogo"
 import { configScormPadrao, type ScormPaginaConfig } from "@/features/scorm/scorm-config"
 import { detectarVersaoScorm } from "@/features/scorm/detectar-versao-scorm"
 import { obterPacoteScorm, urlDownloadScorm, type PacoteScormDto } from "@/features/scorm/scorm-api"
@@ -104,6 +105,9 @@ export function CursoEditor({
   onCancelar,
 }: CursoEditorProps) {
   const [draft, setDraft] = useState<CursoAdmin>(curso)
+const [enviandoCapa, setEnviandoCapa] = useState(false)
+const [erroCapa, setErroCapa] = useState("")
+const [enviandoImagemScorm, setEnviandoImagemScorm] = useState(false)
   const [erro, setErro] = useState("")
   const [slugTocado, setSlugTocado] = useState(curso.origem === "api" || Boolean(curso.slug))
   const [buscaCategoria, setBuscaCategoria] = useState(curso.categoria)
@@ -567,12 +571,44 @@ export function CursoEditor({
             />
           </Campo>
           <Campo titulo="URL da capa">
-            <input
-              value={draft.imagemUrl}
-              onChange={(evento) => alterar("imagemUrl", evento.target.value)}
-              placeholder="/cursos/exemplo.svg"
-              className={campo}
-            />
+            <div className="flex flex-col gap-2">
+              <input
+                value={draft.imagemUrl}
+                onChange={(evento) => alterar("imagemUrl", evento.target.value)}
+                placeholder="/cursos/exemplo.svg ou https://..."
+                className={campo}
+              />
+              <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-[var(--sesi-muted)]">
+                <span className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white px-3 py-2 text-xs font-semibold text-[var(--sesi-black)] transition hover:border-[var(--sesi-red)]">
+                  {enviandoCapa ? "Enviando..." : "Subir do computador"}
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={enviandoCapa}
+                  className="sr-only"
+                  onChange={async (evento) => {
+                    const arquivo = evento.target.files?.[0]
+                    if (!arquivo) return
+                    setEnviandoCapa(true)
+                    setErroCapa("")
+                    try {
+                      const url = await enviarImagem(arquivo)
+                      alterar("imagemUrl", url)
+                    } catch (falha) {
+                      setErroCapa(falha instanceof Error ? falha.message : "Falha ao enviar a imagem.")
+                    } finally {
+                      setEnviandoCapa(false)
+                      evento.target.value = ""
+                    }
+                  }}
+                />
+              </label>
+              {erroCapa && <p role="alert" className="text-xs text-[var(--sesi-red)]">{erroCapa}</p>}
+              <p className="text-xs text-[var(--sesi-muted)]">
+                Ou cole uma URL (Unsplash etc.). Limite de 5 MB por arquivo.
+              </p>
+            </div>
           </Campo>
           <div className="flex items-end">
             <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
@@ -906,13 +942,41 @@ export function CursoEditor({
             />
           </Campo>
           <Campo titulo="URL da imagem do curso">
-            <input
-              value={draft.scorm?.imagemUrl ?? ""}
-              onChange={(evento) => alterarScorm({ imagemUrl: evento.target.value })}
-              placeholder={draft.imagemUrl || "/cursos/exemplo.webp"}
-              maxLength={2048}
-              className={campo}
-            />
+            <div className="flex flex-col gap-2">
+              <input
+                value={draft.scorm?.imagemUrl ?? ""}
+                onChange={(evento) => alterarScorm({ imagemUrl: evento.target.value })}
+                placeholder={draft.imagemUrl || "/cursos/exemplo.webp"}
+                maxLength={2048}
+                className={campo}
+              />
+              <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-[var(--sesi-muted)]">
+                <span className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white px-3 py-2 text-xs font-semibold text-[var(--sesi-black)] transition hover:border-[var(--sesi-red)]">
+                  {enviandoImagemScorm ? "Enviando..." : "Subir do computador"}
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={enviandoImagemScorm}
+                  className="sr-only"
+                  onChange={async (evento) => {
+                    const arquivo = evento.target.files?.[0]
+                    if (!arquivo) return
+                    setEnviandoImagemScorm(true)
+                    try {
+                      const url = await enviarImagem(arquivo)
+                      alterarScorm({ imagemUrl: url })
+                    } catch (falha) {
+                      // eslint-disable-next-line no-alert
+                      window.alert(falha instanceof Error ? falha.message : "Falha ao enviar a imagem.")
+                    } finally {
+                      setEnviandoImagemScorm(false)
+                      evento.target.value = ""
+                    }
+                  }}
+                />
+              </label>
+            </div>
           </Campo>
           <Campo titulo="Carga horária da página (horas)">
             <input

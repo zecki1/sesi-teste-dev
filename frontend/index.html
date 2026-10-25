@@ -34,6 +34,22 @@
         if (window.VLibras && window.VLibras.Widget) {
           new window.VLibras.Widget('https://vlibras.gov.br/app');
         }
+
+        const corrigirProporcaoVlibras = () => {
+          const popups = document.querySelectorAll('img#vlibras-popup, img[src*="vlibras-popup"]');
+          popups.forEach((popup) => {
+            popup.setAttribute('width', '150');
+            popup.setAttribute('height', '40');
+            popup.style.aspectRatio = '450 / 120';
+            popup.style.objectFit = 'contain';
+          });
+        };
+
+        const observer = new MutationObserver(() => {
+          corrigirProporcaoVlibras();
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        corrigirProporcaoVlibras();
       }, { once: true });
     </script>
   </body>

@@ -1,8 +1,8 @@
 import type { CSSProperties } from "react"
 import type { IconType } from "react-icons"
 import { FaChartLine, FaHardHat, FaLaptopCode } from "react-icons/fa"
-import iconeMatematica from "@/assets/icones/matematica.svg"
-import iconeCiencias from "@/assets/icones/ciencias-natureza.svg"
+import iconeMatematica from "@/assets/icons/matematica.svg"
+import iconeCiencias from "@/assets/icons/ciencias-natureza.svg"
 
 /** Ícones locais usados no detalhe e nos cards. */
 const ICONES_LOCAIS: Record<string, string> = {

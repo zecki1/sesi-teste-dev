@@ -1,4 +1,3 @@
-import type { CursoResumoDto } from "@/lib/api/catalogo"
 import desenvolvedorSistemas from "@/assets/images/compagnons-iWpEedbymlA-unsplash.webp"
 import dotnetWeb from "@/assets/images/florian-olivo-4hbJ-eymZ1o-unsplash.webp"
 import gestaoProjetos from "@/assets/images/jo-szczepanska-5aiRb5f464A-unsplash.webp"
@@ -37,6 +36,20 @@ const IMAGENS_POR_CATEGORIA: Record<string, string> = {
   "seguranca-do-trabalho": incendios,
 }
 
-export function imagemDoCurso(curso: Pick<CursoResumoDto, "slug" | "imagemUrl" | "categoria">) {
-  return IMAGENS_POR_SLUG[curso.slug] ?? IMAGENS_POR_CATEGORIA[curso.categoria.slug] ?? curso.imagemUrl
+export function imagemDoCurso(curso: {
+  slug: string
+  imagemUrl?: string
+  categoria?: { slug?: string } | string
+}) {
+  const catSlug =
+    typeof curso.categoria === "string"
+      ? curso.categoria.toLowerCase().replace(/\s+/g, "-")
+      : curso.categoria?.slug
+  return (
+    IMAGENS_POR_SLUG[curso.slug] ??
+    (catSlug ? IMAGENS_POR_CATEGORIA[catSlug] : undefined) ??
+    curso.imagemUrl ??
+    ""
+  )
 }
+

@@ -437,4 +437,61 @@ public sealed class GestaoArmazenamento
     }
 
     private sealed record CredencialUsuario(string UsuarioId, string PasswordHash);
+    private sealed record TokenRedefinicao(string UsuarioId, string Token, DateTime ExpiraEm);
+
+    public async Task<(UsuarioGestaoDto? usuario, string? token)> SolicitarRedefinicaoSenhaAsync(string email, CancellationToken ct)
+    {
+        await _semaphore.WaitAsync(ct);
+        try
+        {
+            var usuarios = await CarregarUsuariosAsync(ct);
+            var usuario = usuarios.FirstOrDefault(u => u.Email.Equals(email, StringComparison.OrdinalIgnoreCase));
+            if (usuario is null || usuario.Papel != "Aluno" || !usuario.Ativo)
+                return (null, null);
+
+            var tokens = (await LerAsync<TokenRedefinicao[]>("redefinicoes.json", [], ct)).ToList();
+            // Remove tokens antigos do mesmo usuário
+            tokens.RemoveAll(t => t.UsuarioId == usuario.Id);
+            var token = Convert.ToHexString(Guid.NewGuid().ToByteArray()).ToLowerInvariant();
+            tokens.Add(new TokenRedefinicao(usuario.Id, token, DateTime.UtcNow.AddHours(1)));
+            await GravarAsync("redefinicoes.json", tokens, ct);
+            return (usuario, token);
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
+
+    public async Task<bool> RedefinirSenhaAsync(string token, string novaSenha, CancellationToken ct)
+    {
+        await _semaphore.WaitAsync(ct);
+        try
+        {
+            var tokens = (await LerAsync<TokenRedefinicao[]>("redefinicoes.json", [], ct)).ToList();
+            var registro = tokens.FirstOrDefault(t => t.Token == token && t.ExpiraEm > DateTime.UtcNow);
+            if (registro is null) return false;
+
+            var credenciais = (await LerAsync<CredencialUsuario[]>("credenciais.json", [], ct)).ToList();
+            var credencial = credenciais.FirstOrDefault(c => c.UsuarioId == registro.UsuarioId);
+            var nova = new CredencialUsuario(registro.UsuarioId, _passwordHasher.HashPassword(
+                new UsuarioGestaoDto(registro.UsuarioId, "", "", "Aluno", true, DateTime.UtcNow), novaSenha));
+            if (credencial is null) credenciais.Add(nova);
+            else
+            {
+                var idx = credenciais.IndexOf(credencial);
+                credenciais[idx] = nova;
+            }
+            await GravarAsync("credenciais.json", credenciais, ct);
+
+            tokens.RemoveAll(t => t.Token == token);
+            await GravarAsync("redefinicoes.json", tokens, ct);
+            return true;
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
+
 }

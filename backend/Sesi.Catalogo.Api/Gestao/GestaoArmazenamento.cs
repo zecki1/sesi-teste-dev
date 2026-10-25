@@ -127,7 +127,8 @@ public sealed class GestaoArmazenamento
         {
             var usuarios = await CarregarUsuariosAsync(ct);
             var usuario = usuarios.FirstOrDefault(u => u.Email.Equals(email, StringComparison.OrdinalIgnoreCase));
-            if (usuario is null || usuario.Papel != "Aluno" || !usuario.Ativo) return null;
+            if (usuario is null || !usuario.Ativo) return null;
+            if (usuario.Papel != "Aluno" && usuario.Papel != "Administrador") return null;
 
             var credenciais = await LerAsync<CredencialUsuario[]>("credenciais.json", [], ct);
             var credencial = credenciais.FirstOrDefault(c =>

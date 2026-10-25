@@ -49,6 +49,7 @@ obj/
 *.db-wal
 /backend/Sesi.Catalogo.Api/App_Data/
 /backend/Sesi.Catalogo.Api/uploads/
+/entregaveis/
 
 # Test coverage
 coverage/

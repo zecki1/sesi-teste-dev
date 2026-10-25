@@ -596,7 +596,9 @@ public sealed class ScormArmazenamento
         {
             if (string.IsNullOrEmpty(entrada.Name)) continue;
 
-            var caminho = Path.GetFullPath(Path.Combine(destino, entrada.FullName));
+            // Normaliza separadores: zips criados no Windows podem usar '\' em vez de '/'.
+            var nomeNormalizado = entrada.FullName.Replace('\\', '/');
+            var caminho = Path.GetFullPath(Path.Combine(destino, nomeNormalizado));
             if (!caminho.StartsWith(raiz, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("O pacote contém caminhos inválidos.");
 

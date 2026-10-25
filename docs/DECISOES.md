@@ -800,3 +800,9 @@ aplicarNaRaiz(lerConfig())
 - **Problema:** pacotes SCORM gerados com base absoluta (`/assets/...`) quebravam ao serem servidos sob `/scorm/{id}/` (404 nos assets). Pacotes com base relativa (`./assets/...`) funcionavam.
 - **Decisão:** após a extração, o backend reescreve `src="/` → `src="./` e `href="/` → `href="./"` no HTML de entrada, cobrindo ambos os casos sem exigir rebuild do pacote.
 - **Impacto:** pacotes antigos (enviados antes da correção) mantêm paths absolutos e precisam ser reenviados.
+
+### D049 - Correção de caminhos com barra invertida em zips criados no Windows
+
+- **Problema:** pacotes SCORM criados no Windows usam `\` como separador de caminho dentro do zip. No Linux (Render), a barra invertida é tratada como caractere literal no nome do arquivo, fazendo com que `assets\index-C0Q_dLvy.js` virasse um único arquivo na raiz em vez de um arquivo dentro da pasta `assets/`. Resultado: 404 em todos os assets.
+- **Decisão:** em `ExtrairComSeguranca`, normalizar `entrada.FullName` substituindo `\` por `/` antes de combinar com o diretório de destino.
+- **Impacto:** pacotes criados no Windows agora funcionam em produção sem rebuild.

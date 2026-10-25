@@ -61,3 +61,5 @@ playwright-report/
 # Misc
 *.tmp
 *.bak
+/cam-simulator-scorm/
+*.zip

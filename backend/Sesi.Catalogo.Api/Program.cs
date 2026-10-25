@@ -392,6 +392,7 @@ gestao.MapGet("/cursos", async (ICatalogoRepositorio repo, CancellationToken ct)
 
     gestao.MapPost("/usuarios/autenticar", async (
         [FromBody] AutenticarAlunoRequest request,
+        HttpContext contexto,
         GestaoArmazenamento armazenamento,
         ResendEmailSender emailSender,
         CancellationToken ct) =>
@@ -401,11 +402,28 @@ gestao.MapGet("/cursos", async (ICatalogoRepositorio repo, CancellationToken ct)
             return Results.BadRequest(new { erro = "Informe um e-mail e uma senha válidos." });
 
         var usuario = await armazenamento.AutenticarAlunoAsync(request.Email, request.Senha, ct);
-        if (usuario is not null)
-            _ = Task.Run(() => emailSender.EnviarCopiaAcessoAsync(usuario.Nome, usuario.Email, CancellationToken.None));
-        return usuario is null
-            ? Results.Json(new { erro = "E-mail ou senha inválidos." }, statusCode: StatusCodes.Status401Unauthorized)
-            : Results.Ok(usuario);
+        if (usuario is null)
+            return Results.Json(new { erro = "E-mail ou senha inválidos." }, statusCode: StatusCodes.Status401Unauthorized);
+
+        _ = Task.Run(() => emailSender.EnviarCopiaAcessoAsync(usuario.Nome, usuario.Email, CancellationToken.None));
+
+        // Administradores promovidos também recebem sessão por cookie para acessar a gestão.
+        if (usuario.Papel == "Administrador")
+        {
+            var identidade = new ClaimsIdentity(
+            [
+                new Claim(ClaimTypes.NameIdentifier, usuario.Id),
+                new Claim(ClaimTypes.Name, usuario.Nome),
+                new Claim(ClaimTypes.Email, usuario.Email),
+                new Claim(ClaimTypes.Role, usuario.Papel),
+            ], CookieAuthenticationDefaults.AuthenticationScheme);
+            await contexto.SignInAsync(
+                CookieAuthenticationDefaults.AuthenticationScheme,
+                new ClaimsPrincipal(identidade),
+                new AuthenticationProperties { IsPersistent = false });
+        }
+
+        return Results.Ok(usuario);
     })
     .WithName("AutenticarAluno")
     .WithSummary("Valida a senha de uma conta de aluno local")

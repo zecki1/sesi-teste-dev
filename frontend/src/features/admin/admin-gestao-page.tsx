@@ -216,6 +216,9 @@ export function AdminGestaoPage() {
           <Link to="/admin/cursos" className="rounded-lg border border-[var(--sesi-gray)] px-4 py-2.5 text-sm font-semibold hover:border-[var(--sesi-red)]">
             Administração de cursos
           </Link>
+          <Link to="/admin/academico" className="rounded-lg border border-[var(--sesi-gray)] px-4 py-2.5 text-sm font-semibold hover:border-[var(--sesi-red)]">
+            Gestão acadêmica
+          </Link>
         </div>
 
         <div role="note" className="mt-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">

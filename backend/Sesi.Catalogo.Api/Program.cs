@@ -1,11 +1,13 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
@@ -29,6 +31,15 @@ builder.WebHost.ConfigureKestrel(opcoes =>
     opcoes.Limits.MaxRequestBodySize = 205 * 1024 * 1024);
 builder.Services.Configure<FormOptions>(opcoes =>
     opcoes.MultipartBodyLengthLimit = 205 * 1024 * 1024);
+
+// Atrás de proxy reverso (Cloudflare Tunnel, Render, Fly...) o esquema e o IP
+// reais chegam em X-Forwarded-Proto / X-Forwarded-For.
+builder.Services.Configure<ForwardedHeadersOptions>(opcoes =>
+{
+    opcoes.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    opcoes.KnownIPNetworks.Clear();
+    opcoes.KnownProxies.Clear();
+});
 builder.Services.AddSingleton<ScormArmazenamento>();
 builder.Services.AddSingleton<GestaoArmazenamento>();
 builder.Services.AddHttpClient<ResendEmailSender>(cliente => cliente.Timeout = TimeSpan.FromSeconds(10));
@@ -58,7 +69,8 @@ if (corsOrigins.Length == 0)
             "http://127.0.0.1:5173",
             "http://localhost:5174",
             "http://127.0.0.1:5174",
-            "https://*.vercel.app"
+            "https://*.vercel.app",
+            "https://*.trycloudflare.com"
         ]
         : ["https://frontend-ezequiel-reginos-projects.vercel.app"];
 }
@@ -142,6 +154,19 @@ builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
+// Em produção as rotas de gestão exigem login administrativo. Para demonstrações
+// e testes de fumaça é possível desligar com Gestao:AutorizacaoAdmin:Exigir=false.
+var exigirAutenticacaoAdmin = app.Environment.IsDevelopment()
+    || !string.Equals(
+        builder.Configuration["Gestao:AutorizacaoAdmin:Exigir"],
+        "false",
+        StringComparison.OrdinalIgnoreCase);
+
+// Publicação "tudo em um": a API também serve o SPA buildado em wwwroot.
+// É o modo usado atrás de túnel/proxy, sempre na mesma origem do /api.
+var raizSpa = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+var spaPublicado = File.Exists(Path.Combine(raizSpa, "index.html"));
+
 app.Logger.LogInformation(
     "[CORS] Origens permitidas: {Origins}",
     corsOrigins.Length == 0 ? "(nenhuma)" : string.Join(", ", corsOrigins));
@@ -149,6 +174,7 @@ app.Logger.LogInformation(
 // Inicialização do banco em background (não bloqueia a subida do Kestrel).
 
 // Pipeline
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
@@ -175,6 +201,19 @@ app.UseStaticFiles(new StaticFileOptions
     FileProvider = new PhysicalFileProvider(raizUploads),
     RequestPath = "/uploads",
 });
+
+if (spaPublicado)
+{
+    // SPA publicado junto com a API (mesma origem): assets com hash, imagens e favicon.
+    app.UseDefaultFiles(new DefaultFilesOptions
+    {
+        FileProvider = new PhysicalFileProvider(raizSpa),
+    });
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new PhysicalFileProvider(raizSpa),
+    });
+}
 
 app.UseSwagger();
 app.UseSwaggerUI(c =>
@@ -255,7 +294,7 @@ v1.MapPost("/chamados", async (
 .Produces(StatusCodes.Status400BadRequest);
 
 var gestao = v1.MapGroup("/gestao").WithTags("Gestão");
-if (!app.Environment.IsDevelopment())
+if (exigirAutenticacaoAdmin && !app.Environment.IsDevelopment())
     // Login e cadastro continuam anônimos via .AllowAnonymous() nos próprios endpoints.
     gestao.RequireAuthorization("Administrador");
 
@@ -705,7 +744,401 @@ gestao.MapGet("/cursos", async (ICatalogoRepositorio repo, CancellationToken ct)
     .WithName("RegistrarMarcoCurso")
     .AllowAnonymous();
 
-v1.MapGet("/facetas", async (HttpContext contexto, ICatalogoRepositorio repo, CancellationToken ct) =>
+    // ---------- Gestão acadêmica: turmas, matrículas e notas ----------
+
+    gestao.MapGet("/turmas", async (ICatalogoRepositorio repo, CancellationToken ct) =>
+            Results.Ok(await repo.ListarTurmasAdminAsync(ct)))
+        .WithName("ListarTurmasAdmin")
+        .WithSummary("Lista todas as turmas para a gestão acadêmica")
+        .Produces<IReadOnlyList<TurmaAdminDto>>(StatusCodes.Status200OK);
+
+    gestao.MapPost("/turmas", async (
+        [FromBody] SalvarTurmaRequest request,
+        ICatalogoRepositorio repo,
+        CancellationToken ct) =>
+    {
+        try
+        {
+            return Results.Ok(await repo.SalvarTurmaAdminAsync(null, request, ct));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ErroValidacao(ex);
+        }
+    })
+    .WithName("CriarTurmaAdmin");
+
+    gestao.MapPut("/turmas/{id:int}", async (
+        int id,
+        [FromBody] SalvarTurmaRequest request,
+        ICatalogoRepositorio repo,
+        CancellationToken ct) =>
+    {
+        try
+        {
+            var turma = await repo.SalvarTurmaAdminAsync(id, request, ct);
+            return turma is null ? Results.NotFound(new { erro = "Turma não encontrada." }) : Results.Ok(turma);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ErroValidacao(ex);
+        }
+    })
+    .WithName("AtualizarTurmaAdmin");
+
+    gestao.MapDelete("/turmas/{id:int}", async (int id, ICatalogoRepositorio repo, CancellationToken ct) =>
+    {
+        var erro = await repo.ExcluirTurmaAdminAsync(id, ct);
+        return erro is null ? Results.NoContent() : Results.BadRequest(new { erro });
+    })
+    .WithName("ExcluirTurmaAdmin");
+
+    gestao.MapGet("/matriculas", async (
+        [FromQuery] int? turmaId,
+        [FromQuery] string? cursoSlug,
+        ICatalogoRepositorio repo,
+        GestaoArmazenamento armazenamento,
+        CancellationToken ct) =>
+    {
+        var matriculas = await repo.ListarMatriculasAdminAsync(turmaId, cursoSlug, ct);
+        var usuarios = await armazenamento.ListarUsuariosAsync(ct);
+        var nomes = usuarios
+            .GroupBy(u => u.Email, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Nome, StringComparer.OrdinalIgnoreCase);
+        var enriquecidas = matriculas
+            .Select(m => m.UsuarioNome is null && nomes.TryGetValue(m.UsuarioId, out var nome)
+                ? m with { UsuarioNome = nome }
+                : m)
+            .ToList();
+        return Results.Ok(enriquecidas);
+    })
+    .WithName("ListarMatriculasAdmin")
+    .Produces<IReadOnlyList<MatriculaAdminDto>>(StatusCodes.Status200OK);
+
+    gestao.MapPost("/matriculas", async (
+        [FromBody] SalvarMatriculaAdminRequest request,
+        ICatalogoRepositorio repo,
+        CancellationToken ct) =>
+    {
+        try
+        {
+            return Results.Ok(await repo.SalvarMatriculaAdminAsync(null, request, ct));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ErroValidacao(ex);
+        }
+    })
+    .WithName("CriarMatriculaAdmin");
+
+    gestao.MapPut("/matriculas/{id:int}", async (
+        int id,
+        [FromBody] SalvarMatriculaAdminRequest request,
+        ICatalogoRepositorio repo,
+        CancellationToken ct) =>
+    {
+        try
+        {
+            var matricula = await repo.SalvarMatriculaAdminAsync(id, request, ct);
+            return matricula is null ? Results.NotFound(new { erro = "Matrícula não encontrada." }) : Results.Ok(matricula);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ErroValidacao(ex);
+        }
+    })
+    .WithName("AtualizarMatriculaAdmin");
+
+    gestao.MapDelete("/matriculas/{id:int}", async (int id, ICatalogoRepositorio repo, CancellationToken ct) =>
+    {
+        var removida = await repo.ExcluirMatriculaAdminAsync(id, ct);
+        return removida ? Results.NoContent() : Results.NotFound(new { erro = "Matrícula não encontrada." });
+    })
+    .WithName("ExcluirMatriculaAdmin");
+
+    gestao.MapGet("/matriculas/{matriculaId:int}/notas", async (
+        int matriculaId,
+        ICatalogoRepositorio repo,
+        CancellationToken ct) =>
+        Results.Ok(await repo.ListarNotasAsync(matriculaId, ct)))
+    .WithName("ListarNotasDaMatricula")
+    .Produces<IReadOnlyList<NotaDto>>(StatusCodes.Status200OK);
+
+    gestao.MapPost("/matriculas/{matriculaId:int}/notas", async (
+        int matriculaId,
+        [FromBody] SalvarNotaRequest request,
+        ICatalogoRepositorio repo,
+        CancellationToken ct) =>
+    {
+        try
+        {
+            var nota = await repo.SalvarNotaAsync(matriculaId, null, request, ct);
+            return nota is null ? Results.NotFound(new { erro = "Matrícula não encontrada." }) : Results.Ok(nota);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ErroValidacao(ex);
+        }
+    })
+    .WithName("CriarNota");
+
+    gestao.MapPut("/matriculas/{matriculaId:int}/notas/{id:int}", async (
+        int matriculaId,
+        int id,
+        [FromBody] SalvarNotaRequest request,
+        ICatalogoRepositorio repo,
+        CancellationToken ct) =>
+    {
+        try
+        {
+            var nota = await repo.SalvarNotaAsync(matriculaId, id, request, ct);
+            return nota is null ? Results.NotFound(new { erro = "Nota não encontrada." }) : Results.Ok(nota);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ErroValidacao(ex);
+        }
+    })
+    .WithName("AtualizarNota");
+
+    gestao.MapDelete("/notas/{id:int}", async (int id, ICatalogoRepositorio repo, CancellationToken ct) =>
+    {
+        var removida = await repo.ExcluirNotaAsync(id, ct);
+        return removida ? Results.NoContent() : Results.NotFound(new { erro = "Nota não encontrada." });
+    })
+    .WithName("ExcluirNota");
+
+    gestao.MapGet("/boletim", async (
+        [FromQuery] string usuarioId,
+        ICatalogoRepositorio repo,
+        CancellationToken ct) =>
+    {
+        if (string.IsNullOrWhiteSpace(usuarioId))
+            return Results.BadRequest(new { erro = "usuarioId é obrigatório." });
+        return Results.Ok(await repo.ObterBoletimAsync(usuarioId, ct));
+    })
+    .WithName("ObterBoletimGestao")
+    .AllowAnonymous();
+
+    v1.MapGet("/boletim", async (
+        [FromQuery] string usuarioId,
+        ICatalogoRepositorio repo,
+        CancellationToken ct) =>
+    {
+        if (string.IsNullOrWhiteSpace(usuarioId))
+            return Results.BadRequest(new { erro = "usuarioId é obrigatório." });
+        return Results.Ok(await repo.ObterBoletimAsync(usuarioId, ct));
+    })
+    .WithName("ObterBoletimAluno")
+    .AllowAnonymous()
+    .Produces<BoletimDto>(StatusCodes.Status200OK);
+
+    // ---------- Comunidade da turma (fórum, chat, plantão) ----------
+    gestao.MapGet("/turmas/{turmaId:int}/comunidade", async (
+        int turmaId,
+        [FromQuery] string? canal,
+        ICatalogoRepositorio repo,
+        CancellationToken ct) =>
+        Results.Ok(await repo.ListarMensagensComunidadeAsync(turmaId, canal ?? "forum", ct)))
+    .WithName("ListarComunidadeTurma")
+    .Produces<IReadOnlyList<MensagemComunidadeDto>>(StatusCodes.Status200OK);
+
+    gestao.MapPost("/turmas/{turmaId:int}/comunidade", async (
+        int turmaId,
+        [FromBody] EnviarMensagemComunidadeRequest request,
+        ICatalogoRepositorio repo,
+        CancellationToken ct) =>
+    {
+        try
+        {
+            var dados = request with { TurmaId = turmaId };
+            return Results.Ok(await repo.CriarMensagemComunidadeAsync(dados, ct));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ErroValidacao(ex);
+        }
+    })
+    .WithName("EnviarMensagemComunidade");
+
+    // ---------- Aulas ao vivo (semi-presencial) ----------
+    gestao.MapGet("/turmas/{turmaId:int}/aulas-ao-vivo", async (
+        int turmaId,
+        ICatalogoRepositorio repo,
+        CancellationToken ct) =>
+        Results.Ok(await repo.ListarAulasAoVivoAsync(turmaId, ct)))
+    .WithName("ListarAulasAoVivo")
+    .Produces<IReadOnlyList<AulaAoVivoDto>>(StatusCodes.Status200OK);
+
+    gestao.MapPost("/turmas/{turmaId:int}/aulas-ao-vivo", async (
+        int turmaId,
+        [FromBody] SalvarAulaAoVivoRequest request,
+        ICatalogoRepositorio repo,
+        CancellationToken ct) =>
+    {
+        try
+        {
+            var dados = request with { TurmaId = turmaId };
+            return Results.Ok(await repo.CriarAulaAoVivoAsync(dados, ct));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ErroValidacao(ex);
+        }
+    })
+    .WithName("CriarAulaAoVivo");
+
+    gestao.MapPost("/aulas-ao-vivo/{aulaId:int}/presenca", async (
+        int aulaId,
+        [FromBody] RegistrarPresencaRequest request,
+        ICatalogoRepositorio repo,
+        CancellationToken ct) =>
+    {
+        try
+        {
+            return Results.Ok(await repo.RegistrarPresencaAulaAsync(aulaId, request.UsuarioId, request.Presente, ct));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ErroValidacao(ex);
+        }
+    })
+    .WithName("RegistrarPresencaAula");
+
+    gestao.MapGet("/aulas-ao-vivo/{aulaId:int}/presencas", async (
+        int aulaId,
+        ICatalogoRepositorio repo,
+        CancellationToken ct) =>
+        Results.Ok(await repo.ListarPresencasAulaAsync(aulaId, ct)))
+    .WithName("ListarPresencasAula")
+    .Produces<IReadOnlyList<PresencaAulaDto>>(StatusCodes.Status200OK);
+
+    // ---------- Tutor virtual (proxy para o Ollama local) ----------
+    v1.MapPost("/tutor", async (
+        [FromBody] TutorRequest request,
+        IHttpClientFactory fabrica,
+        CatalogoDbContext db,
+        CancellationToken ct) =>
+    {
+        if (string.IsNullOrWhiteSpace(request.Mensagem))
+            return Results.BadRequest(new { erro = "Mensagem é obrigatória." });
+
+        var usuarioId = string.IsNullOrWhiteSpace(request.UsuarioId) ? (string.IsNullOrWhiteSpace(request.NomeAluno) ? "anonimo" : request.NomeAluno!.Trim()) : request.UsuarioId!.Trim();
+
+        // Retenção de 7 dias: remove mensagens antigas deste usuário.
+        var limite = DateTime.UtcNow.AddDays(-7);
+        await db.HistoricoTutor
+            .Where(h => h.UsuarioId == usuarioId && h.CriadoEm < limite)
+            .ExecuteDeleteAsync(ct);
+
+        try
+        {
+            var cliente = fabrica.CreateClient();
+            cliente.Timeout = TimeSpan.FromSeconds(120);
+
+            // Conteúdo lido da tela do curso (SCORM) para o tutor responder com base no material.
+            var contexto = string.IsNullOrWhiteSpace(request.Contexto)
+                ? ""
+                : "\n\nConteúdo do curso aberto pelo aluno (use como fonte principal e não invente o que não estiver aqui):\n" +
+                  (request.Contexto!.Length > 9000 ? request.Contexto[..9000] : request.Contexto);
+
+            var mensagens = new List<object>
+            {
+                new
+                {
+                    role = "system",
+                    content = "Você é o Super Sesinho, tutor virtual amigável e paciente da plataforma de cursos do SESI. Responda em português do Brasil, de forma clara e didática, em no máximo 4 parágrafos curtos. Quando não souber, admita e sugira onde procurar. " +
+                              "IMPORTANTE: responda sobre o AVA do SESI e sobre o conteúdo do curso (navegação, cronograma, turma, notas, presenças, materiais, conceitos teóricos). NUNCA dê respostas de provas, atividades, exercícios ou avaliações; em vez disso, oriente o aluno a consultar o material e o professor. " +
+                              (string.IsNullOrWhiteSpace(request.NomeAluno) ? "" : $"O aluno se chama {request.NomeAluno}. ") +
+                              contexto,
+                },
+            };
+            if (request.Historico is not null)
+            {
+                foreach (var item in request.Historico)
+                {
+                    mensagens.Add(new
+                    {
+                        role = item.Papel == "user" ? "user" : "assistant",
+                        content = item.Texto,
+                    });
+                }
+            }
+            mensagens.Add(new { role = "user", content = request.Mensagem });
+
+            var corpo = new { model = "llama3.2:3b", stream = false, messages = mensagens };
+            var respostaHttp = await cliente.PostAsJsonAsync("http://localhost:11434/api/chat", corpo, ct);
+            if (!respostaHttp.IsSuccessStatusCode)
+            {
+                var detalhe = await respostaHttp.Content.ReadAsStringAsync(ct);
+                return Results.Problem($"Ollama respondeu {(int)respostaHttp.StatusCode}: {detalhe}", statusCode: 502);
+            }
+            var dados = await respostaHttp.Content.ReadFromJsonAsync<JsonElement>(ct);
+            var texto = dados.GetProperty("message").GetProperty("content").GetString() ?? "Não consegui gerar uma resposta.";
+
+            // Persiste a conversa (usuário + assistente) por 7 dias.
+            db.HistoricoTutor.Add(new Sesi.Catalogo.Domain.Entities.HistoricoTutor
+            {
+                UsuarioId = usuarioId,
+                Papel = "user",
+                Texto = request.Mensagem,
+                CriadoEm = DateTime.UtcNow,
+            });
+            db.HistoricoTutor.Add(new Sesi.Catalogo.Domain.Entities.HistoricoTutor
+            {
+                UsuarioId = usuarioId,
+                Papel = "assistant",
+                Texto = texto.Trim(),
+                CriadoEm = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new TutorResponse(texto.Trim()));
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Não foi possível falar com o tutor local (Ollama): {ex.Message}", statusCode: 503);
+        }
+    })
+    .WithName("TutorVirtual")
+    .AllowAnonymous()
+    .Produces<TutorResponse>(StatusCodes.Status200OK);
+
+    // Histórico do tutor (últimos 7 dias).
+    v1.MapGet("/tutor/historico", async (
+        [FromQuery] string usuarioId,
+        CatalogoDbContext db,
+        CancellationToken ct) =>
+    {
+        if (string.IsNullOrWhiteSpace(usuarioId))
+            return Results.BadRequest(new { erro = "usuarioId é obrigatório." });
+
+        var limite = DateTime.UtcNow.AddDays(-7);
+        var lista = await db.HistoricoTutor
+            .AsNoTracking()
+            .Where(h => h.UsuarioId == usuarioId.Trim() && h.CriadoEm >= limite)
+            .OrderBy(h => h.CriadoEm)
+            .Select(h => new { h.Id, h.Papel, h.Texto, h.CriadoEm })
+            .ToListAsync(ct);
+        return Results.Ok(lista);
+    })
+    .WithName("HistoricoTutor")
+    .AllowAnonymous();
+
+    v1.MapDelete("/tutor/historico", async (
+        [FromQuery] string usuarioId,
+        CatalogoDbContext db,
+        CancellationToken ct) =>
+    {
+        if (string.IsNullOrWhiteSpace(usuarioId))
+            return Results.BadRequest(new { erro = "usuarioId é obrigatório." });
+        await db.HistoricoTutor
+            .Where(h => h.UsuarioId == usuarioId.Trim())
+            .ExecuteDeleteAsync(ct);
+        return Results.NoContent();
+    })
+    .WithName("LimparHistoricoTutor")
+    .AllowAnonymous();v1.MapGet("/facetas", async (HttpContext contexto, ICatalogoRepositorio repo, CancellationToken ct) =>
 {
     var idioma = contexto.Items[IdiomaMiddleware.Chave]?.ToString();
     var facetas = await repo.ObterFacetasAsync(idioma, ct);
@@ -749,7 +1182,7 @@ v1.MapGet("/cursos/{slug}/turmas", async (string slug, ICatalogoRepositorio repo
 .Produces<IReadOnlyList<TurmaDto>>(StatusCodes.Status200OK);
 
 var adminV1 = v1.MapGroup("");
-if (!app.Environment.IsDevelopment())
+if (exigirAutenticacaoAdmin && !app.Environment.IsDevelopment())
     adminV1.RequireAuthorization("Administrador");
 
 adminV1.MapPost("/cursos", async ([FromBody] CursoSalvarRequest request, ICatalogoRepositorio repo, CancellationToken ct) =>
@@ -1254,11 +1687,37 @@ v1.MapGet("/scorm/progresso", async (
 v1.MapPost("/scorm/progresso", async (
     [FromBody] SalvarProgressoScormRequest request,
     ScormArmazenamento armazenamento,
+    ICatalogoRepositorio repo,
     CancellationToken ct) =>
 {
     try
     {
         var progresso = await armazenamento.SalvarProgressoAsync(request, ct);
+
+        if (request.Score.HasValue)
+        {
+            var matriculas = await repo.ListarMatriculasAsync(request.UsuarioId, ct);
+            var matricula = matriculas.FirstOrDefault(m =>
+                string.Equals(m.Curso.Slug, request.CursoSlug, StringComparison.OrdinalIgnoreCase));
+            if (matricula is not null)
+            {
+                var notas = await repo.ListarNotasAsync(matricula.Id, ct);
+                var existente = notas.FirstOrDefault(n =>
+                    string.Equals(n.Titulo, "Atividade SCORM", StringComparison.OrdinalIgnoreCase));
+                var valor = Math.Round(request.Score.Value / 10m, 2);
+                if (valor > 10m) valor = 10m;
+                if (valor < 0m) valor = 0m;
+                await repo.SalvarNotaAsync(matricula.Id, existente?.Id, new SalvarNotaRequest(
+                    "Atividade SCORM",
+                    "Atividade",
+                    1m,
+                    valor,
+                    10m,
+                    DateTime.UtcNow,
+                    "Gerada automaticamente a partir do score SCORM."), ct);
+            }
+        }
+
         return Results.Ok(progresso);
     }
     catch (InvalidOperationException ex)
@@ -1385,8 +1844,31 @@ app.MapPost("/api/v1/debug/i18n/seed", async (CatalogoDbContext db, Cancellation
     return Results.Ok(new { ok = true });
 });
 
+if (spaPublicado)
+{
+    // Fallback do SPA: rotas do React (ex.: /admin/cursos, /area-do-aluno) recebem o index.html.
+    // Caminhos de API, uploads, SCORM, Swagger e health continuam respondendo o próprio 404.
+    app.MapFallback(async contexto =>
+    {
+        var caminho = contexto.Request.Path.Value ?? "/";
+        var prefixosTecnicos = new[] { "/api", "/uploads", "/scorm", "/swagger", "/health" };
+        if (prefixosTecnicos.Any(p => caminho.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+        {
+            contexto.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        contexto.Response.ContentType = "text/html; charset=utf-8";
+        await contexto.Response.SendFileAsync(Path.Combine(raizSpa, "index.html"));
+    });
+}
+
 app.Logger.LogInformation("[API] Iniciando em http://localhost:5077");
 app.Logger.LogInformation("[API] Swagger: http://localhost:5077/swagger");
+if (spaPublicado)
+    app.Logger.LogInformation("[API] SPA publicado em wwwroot (mesma origem do /api)");
+if (!exigirAutenticacaoAdmin)
+    app.Logger.LogWarning("[DEMO] Autorização administrativa desativada (Gestao:AutorizacaoAdmin:Exigir=false).");
 app.Run();
 
 /// <summary>

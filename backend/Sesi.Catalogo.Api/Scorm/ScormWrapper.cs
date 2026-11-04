@@ -65,6 +65,21 @@ public static class ScormWrapper
                   let finalizado = false;
                   let ultimoErro = "0";
                   let ultimaAcessibilidade = null;
+                  const eventosDebug = [];
+
+                  function depurar(evento, detalhes) {
+                    const registro = {
+                      evento,
+                      detalhes: detalhes === undefined ? null : detalhes,
+                      quando: new Date().toISOString()
+                    };
+                    eventosDebug.push(registro);
+                    if (eventosDebug.length > 100) eventosDebug.shift();
+                    try { console.log("[SCORM-WRAPPER]", evento, detalhes || ""); } catch (_) {}
+                    notificar("SCORM_DEBUG", { evento, detalhes: registro.detalhes, quando: registro.quando });
+                  }
+
+                  window.__scormDebug = eventosDebug;
 
                   const erros = {
                     "0": "No error",
@@ -152,6 +167,11 @@ public static class ScormWrapper
                     }).catch(() => {});
 
                     notificar("SCORM_DATA_SAVE", { dados: corpo });
+                    depurar("persistir", {
+                      percentual: corpo.percentual,
+                      lessonStatus: corpo.lessonStatus,
+                      lessonLocation: corpo.lessonLocation
+                    });
                   }
 
                   function get(nome) {
@@ -161,6 +181,11 @@ public static class ScormWrapper
                   function set(nome, valor) {
                     cmi[nome] = String(valor === undefined || valor === null ? "" : valor);
                     notificar("SCORM_VALUE_CHANGED", { nome, valor: cmi[nome] });
+                    if (nome === "cmi.progress_measure" || nome === "cmi.completion_status" ||
+                        nome === "cmi.core.lesson_status" || nome === "cmi.core.lesson_location" ||
+                        nome === "cmi.location") {
+                      depurar("set", { nome, valor: cmi[nome] });
+                    }
                     return "true";
                   }
 
@@ -192,15 +217,51 @@ public static class ScormWrapper
                     GetDiagnostic(codigo) { return window.API.LMSGetDiagnostic(codigo); }
                   };
 
+                  function encaminharParaConteudo(dados) {
+                    try {
+                      const frame = document.getElementById("sco");
+                      if (frame && frame.contentWindow) frame.contentWindow.postMessage(dados, "*");
+                    } catch (_) {}
+                  }
+
                   window.addEventListener("message", (evento) => {
                     const dados = evento.data;
                     if (!dados || typeof dados !== "object") return;
-                    if (evento.source === window.parent && dados.type === "SESI_A11Y_CONFIG") {
-                      aplicarAcessibilidade(dados.config);
+
+                    if (evento.source === window.parent) {
+                      if (dados.type === "SESI_A11Y_CONFIG") {
+                        aplicarAcessibilidade(dados.config);
+                        encaminharParaConteudo(dados);
+                        depurar("a11y:config", dados.config);
+                        return;
+                      }
+                      if (dados.type === "SESI_RESUME" || dados.type === "SESI_RESET") {
+                        depurar(String(dados.type).toLowerCase(), null);
+                        encaminharParaConteudo(dados);
+                        return;
+                      }
+                      if (dados.type === "SESI_LANG_CHANGED" || dados.type === "SESI_THEME_CHANGED") {
+                        encaminharParaConteudo(dados);
+                        return;
+                      }
+                      if (dados.type === "SCORM_GET_STATUS") {
+                        notificar("SCORM_STATUS", { dados: estado() });
+                        depurar("status:solicitado", estado());
+                      }
                       return;
                     }
-                    if (dados.type === "SCORM_GET_STATUS") {
-                      notificar("SCORM_STATUS", { dados: estado() });
+
+                    // Mensagens vindas do conteúdo SCORM (idioma/tema escolhidos dentro do curso).
+                    if (dados.type === "SESI_LANG_CHANGED") {
+                      notificar("SESI_LANG_CHANGED", { lang: dados.lang });
+                      return;
+                    }
+                    if (dados.type === "SESI_THEME_CHANGED") {
+                      notificar("SESI_THEME_CHANGED", { theme: dados.theme });
+                      return;
+                    }
+                    if (dados.type === "SESI_DEBUG") {
+                      depurar("conteudo:" + String(dados.evento || ""), dados.detalhes);
                     }
                   });
 
@@ -230,6 +291,8 @@ public static class ScormWrapper
                       raiz.setAttribute("data-font", configA11y.dislexia ? "opendyslexic" : "default");
                       raiz.setAttribute("data-theme", configA11y.tema);
                       raiz.setAttribute("data-vlibras", configA11y.vlibras ? "on" : "off");
+                      raiz.classList.remove("light", "dark");
+                      raiz.classList.add(configA11y.tema === "escuro" ? "dark" : "light");
 
                       let estilos = documento.getElementById("sesi-a11y-styles");
                       if (!estilos) {
@@ -296,7 +359,14 @@ public static class ScormWrapper
                           if (!interno.dataset.sesiA11yListener) {
                             interno.dataset.sesiA11yListener = "true";
                             interno.addEventListener("load", () => {
-                              if (ultimaAcessibilidade) aplicarAcessibilidade(ultimaAcessibilidade);
+                              if (ultimaAcessibilidade) {
+                                aplicarAcessibilidade(ultimaAcessibilidade);
+                                encaminharParaConteudo({
+                                  type: "SESI_A11Y_CONFIG",
+                                  config: ultimaAcessibilidade
+                                });
+                                depurar("conteudo:carregado", { tema: ultimaAcessibilidade.tema });
+                              }
                             });
                           }
                           if (interno.contentDocument) aplicarNoDocumento(interno.contentDocument);
@@ -317,6 +387,7 @@ public static class ScormWrapper
 
                     const frame = document.getElementById("sco");
                     frame.src = config.conteudoUrl;
+                    depurar("iniciar", { conteudoUrl: config.conteudoUrl, totalAulas: config.totalAulas });
                     notificar("SCORM_READY", { dados: estado() });
                   }
 
@@ -327,17 +398,26 @@ public static class ScormWrapper
                     .then((resposta) => resposta.status === 204 ? null : (resposta.ok ? resposta.json() : null))
                     .then((progresso) => {
                       if (!progresso) return;
-                      cmi["cmi.suspend_data"] = progresso.suspendData || "";
-                      cmi["cmi.core.lesson_location"] = progresso.lessonLocation || "";
-                      cmi["cmi.location"] = progresso.lessonLocation || "";
-                      cmi["cmi.core.lesson_status"] = progresso.lessonStatus || cmi["cmi.core.lesson_status"];
-                      cmi["cmi.completion_status"] = progresso.lessonStatus || cmi["cmi.completion_status"];
+                      // O snapshot completo vem primeiro: os campos canônicos
+                      // (localização, suspend_data, status, nota) entram depois
+                      // para que um snapshot antigo não apague a retomada.
+                      if (progresso.cmiDataJson) {
+                        try { Object.assign(cmi, JSON.parse(progresso.cmiDataJson)); } catch (_) {}
+                      }
+                      if (progresso.suspendData) {
+                        cmi["cmi.suspend_data"] = progresso.suspendData;
+                      }
+                      if (progresso.lessonLocation) {
+                        cmi["cmi.core.lesson_location"] = progresso.lessonLocation;
+                        cmi["cmi.location"] = progresso.lessonLocation;
+                      }
+                      if (progresso.lessonStatus) {
+                        cmi["cmi.core.lesson_status"] = progresso.lessonStatus;
+                        cmi["cmi.completion_status"] = progresso.lessonStatus;
+                      }
                       if (progresso.score !== null && progresso.score !== undefined) {
                         cmi["cmi.core.score.raw"] = String(progresso.score);
                         cmi["cmi.score.raw"] = String(progresso.score);
-                      }
-                      if (progresso.cmiDataJson) {
-                        try { Object.assign(cmi, JSON.parse(progresso.cmiDataJson)); } catch (_) {}
                       }
                       notificar("SCORM_STATUS", { dados: estado() });
                     })

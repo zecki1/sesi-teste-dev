@@ -901,6 +901,38 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
 
         await db.SaveChangesAsync(ct);
 
+        // Sincroniza a nota da avaliação com o boletim do aluno (se houver matrícula).
+        try
+        {
+            var matricula = await db.Matriculas
+                .FirstOrDefaultAsync(m => m.CursoId == curso.Id && m.UsuarioId == usuarioId, ct);
+            if (matricula is not null)
+            {
+                var notaExistente = await db.Notas
+                    .FirstOrDefaultAsync(n => n.MatriculaId == matricula.Id && n.Titulo == "Avaliação do curso", ct);
+                if (notaExistente is null)
+                {
+                    notaExistente = new Nota
+                    {
+                        MatriculaId = matricula.Id,
+                        Titulo = "Avaliação do curso",
+                        Tipo = "Avaliação",
+                        Peso = 1m,
+                    };
+                    db.Notas.Add(notaExistente);
+                }
+                notaExistente.Valor = avaliacao.Nota;
+                notaExistente.ValorMaximo = 5m;
+                notaExistente.Data = DateTime.UtcNow;
+                notaExistente.Observacao = avaliacao.Depoimento;
+                await db.SaveChangesAsync(ct);
+            }
+        }
+        catch
+        {
+            // Não bloqueia a avaliação se a sincronização de notas falhar.
+        }
+
         var nome = await NomeTraduzidoDoCursoAsync(curso.Id, curso.NomeBreve, avaliacao.Idioma, ct);
         return ParaAvaliacaoDto(avaliacao, curso.Slug, nome);
     }
@@ -1154,4 +1186,412 @@ public sealed class CatalogoRepositorio(CatalogoDbContext db) : ICatalogoReposit
         "incomplete" or "browsed" or "failed" or "em-andamento" => StatusSessao.EmAndamento,
         _ => StatusSessao.NaoIniciado
     };
+
+    // ---------- Gestão acadêmica ----------
+
+    public async Task<IReadOnlyList<TurmaAdminDto>> ListarTurmasAdminAsync(CancellationToken ct = default)
+    {
+        var turmas = await db.Turmas
+            .AsNoTracking()
+            .Include(t => t.Modalidade)
+            .Include(t => t.Matriculas)
+            .OrderBy(t => t.CursoId)
+            .ThenBy(t => t.Codigo)
+            .ToListAsync(ct);
+
+        return turmas.Select(ParaTurmaAdmin).ToList();
+    }
+
+    public async Task<TurmaAdminDto?> SalvarTurmaAdminAsync(int? id, SalvarTurmaRequest request, CancellationToken ct = default)
+    {
+        var curso = await db.Cursos.FirstOrDefaultAsync(c => c.Id == request.CursoId, ct);
+        if (curso is null) throw new InvalidOperationException("Curso não encontrado.");
+
+        var modalidade = await db.Modalidades.FirstOrDefaultAsync(m => m.Id == request.ModalidadeId, ct)
+            ?? throw new InvalidOperationException("Modalidade não encontrada.");
+
+        if (string.IsNullOrWhiteSpace(request.Codigo))
+            throw new InvalidOperationException("Informe o código da turma.");
+        if (!TimeOnly.TryParseExact(request.HorarioInicio, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var inicio) ||
+            !TimeOnly.TryParseExact(request.HorarioFim, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fim))
+            throw new InvalidOperationException("Horários inválidos. Use o formato HH:mm.");
+        if (fim <= inicio)
+            throw new InvalidOperationException("O horário final deve ser maior que o inicial.");
+        if (request.DataFim is not null && request.DataFim < request.DataInicio)
+            throw new InvalidOperationException("A data final não pode ser anterior à data inicial.");
+        if (string.IsNullOrWhiteSpace(request.DiasSemana))
+            throw new InvalidOperationException("Informe os dias da semana da turma.");
+
+        var codigo = request.Codigo.Trim();
+        var duplicada = await db.Turmas.AnyAsync(t =>
+            t.CursoId == request.CursoId &&
+            t.Codigo == codigo &&
+            (id == null || t.Id != id), ct);
+        if (duplicada)
+            throw new InvalidOperationException("Já existe uma turma com este código para o curso.");
+
+        Turma turma;
+        if (id is null)
+        {
+            turma = new Turma();
+            db.Turmas.Add(turma);
+        }
+        else
+        {
+            var existente = await db.Turmas.FirstOrDefaultAsync(t => t.Id == id, ct);
+            if (existente is null) return null;
+            turma = existente;
+        }
+
+        turma.CursoId = request.CursoId;
+        turma.ModalidadeId = request.ModalidadeId;
+        turma.Codigo = codigo;
+        turma.DataInicio = request.DataInicio;
+        turma.DataFim = request.DataFim;
+        turma.DiasSemana = request.DiasSemana.Trim();
+        turma.HorarioInicio = inicio;
+        turma.HorarioFim = fim;
+        turma.Vagas = request.Vagas <= 0 ? 1 : request.Vagas;
+        turma.Ativa = request.Ativa;
+
+        await db.SaveChangesAsync(ct);
+
+        var salva = await db.Turmas
+            .AsNoTracking()
+            .Include(t => t.Modalidade)
+            .Include(t => t.Matriculas)
+            .FirstAsync(t => t.Id == turma.Id, ct);
+
+        return ParaTurmaAdmin(salva);
+    }
+
+    public async Task<string?> ExcluirTurmaAdminAsync(int id, CancellationToken ct = default)
+    {
+        var turma = await db.Turmas
+            .Include(t => t.Matriculas)
+            .FirstOrDefaultAsync(t => t.Id == id, ct);
+        if (turma is null) return "Turma não encontrada.";
+        if (turma.Matriculas.Count > 0)
+            return "Não é possível excluir uma turma com matrículas. Remova as matrículas primeiro.";
+
+        db.Turmas.Remove(turma);
+        await db.SaveChangesAsync(ct);
+        return null;
+    }
+
+    public async Task<IReadOnlyList<MatriculaAdminDto>> ListarMatriculasAdminAsync(
+        int? turmaId = null, string? cursoSlug = null, CancellationToken ct = default)
+    {
+        var consulta = db.Matriculas
+            .AsNoTracking()
+            .Include(m => m.Curso)
+            .Include(m => m.Turma!)
+                .ThenInclude(t => t.Modalidade)
+            .AsQueryable();
+
+        if (turmaId is > 0)
+            consulta = consulta.Where(m => m.TurmaId == turmaId);
+        if (!string.IsNullOrWhiteSpace(cursoSlug))
+            consulta = consulta.Where(m => m.Curso!.Slug == cursoSlug.Trim());
+
+        var matriculas = await consulta
+            .OrderByDescending(m => m.DataMatricula)
+            .ToListAsync(ct);
+
+        return matriculas.Select(ParaMatriculaAdmin).ToList();
+    }
+
+    public async Task<MatriculaAdminDto?> SalvarMatriculaAdminAsync(
+        int? id, SalvarMatriculaAdminRequest request, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.UsuarioId))
+            throw new InvalidOperationException("Informe o aluno (e-mail).");
+
+        var usuarioId = request.UsuarioId.Trim();
+        var turma = await db.Turmas
+            .Include(t => t.Modalidade)
+            .FirstOrDefaultAsync(t => t.Id == request.TurmaId, ct)
+            ?? throw new InvalidOperationException("Turma não encontrada.");
+
+        Matricula matricula;
+        if (id is null)
+        {
+            var existente = await db.Matriculas
+                .FirstOrDefaultAsync(m => m.UsuarioId == usuarioId && m.TurmaId == turma.Id, ct);
+            if (existente is not null)
+                return ParaMatriculaAdmin(await CarregarMatriculaAdmin(existente.Id, ct)
+                    ?? throw new InvalidOperationException("Matrícula não encontrada."));
+
+            matricula = new Matricula
+            {
+                CursoId = turma.CursoId,
+                TurmaId = turma.Id,
+                UsuarioId = usuarioId,
+                DataMatricula = DateTime.UtcNow,
+                Status = string.IsNullOrWhiteSpace(request.Status) ? "ativa" : request.Status!.Trim(),
+                Progresso = Math.Clamp(request.Progresso ?? 0, 0, 100),
+                Concluido = request.Concluido ?? false
+            };
+            db.Matriculas.Add(matricula);
+        }
+        else
+        {
+            var existente = await db.Matriculas.FirstOrDefaultAsync(m => m.Id == id, ct);
+            if (existente is null) return null;
+            matricula = existente;
+            matricula.TurmaId = turma.Id;
+            matricula.CursoId = turma.CursoId;
+            matricula.UsuarioId = usuarioId;
+            if (!string.IsNullOrWhiteSpace(request.Status)) matricula.Status = request.Status!.Trim();
+            if (request.Progresso is not null) matricula.Progresso = Math.Clamp(request.Progresso.Value, 0, 100);
+            if (request.Concluido is not null) matricula.Concluido = request.Concluido.Value;
+        }
+
+        await db.SaveChangesAsync(ct);
+        var carregada = await CarregarMatriculaAdmin(matricula.Id, ct);
+        return carregada is null ? null : ParaMatriculaAdmin(carregada);
+    }
+
+    public async Task<bool> ExcluirMatriculaAdminAsync(int id, CancellationToken ct = default)
+    {
+        var matricula = await db.Matriculas.FirstOrDefaultAsync(m => m.Id == id, ct);
+        if (matricula is null) return false;
+        db.Matriculas.Remove(matricula);
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<IReadOnlyList<NotaDto>> ListarNotasAsync(int matriculaId, CancellationToken ct = default)
+    {
+        var notas = await db.Notas
+            .AsNoTracking()
+            .Where(n => n.MatriculaId == matriculaId)
+            .OrderBy(n => n.Data)
+            .ThenBy(n => n.Id)
+            .ToListAsync(ct);
+        return notas.Select(ParaNota).ToList();
+    }
+
+    public async Task<NotaDto?> SalvarNotaAsync(
+        int matriculaId, int? id, SalvarNotaRequest request, CancellationToken ct = default)
+    {
+        var matricula = await db.Matriculas.FirstOrDefaultAsync(m => m.Id == matriculaId, ct);
+        if (matricula is null) return null;
+
+        if (string.IsNullOrWhiteSpace(request.Titulo))
+            throw new InvalidOperationException("Informe o título da nota.");
+        if (request.ValorMaximo <= 0)
+            throw new InvalidOperationException("O valor máximo deve ser maior que zero.");
+        if (request.Valor < 0 || request.Valor > request.ValorMaximo)
+            throw new InvalidOperationException("O valor deve estar entre zero e o valor máximo.");
+        if (request.Peso <= 0)
+            throw new InvalidOperationException("O peso deve ser maior que zero.");
+
+        Nota nota;
+        if (id is null)
+        {
+            nota = new Nota { MatriculaId = matriculaId };
+            db.Notas.Add(nota);
+        }
+        else
+        {
+            var existente = await db.Notas.FirstOrDefaultAsync(n => n.Id == id && n.MatriculaId == matriculaId, ct);
+            if (existente is null) return null;
+            nota = existente;
+        }
+
+        nota.Titulo = request.Titulo.Trim();
+        nota.Tipo = string.IsNullOrWhiteSpace(request.Tipo) ? "Prova" : request.Tipo.Trim();
+        nota.Peso = request.Peso;
+        nota.Valor = request.Valor;
+        nota.ValorMaximo = request.ValorMaximo;
+        nota.Data = request.Data ?? DateTime.UtcNow;
+        nota.Observacao = request.Observacao?.Trim();
+
+        await db.SaveChangesAsync(ct);
+        return ParaNota(nota);
+    }
+
+    public async Task<bool> ExcluirNotaAsync(int id, CancellationToken ct = default)
+    {
+        var nota = await db.Notas.FirstOrDefaultAsync(n => n.Id == id, ct);
+        if (nota is null) return false;
+        db.Notas.Remove(nota);
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<BoletimDto> ObterBoletimAsync(string usuarioId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(usuarioId))
+            return new BoletimDto(string.Empty, []);
+
+        var matriculas = await db.Matriculas
+            .AsNoTracking()
+            .Include(m => m.Curso)
+            .Include(m => m.Turma)
+            .Where(m => m.UsuarioId == usuarioId.Trim())
+            .OrderByDescending(m => m.DataMatricula)
+            .ToListAsync(ct);
+
+        var matriculasIds = matriculas.Select(m => m.Id).ToList();
+        var notas = await db.Notas
+            .AsNoTracking()
+            .Where(n => matriculasIds.Contains(n.MatriculaId))
+            .ToListAsync(ct);
+
+        var notasPorMatricula = notas
+            .GroupBy(n => n.MatriculaId)
+            .ToDictionary(g => g.Key, g => g.Select(ParaNota).ToList());
+
+        var cursos = matriculas.Select(m =>
+        {
+            var lista = notasPorMatricula.TryGetValue(m.Id, out var n) ? n : [];
+            var somaPeso = lista.Sum(x => x.Peso);
+            var media = somaPeso <= 0
+                ? 0
+                : Math.Round(lista.Sum(x => x.Valor / x.ValorMaximo * 10 * x.Peso) / somaPeso, 2);
+            return new BoletimCursoDto(
+                m.Id,
+                m.TurmaId,
+                m.Curso?.Slug ?? string.Empty,
+                m.Curso?.NomeBreve ?? m.Curso?.NomeCompleto ?? string.Empty,
+                m.Turma?.Codigo ?? string.Empty,
+                m.Status,
+                m.Progresso,
+                m.Concluido,
+                lista,
+                media);
+        }).ToList();
+
+        return new BoletimDto(usuarioId.Trim(), cursos);
+    }
+
+    private async Task<Matricula?> CarregarMatriculaAdmin(int id, CancellationToken ct) =>
+        await db.Matriculas
+            .AsNoTracking()
+            .Include(m => m.Curso)
+            .Include(m => m.Turma!)
+                .ThenInclude(t => t.Modalidade)
+            .FirstOrDefaultAsync(m => m.Id == id, ct);
+
+    private static TurmaAdminDto ParaTurmaAdmin(Turma t) =>
+        new(t.Id, t.CursoId, t.Codigo, t.ModalidadeId, t.Modalidade?.Nome ?? string.Empty,
+            t.DataInicio, t.DataFim, t.DiasSemana,
+            t.HorarioInicio.ToString("HH:mm"), t.HorarioFim.ToString("HH:mm"),
+            t.Vagas, t.Matriculas?.Count ?? 0, t.Ativa);
+
+    private static MatriculaAdminDto ParaMatriculaAdmin(Matricula m) =>
+        new(m.Id, m.UsuarioId, null, m.CursoId, m.Curso?.Slug ?? string.Empty,
+            m.Curso?.NomeBreve ?? m.Curso?.NomeCompleto ?? string.Empty,
+            m.TurmaId, m.Turma?.Codigo ?? string.Empty, m.DataMatricula,
+            m.Status, m.Progresso, m.Concluido);
+
+    private static NotaDto ParaNota(Nota n) =>
+        new(n.Id, n.MatriculaId, n.Titulo, n.Tipo, n.Peso, n.Valor, n.ValorMaximo, n.Data, n.Observacao);
+
+    public async Task<IReadOnlyList<MensagemComunidadeDto>> ListarMensagensComunidadeAsync(
+        int turmaId, string canal, CancellationToken ct = default)
+    {
+        var canalNormalizado = string.IsNullOrWhiteSpace(canal) ? "forum" : canal.Trim().ToLowerInvariant();
+        var mensagens = await db.MensagensComunidade
+            .AsNoTracking()
+            .Where(m => m.TurmaId == turmaId && m.Canal == canalNormalizado)
+            .OrderBy(m => m.CriadoEm)
+            .ThenBy(m => m.Id)
+            .ToListAsync(ct);
+        return mensagens.Select(ParaMensagemComunidade).ToList();
+    }
+
+    public async Task<MensagemComunidadeDto> CriarMensagemComunidadeAsync(
+        EnviarMensagemComunidadeRequest request, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Conteudo))
+            throw new InvalidOperationException("Informe o conteúdo da mensagem.");
+        var canal = string.IsNullOrWhiteSpace(request.Canal) ? "forum" : request.Canal.Trim().ToLowerInvariant();
+        if (canal is not ("forum" or "chat" or "plantao"))
+            throw new InvalidOperationException("Canal inválido.");
+
+        var mensagem = new MensagemComunidade
+        {
+            TurmaId = request.TurmaId,
+            UsuarioId = request.UsuarioId.Trim(),
+            UsuarioNome = string.IsNullOrWhiteSpace(request.UsuarioNome) ? request.UsuarioId : request.UsuarioNome.Trim(),
+            Canal = canal,
+            Titulo = string.IsNullOrWhiteSpace(request.Titulo) ? null : request.Titulo.Trim(),
+            Conteudo = request.Conteudo.Trim(),
+            ParentId = request.ParentId,
+            CriadoEm = DateTime.UtcNow,
+        };
+        db.MensagensComunidade.Add(mensagem);
+        await db.SaveChangesAsync(ct);
+        return ParaMensagemComunidade(mensagem);
+    }
+
+    private static MensagemComunidadeDto ParaMensagemComunidade(MensagemComunidade m) =>
+        new(m.Id, m.TurmaId, m.UsuarioId, m.UsuarioNome, m.Canal, m.Titulo, m.Conteudo, m.ParentId, m.CriadoEm);
+
+    public async Task<IReadOnlyList<AulaAoVivoDto>> ListarAulasAoVivoAsync(int turmaId, CancellationToken ct = default)
+    {
+        var aulas = await db.AulasAoVivo
+            .AsNoTracking()
+            .Include(a => a.Presencas)
+            .Where(a => a.TurmaId == turmaId)
+            .OrderBy(a => a.DataHora)
+            .ToListAsync(ct);
+        return aulas.Select(ParaAulaAoVivo).ToList();
+    }
+
+    public async Task<AulaAoVivoDto> CriarAulaAoVivoAsync(SalvarAulaAoVivoRequest request, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Titulo))
+            throw new InvalidOperationException("Informe o título da aula.");
+        if (request.DuracaoMinutos <= 0)
+            throw new InvalidOperationException("A duração deve ser maior que zero.");
+
+        var aula = new AulaAoVivo
+        {
+            TurmaId = request.TurmaId,
+            Titulo = request.Titulo.Trim(),
+            Descricao = string.IsNullOrWhiteSpace(request.Descricao) ? null : request.Descricao.Trim(),
+            DataHora = request.DataHora,
+            DuracaoMinutos = request.DuracaoMinutos,
+            Sala = $"sesi-turma-{request.TurmaId}-aula-{Guid.NewGuid():N}".Substring(0, 40),
+            CriadoEm = DateTime.UtcNow,
+        };
+        db.AulasAoVivo.Add(aula);
+        await db.SaveChangesAsync(ct);
+        return ParaAulaAoVivo(aula);
+    }
+
+    public async Task<PresencaAulaDto> RegistrarPresencaAulaAsync(int aulaId, string usuarioId, bool presente, CancellationToken ct = default)
+    {
+        var aula = await db.AulasAoVivo.FirstOrDefaultAsync(a => a.Id == aulaId, ct)
+            ?? throw new InvalidOperationException("Aula não encontrada.");
+
+        var presenca = await db.PresencasAula.FirstOrDefaultAsync(p => p.AulaAoVivoId == aulaId && p.UsuarioId == usuarioId, ct);
+        if (presenca is null)
+        {
+            presenca = new PresencaAula { AulaAoVivoId = aulaId, UsuarioId = usuarioId };
+            db.PresencasAula.Add(presenca);
+        }
+        presenca.Presente = presente;
+        presenca.RegistradoEm = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return new PresencaAulaDto(aulaId, usuarioId, presenca.Presente, presenca.RegistradoEm);
+    }
+
+    public async Task<IReadOnlyList<PresencaAulaDto>> ListarPresencasAulaAsync(int aulaId, CancellationToken ct = default)
+    {
+        var lista = await db.PresencasAula
+            .AsNoTracking()
+            .Where(p => p.AulaAoVivoId == aulaId)
+            .OrderBy(p => p.UsuarioId)
+            .ToListAsync(ct);
+        return lista.Select(p => new PresencaAulaDto(p.AulaAoVivoId, p.UsuarioId, p.Presente, p.RegistradoEm)).ToList();
+    }
+
+    private static AulaAoVivoDto ParaAulaAoVivo(AulaAoVivo a) =>
+        new(a.Id, a.TurmaId, a.Titulo, a.Descricao, a.DataHora, a.DuracaoMinutos, a.Sala,
+            $"https://meet.jit.si/{a.Sala}", a.Presencas.Count(p => p.Presente));
 }

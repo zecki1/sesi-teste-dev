@@ -12,6 +12,8 @@ build/
 out/
 .next/
 *.tsbuildinfo
+# SPA publicado dentro da API pelo publicar-producao.ps1
+backend/Sesi.Catalogo.Api/wwwroot/
 
 # Environment
 .env

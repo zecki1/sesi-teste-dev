@@ -452,7 +452,7 @@ public sealed class GestaoArmazenamento
             ("Isabela Martins", "isabela.martins@exemplo.com"),
             ("Joao Pedro", "joao.pedro@exemplo.com"),
         };
-        const string senha = "Sesi@2026";
+        const string senha = "Teste123@-";
 
         foreach (var (nome, email) in demo)
         {
@@ -461,15 +461,36 @@ public sealed class GestaoArmazenamento
             {
                 var usuarios = (await CarregarUsuariosAsync(ct)).ToList();
                 var existente = usuarios.FirstOrDefault(u => u.Email.Equals(email, StringComparison.OrdinalIgnoreCase));
-                if (existente is not null) continue;
 
-                var usuario = new UsuarioGestaoDto(
-                    Guid.NewGuid().ToString("N"), nome, email.ToLowerInvariant(), "Aluno", true, DateTime.UtcNow);
-                usuarios.Add(usuario);
-                await GravarAsync("usuarios.json", usuarios, ct);
+                UsuarioGestaoDto usuario;
+                if (existente is not null)
+                {
+                    usuario = existente;
+                    // Garante o nome e o papel esperados e atualiza a senha demo.
+                    var idx = usuarios.IndexOf(existente);
+                    usuarios[idx] = existente with { Nome = nome, Papel = "Aluno", Ativo = true };
+                    usuario = usuarios[idx];
+                    await GravarAsync("usuarios.json", usuarios, ct);
+                }
+                else
+                {
+                    usuario = new UsuarioGestaoDto(
+                        Guid.NewGuid().ToString("N"), nome, email.ToLowerInvariant(), "Aluno", true, DateTime.UtcNow);
+                    usuarios.Add(usuario);
+                    await GravarAsync("usuarios.json", usuarios, ct);
+                }
 
                 var credenciais = (await LerAsync<CredencialUsuario[]>("credenciais.json", [], ct)).ToList();
-                credenciais.Add(new CredencialUsuario(usuario.Id, _passwordHasher.HashPassword(usuario, senha)));
+                var credencial = credenciais.FirstOrDefault(c => c.UsuarioId == usuario.Id);
+                if (credencial is null)
+                {
+                    credenciais.Add(new CredencialUsuario(usuario.Id, _passwordHasher.HashPassword(usuario, senha)));
+                }
+                else
+                {
+                    var index = credenciais.IndexOf(credencial);
+                    credenciais[index] = credencial with { PasswordHash = _passwordHasher.HashPassword(usuario, senha) };
+                }
                 await GravarAsync("credenciais.json", credenciais, ct);
             }
             finally

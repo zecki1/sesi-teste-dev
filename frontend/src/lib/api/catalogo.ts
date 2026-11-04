@@ -187,7 +187,28 @@ export interface PaginaDto<T> {
   facetas: FacetasDto
 }
 
-export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5077"
+const apiConfigurada = (import.meta.env.VITE_API_URL ?? "").trim().replace(/\/+$/, "")
+
+/**
+ * Base da API.
+ * - Produção: vazio, pois o SPA é servido pela própria API (mesma origem).
+ * - Desenvolvimento: vazio também, com o Vite fazendo proxy para http://localhost:5077
+ *   (ver `vite.config.ts`).
+ * `VITE_API_URL` continua valendo quando o frontend precisa apontar para outra origem.
+ */
+export const API_URL = apiConfigurada
+
+/**
+ * Origem absoluta da API.
+ * Com o SPA servido pela própria API (mesma origem) a origem é a da página;
+ * sem API_URL (builds de teste) cai no host local. Usado para validar
+ * `event.origin` das mensagens SCORM e montar URLs absolutas.
+ */
+export const API_ORIGIN = (() => {
+  if (apiConfigurada) return new URL(apiConfigurada).origin
+  if (typeof window !== "undefined" && window.location?.origin) return window.location.origin
+  return "http://localhost:5077"
+})()
 
 /** Erro com o status HTTP, para diferenciar "não encontrado" de "sem conexão". */
 export class ApiError extends Error {

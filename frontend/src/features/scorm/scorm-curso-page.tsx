@@ -1,10 +1,9 @@
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom"
-import { useEffect, useRef, useState } from "react"
+import { Link, useParams } from "react-router-dom"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useCurso } from "@/hooks/use-catalogo"
-import { ApiError, API_URL } from "@/lib/api/catalogo"
+import { ApiError } from "@/lib/api/catalogo"
 import { usePerfil } from "@/lib/auth/perfil"
-import { useScormAcessibilidade } from "@/features/scorm/use-scorm-acessibilidade"
 import { MainLayout } from "@/components/layout/main-layout"
 import { Container } from "@/components/layout/container"
 import { Button } from "@/components/ui/button"
@@ -24,7 +23,7 @@ import {
   type PacoteScormDto,
   type ScormPaginaConfigDto,
 } from "./scorm-api"
-import { registrarMarcoCurso } from "@/lib/api/gestao"
+import { obterBoletim, type BoletimCurso } from "@/lib/api/academico"
 
 const IDIOMAS_SUPORTADOS = ["pt-BR", "en-US", "es-ES"] as const
 
@@ -68,8 +67,6 @@ function AlertaIdioma({ idioma, padrao }: { idioma: string; padrao: string }) {
 export function ScormCursoPage() {
   const { t, i18n } = useTranslation("course")
   const { slug } = useParams<{ slug: string }>()
-  const { pathname } = useLocation()
-  const navigate = useNavigate()
   const { data: curso, isLoading, isError, error } = useCurso(slug || "")
   const perfil = usePerfil()
   const [pacote, setPacote] = useState<PacoteScormDto | null>(null)
@@ -79,22 +76,9 @@ export function ScormCursoPage() {
   const [erroConfiguracao, setErroConfiguracao] = useState("")
   const [configuracaoRemota, setConfiguracaoRemota] = useState<ScormPaginaConfigDto | null>(null)
   const [progresso, setProgresso] = useState(0)
+  const [boletimCurso, setBoletimCurso] = useState<BoletimCurso | null>(null)
   const [statusScorm, setStatusScorm] = useState("")
   const [matriculaAberta, setMatriculaAberta] = useState(false)
-  const conclusaoRegistrada = useRef(false)
-  const emPlayer = pathname.endsWith("/scorm/player")
-  useScormAcessibilidade(Boolean(pacote && emPlayer), pacote?.id)
-
-  useEffect(() => {
-    conclusaoRegistrada.current = false
-  }, [slug, perfil?.email])
-
-  useEffect(() => {
-    if (!emPlayer || !slug || !perfil?.email) return
-    registrarMarcoCurso(slug, perfil.email, "inicio").catch((falha: unknown) => {
-      setErroProgresso(falha instanceof Error ? falha.message : t("scorm.progressError"))
-    })
-  }, [emPlayer, slug, perfil?.email, t])
 
   useEffect(() => {
     if (!slug || !curso) return
@@ -146,79 +130,44 @@ export function ScormCursoPage() {
     if (!slug || !pacote) return
     let ativo = true
 
-    obterProgressoScorm(slug, usuarioId)
-      .then((salvo) => {
-        if (ativo && salvo) {
-          setProgresso((atual) => Math.max(atual, Math.round(salvo.percentual)))
-          setStatusScorm(salvo.lessonStatus || "")
-        }
-      })
-      .catch((falha: unknown) => {
-        if (ativo) {
-          setErroProgresso(falha instanceof Error ? falha.message : t("scorm.progressError"))
-        }
-      })
+    const consultar = () =>
+      obterProgressoScorm(slug, usuarioId)
+        .then((salvo) => {
+          if (ativo && salvo) {
+            setProgresso((atual) => Math.max(atual, Math.round(salvo.percentual)))
+            setStatusScorm(salvo.lessonStatus || "")
+          }
+        })
+        .catch((falha: unknown) => {
+          if (ativo) {
+            setErroProgresso(falha instanceof Error ? falha.message : t("scorm.progressError"))
+          }
+        })
+
+    void consultar()
+
+    // O curso abre em outra guia; ao voltar, atualiza o progresso salvo pelo player.
+    const aoVoltar = () => {
+      if (document.visibilityState === "visible") void consultar()
+    }
+    document.addEventListener("visibilitychange", aoVoltar)
+    window.addEventListener("focus", aoVoltar)
 
     return () => {
       ativo = false
+      document.removeEventListener("visibilitychange", aoVoltar)
+      window.removeEventListener("focus", aoVoltar)
     }
   }, [slug, pacote, perfil?.email, t])
 
   useEffect(() => {
-    const origemApi = new URL(API_URL).origin
-
-    const aoReceberMensagem = (evento: MessageEvent) => {
-      if (evento.origin !== origemApi) return
-
-      const mensagem = evento.data as { type?: string; dados?: { percentual?: number; lessonStatus?: string } } | null
-      if (!mensagem || typeof mensagem !== "object" || !String(mensagem.type).startsWith("SCORM_")) return
-
-      const dados = mensagem.dados ?? (mensagem as { percentual?: number; lessonStatus?: string })
-      if (typeof dados.percentual === "number") {
-        setProgresso((atual) => Math.max(atual, Math.round(dados.percentual ?? 0)))
-      }
-      if (dados.lessonStatus) setStatusScorm(dados.lessonStatus)
-    }
-
-    window.addEventListener("message", aoReceberMensagem)
-    return () => window.removeEventListener("message", aoReceberMensagem)
-  }, [])
-
-  useEffect(() => {
-    const statusConcluido = ["completed", "passed", "complete"].includes(statusScorm.toLowerCase())
-    if (
-      !emPlayer ||
-      !slug ||
-      !perfil?.email ||
-      conclusaoRegistrada.current ||
-      (progresso < 100 && !statusConcluido)
-    ) return
-
-    conclusaoRegistrada.current = true
-
-    const dispararCelebracao = (concluidoEm: string) => {
-      const chaveAviso = `sesi.certificado.mostrado.${slug}::${perfil.email.toLowerCase()}`
-      if (window.localStorage.getItem(chaveAviso)) return
-      window.localStorage.setItem(chaveAviso, "1")
-      window.dispatchEvent(new CustomEvent("sesi:curso-concluido", {
-        detail: {
-          slug,
-          titulo: curso?.nomeCompleto ?? curso?.nomeBreve ?? slug,
-          aluno: `${perfil.nome} ${perfil.sobrenome}`.trim(),
-          concluidoEm,
-        },
-      }))
-    }
-
-    registrarMarcoCurso(slug, perfil.email, "conclusao", progresso)
-      .then((marco) => {
-        dispararCelebracao(marco.concluidoEm || new Date().toISOString())
-      })
-      .catch((falha: unknown) => {
-        setErroProgresso(falha instanceof Error ? falha.message : t("scorm.completionError"))
-        dispararCelebracao(new Date().toISOString())
-      })
-  }, [emPlayer, slug, perfil?.email, perfil?.nome, perfil?.sobrenome, progresso, statusScorm, curso?.nomeCompleto, curso?.nomeBreve, t])
+    if (!perfil?.email || !slug) return
+    let ativo = true
+    obterBoletim(perfil.email)
+      .then((b) => ativo && setBoletimCurso(b.cursos.find((c) => c.cursoSlug === slug) ?? null))
+      .catch(() => ativo && setBoletimCurso(null))
+    return () => { ativo = false }
+  }, [perfil?.email, slug])
 
   if (isLoading) {
     return (
@@ -264,59 +213,8 @@ export function ScormCursoPage() {
   const idiomaPadrao = normalizarIdioma(config.idiomaPadrao)
   const idiomaIndisponivel = !idiomasDoPacote.includes(idiomaAtual)
 
-  const irParaConteudo = () => navigate(`/curso/${curso.slug}/scorm/player`)
-
-  if (emPlayer) {
-    return (
-      <MainLayout showFooter={false}>
-        <section className="flex min-h-[calc(100svh-72px)] flex-col">
-          <Container className="flex w-full items-center justify-between gap-4 border-b border-[var(--sesi-gray)] py-4">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--sesi-muted)]">
-                {t("scorm.playerEyebrow", { versao: versaoEfetiva })}
-              </p>
-              <h1 className="truncate text-lg font-bold text-[var(--sesi-black)] sm:text-xl">{config.titulo}</h1>
-            </div>
-            <div className="shrink-0 text-right">
-              <span className="block text-xs text-[var(--sesi-muted)]">{t("scorm.progress")}</span>
-              <strong className="text-sm text-[var(--sesi-black)]">{progresso}%</strong>
-            </div>
-          </Container>
-
-          {idiomaIndisponivel && (
-            <Container className="w-full">
-              <AlertaIdioma idioma={idiomaAtual} padrao={idiomaPadrao} />
-            </Container>
-          )}
-
-          {temPlayer ? (
-            <iframe
-              data-player-scorm
-              src={urlPlayer}
-              title={t("scorm.playerTitle", { curso: curso.nomeBreve })}
-              className="h-[calc(100svh-150px)] min-h-[420px] w-full border-0"
-              allow="fullscreen"
-            />
-          ) : carregandoPacote ? (
-            <div data-player-carregando className="grid min-h-[420px] flex-1 place-items-center px-6 py-10 text-sm text-[var(--sesi-muted)]">
-              {t("scorm.loadingPlayer")}
-            </div>
-          ) : (
-            <Container className="flex flex-1 flex-col items-center justify-center gap-4 py-12 text-center">
-              <p role={erroPacote ? "alert" : undefined} className={erroPacote ? "text-sm text-[var(--sesi-red)]" : "text-sm text-[var(--sesi-muted)]"}>
-                {erroPacote
-                  ? `${t("scorm.packageError")} ${erroPacote}`
-                  : t("scorm.noPackage")}
-              </p>
-              <Button type="button" variant="secondary" onClick={() => navigate(`/curso/${curso.slug}/scorm`)}>
-                {t("scorm.backToCourse")}
-              </Button>
-            </Container>
-          )}
-        </section>
-      </MainLayout>
-    )
-  }
+  const abrirPlayer = () => window.open(`/curso/${curso.slug}/scorm/player`, "_blank")
+  const irParaConteudo = abrirPlayer
 
   return (
     <MainLayout>
@@ -403,13 +301,14 @@ export function ScormCursoPage() {
                       <h3 className="font-semibold text-[var(--sesi-black)]">{t("scorm.readyTitle")}</h3>
                       <p className="mt-1 text-sm text-[var(--sesi-muted)]">{t("scorm.readyText")}</p>
                     </div>
-                    <Link
-                      to={`/curso/${curso.slug}/scorm/player`}
+                    <button
+                      type="button"
+                      onClick={abrirPlayer}
                       className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--sesi-red)] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[var(--sesi-red-dark)]"
                     >
                       {progresso > 0 ? t("continueCourse") : t("startCourse")}
                       <span aria-hidden="true">→</span>
-                    </Link>
+                    </button>
                   </div>
                 </>
               ) : carregandoPacote ? (
@@ -474,6 +373,48 @@ export function ScormCursoPage() {
       <SobreCurso curso={curso} descricao={config.descricao} />
       <DepoimentosCurso curso={curso} />
       <AjudaCurso curso={curso} />
+      {boletimCurso && (
+        <section className="mx-auto mt-6 max-w-5xl px-4">
+          <div className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white p-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-lg font-bold text-[var(--sesi-black)]">Minhas notas neste curso</h2>
+              <p className="text-sm text-[var(--sesi-muted)]">
+                Turma {boletimCurso.turmaCodigo || "—"} · média{" "}
+                <strong className="text-[var(--sesi-black)]">
+                  {boletimCurso.notas.length ? boletimCurso.mediaFinal.toFixed(1) : "—"}
+                </strong>
+              </p>
+            </div>
+            {boletimCurso.notas.length === 0 ? (
+              <p className="mt-3 text-sm text-[var(--sesi-muted)]">Nenhuma nota lançada ainda.</p>
+            ) : (
+              <div className="mt-3 overflow-x-auto rounded-lg border border-[var(--sesi-gray)]">
+                <table className="w-full min-w-[480px] text-left text-sm">
+                  <thead className="bg-[#F5F5F5] text-xs uppercase text-[var(--sesi-muted)]">
+                    <tr>
+                      <th className="px-4 py-2.5">Avaliação</th>
+                      <th className="px-4 py-2.5">Tipo</th>
+                      <th className="px-4 py-2.5">Data</th>
+                      <th className="px-4 py-2.5">Nota</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {boletimCurso.notas.map((nota) => (
+                      <tr key={nota.id} className="border-t border-[var(--sesi-gray)]">
+                        <td className="px-4 py-2.5 font-medium">{nota.titulo}</td>
+                        <td className="px-4 py-2.5">{nota.tipo}</td>
+                        <td className="px-4 py-2.5">{new Date(nota.data).toLocaleDateString("pt-BR")}</td>
+                        <td className="px-4 py-2.5">{nota.valor} / {nota.valorMaximo}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       <FaixaMatricula
         nomeCurso={curso.nomeCompleto}
         onMatricular={() => setMatriculaAberta(true)}

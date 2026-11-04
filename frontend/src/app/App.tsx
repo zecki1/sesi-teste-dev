@@ -9,6 +9,7 @@ import { SmoothScroll } from '@/components/motion/smooth-scroll'
 import { usePerfil } from '@/lib/auth/perfil'
 import { aplicarIdioma, iniciarIdioma } from '@/lib/i18n/idioma'
 import { LanguageSync } from './LanguageSync'
+import { CrossTabSync } from './CrossTabSync'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,6 +33,7 @@ function App() {
       <BrowserRouter>
         <SmoothScroll />
         <LanguageSync />
+        <CrossTabSync />
         <Routes />
         <AccessibilityMenu />
         <StudentSupportDialog />

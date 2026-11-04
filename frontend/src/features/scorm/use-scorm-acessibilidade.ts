@@ -2,7 +2,7 @@ import { useEffect } from "react"
 import fonteDislexia from "@fontsource/opendyslexic/files/opendyslexic-latin-400-normal.woff2?inline"
 import { lerConfig } from "@/lib/a11y/config"
 
-export function useScormAcessibilidade(ativo: boolean, chaveInstancia?: string | number) {
+export function useScormAcessibilidade(ativo: boolean, chaveInstancia?: string | number, desabilitarVlibrasScorm: boolean = false) {
   useEffect(() => {
     if (!ativo) return
 
@@ -10,8 +10,10 @@ export function useScormAcessibilidade(ativo: boolean, chaveInstancia?: string |
     if (!player) return
 
     const sincronizar = () => {
+      const config = { ...lerConfig(), fontDataUrl: fonteDislexia }
+      if (desabilitarVlibrasScorm) config.vlibras = false
       player.contentWindow?.postMessage(
-        { type: "SESI_A11Y_CONFIG", config: { ...lerConfig(), fontDataUrl: fonteDislexia } },
+        { type: "SESI_A11Y_CONFIG", config },
         "*",
       )
     }
@@ -27,5 +29,5 @@ export function useScormAcessibilidade(ativo: boolean, chaveInstancia?: string |
       window.removeEventListener("sesi:acessibilidade-atualizada", aoAtualizar)
       window.removeEventListener("storage", aoAtualizar)
     }
-  }, [ativo, chaveInstancia])
+  }, [ativo, chaveInstancia, desabilitarVlibrasScorm])
 }

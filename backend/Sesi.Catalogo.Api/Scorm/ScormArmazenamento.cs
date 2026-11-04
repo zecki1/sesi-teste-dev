@@ -447,15 +447,24 @@ public sealed class ScormArmazenamento
                 0,
                 100);
 
+            // Campos vazios nunca apagam o que já foi salvo: o conteúdo pode
+            // enviar "" ou "not attempted" no início de uma nova sessão.
+            static string? Preservar(string? novo, string? anterior)
+                => string.IsNullOrWhiteSpace(novo) ? anterior : novo;
+
+            var status = request.LessonStatus;
+            if (string.Equals(status?.Trim(), "not attempted", StringComparison.OrdinalIgnoreCase))
+                status = null;
+
             var progresso = new ProgressoScormDto(
                 cursoSlug,
                 usuarioId,
-                request.SuspendData ?? anterior?.SuspendData,
-                request.LessonStatus ?? anterior?.LessonStatus,
-                request.LessonLocation ?? anterior?.LessonLocation,
+                Preservar(request.SuspendData, anterior?.SuspendData),
+                Preservar(status, anterior?.LessonStatus),
+                Preservar(request.LessonLocation, anterior?.LessonLocation),
                 request.Score ?? anterior?.Score,
                 percentual,
-                request.CmiDataJson ?? anterior?.CmiDataJson,
+                Preservar(request.CmiDataJson, anterior?.CmiDataJson),
                 DateTime.UtcNow);
 
             await GravarProgressoAsync(caminho, progresso, ct);

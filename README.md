@@ -17,8 +17,11 @@
 > Interface construída a partir dos protótipos do Figma, com foco em acessibilidade,
 > internacionalização e responsividade.
 >
-> **Produção:** https://frontend-ezequiel-reginos-projects.vercel.app · **API:** https://sesi-teste-dev.onrender.com
-> **Repo:** `https://github.com/zecki1/sesi-teste-dev` (branch `main`)
+> **Deploy:** https://frontend-ezequiel-reginos-projects.vercel.app · **Repo:** `https://github.com/zecki1/sesi-teste-dev` (branch `main`)
+>
+> Para demonstrar em produção sem depender de serviços de terceiros, use
+> `publicar-producao.ps1`: compila o front, serve o SPA pela própria API e abre um túnel
+> Cloudflare com HTTPS (seção **Publicar como produção**).
 
 ---
 
@@ -98,13 +101,42 @@ npm install
 npm run dev                                # API em :5077 e Vite em :5173
 ```
 
-O front-end usa `http://localhost:5077` como API padrão. Para apontar para outro ambiente, crie
-`frontend/.env.local` com `VITE_API_URL=http://localhost:5077`. Se a porta `5173` estiver ocupada, o Vite pode abrir em `5174`; a API local também permite as origens `localhost:5174` e `127.0.0.1:5174` via CORS.
+O front-end fala com a API **na mesma origem**: em desenvolvimento o Vite faz proxy de
+`/api`, `/uploads`, `/scorm` e `/health` para `http://localhost:5077` (veja `frontend/vite.config.ts`
+e `frontend/scripts/dev.mjs`), então não há CORS no navegador. Para apontar para outra API, crie
+`frontend/.env.local` com `VITE_API_URL=https://outra-api`. Se a porta `5173` estiver ocupada, o Vite pode abrir em `5174`; a API local também permite as origens `localhost:5174` e `127.0.0.1:5174` via CORS.
 Os dois serviços também podem ser iniciados pelo back-end: execute `dotnet run --project backend/Sesi.Catalogo.Api --launch-profile http` na raiz do repositório. Em Development, esse comando inicia o Vite se ele ainda não estiver ativo; `npm run dev` faz o inverso, iniciando a API se necessário. Ambos verificam serviços locais já ativos para evitar iniciar uma segunda instância. Ao encerrar o processo que iniciou ambos, o serviço filho também é encerrado.
 No modo de desenvolvimento, chamadas da API não são substituídas por dados simulados: catálogo, matrículas e progresso exigem que a API local esteja rodando.
 Com a API iniciada, o health check local fica disponível em `http://localhost:5077/health`.
 O Swagger/OpenAPI local fica em [`http://localhost:5077/swagger`](http://localhost:5077/swagger) enquanto a API está rodando. A interface Swagger é habilitada nos ambientes Development e Staging; não está exposta no ambiente Production.
 O banco SQLite local (`catalogo.db`), os pacotes SCORM, chamados, usuários e marcos dos cursos ficam em arquivos locais; a pasta `backend/Sesi.Catalogo.Api/App_Data/` é ignorada pelo Git para não versionar uploads e dados de alunos.
+
+### Publicar como produção (local + túnel)
+
+O script `publicar-producao.ps1` sobe o AVA inteiro como em produção, em **uma única origem**:
+
+1. compila o frontend (`npm run build`);
+2. publica o build em `backend/Sesi.Catalogo.Api/wwwroot`, servido pela própria API;
+3. sobe a API com `ASPNETCORE_ENVIRONMENT=Production` na porta `5077`;
+4. abre um túnel Cloudflare (HTTPS) e libera a URL no CORS.
+
+`X-Forwarded-Proto` é respeitado, então cookies `Secure` e o redirecionamento funcionam atrás do túnel.
+O Ollama fica privado na máquina local: o navegador só conversa com `/api/v1/tutor`.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\publicar-producao.ps1          # sobe tudo
+powershell -ExecutionPolicy Bypass -File .\publicar-producao.ps1 -Parar   # derruba tudo
+```
+
+Variáveis úteis:
+
+| Variável | Efeito |
+|----------|--------|
+| `SESI_DEMO_AUTH=0` | Religar a exigência de login administrativo em `/api/v1/gestao` (padrão: liberado para demonstração) |
+| `SESI_SEM_TUNEL=1` | Subir só em `http://localhost:5077`, sem túnel |
+
+No modo padrão a API loga um aviso `[DEMO] Autorização administrativa desativada`. Em produção real,
+rode com `SESI_DEMO_AUTH=0` e autentique em `POST /api/v1/gestao/sessao`.
 
 ### E-mail de suporte local
 
@@ -154,6 +186,7 @@ O destino padrão dos chamados é `zecki1@hotmail.com`; o remetente padrão é `
 | `npm run perf:lighthouse` | Lighthouse CI em quatro rotas do build local |
 | `npm run e2e:screenshots` | Gera screenshots desktop/mobile em `docs/screenshots/` |
 | `dotnet run --project Sesi.Catalogo.Api --launch-profile http` | Sobe a API e o Vite (`backend/`) |
+| `.\publicar-producao.ps1` | Build + API em Production + túnel Cloudflare, tudo na mesma origem |
 | `dotnet test` | Testes de integração da API (`backend/`) |
 
 Os comandos de front-end rodam em `frontend/`; os de back-end, em `backend/`.

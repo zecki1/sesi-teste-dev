@@ -1,4 +1,4 @@
-import { API_URL } from "@/lib/api/catalogo"
+import { API_ORIGIN, API_URL } from "@/lib/api/catalogo"
 import type { ScormPaginaConfig } from "./scorm-config"
 
 export interface PacoteScormDto {
@@ -168,7 +168,7 @@ export async function obterProgressoScorm(
   cursoSlug: string,
   usuarioId: string,
 ): Promise<ProgressoScormDto | null> {
-  const url = new URL(`${API_URL}/api/v1/scorm/progresso`)
+  const url = new URL(`${API_URL}/api/v1/scorm/progresso`, API_ORIGIN)
   url.searchParams.set("cursoSlug", cursoSlug)
   url.searchParams.set("usuarioId", usuarioId)
 
@@ -182,7 +182,7 @@ export async function reiniciarProgressoScorm(
   cursoSlug: string,
   usuarioId: string,
 ): Promise<ProgressoScormDto> {
-  const url = new URL(`${API_URL}/api/v1/scorm/progresso/reiniciar`)
+  const url = new URL(`${API_URL}/api/v1/scorm/progresso/reiniciar`, API_ORIGIN)
   url.searchParams.set("cursoSlug", cursoSlug)
   url.searchParams.set("usuarioId", usuarioId)
 

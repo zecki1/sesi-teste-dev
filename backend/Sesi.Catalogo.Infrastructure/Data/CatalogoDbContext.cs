@@ -24,6 +24,11 @@ public class CatalogoDbContext(DbContextOptions<CatalogoDbContext> options) : Db
     public DbSet<TentativaScorm> TentativasScorm => Set<TentativaScorm>();
     public DbSet<Turma> Turmas => Set<Turma>();
     public DbSet<Matricula> Matriculas => Set<Matricula>();
+    public DbSet<Nota> Notas => Set<Nota>();
+    public DbSet<MensagemComunidade> MensagensComunidade => Set<MensagemComunidade>();
+    public DbSet<AulaAoVivo> AulasAoVivo => Set<AulaAoVivo>();
+    public DbSet<PresencaAula> PresencasAula => Set<PresencaAula>();
+    public DbSet<HistoricoTutor> HistoricoTutor => Set<HistoricoTutor>();
     public DbSet<AvaliacaoCurso> Avaliacoes => Set<AvaliacaoCurso>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -258,6 +263,63 @@ public class CatalogoDbContext(DbContextOptions<CatalogoDbContext> options) : Db
                 .WithMany(t => t.Matriculas)
                 .HasForeignKey(x => x.TurmaId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Nota>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Titulo).HasMaxLength(200).IsRequired();
+            e.Property(x => x.Tipo).HasMaxLength(40).IsRequired();
+            e.Property(x => x.Peso).HasPrecision(5, 2);
+            e.Property(x => x.Valor).HasPrecision(7, 2);
+            e.Property(x => x.ValorMaximo).HasPrecision(7, 2);
+            e.Property(x => x.Observacao).HasMaxLength(1000);
+            e.HasIndex(x => x.MatriculaId);
+
+            e.HasOne(x => x.Matricula)
+                .WithMany()
+                .HasForeignKey(x => x.MatriculaId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MensagemComunidade>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.UsuarioId).HasMaxLength(200).IsRequired();
+            e.Property(x => x.UsuarioNome).HasMaxLength(120).IsRequired();
+            e.Property(x => x.Canal).HasMaxLength(20).IsRequired();
+            e.Property(x => x.Titulo).HasMaxLength(200);
+            e.Property(x => x.Conteudo).HasMaxLength(4000).IsRequired();
+            e.HasIndex(x => new { x.TurmaId, x.Canal, x.CriadoEm });
+            e.HasOne(x => x.Turma).WithMany().HasForeignKey(x => x.TurmaId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Parent).WithMany().HasForeignKey(x => x.ParentId).OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<AulaAoVivo>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Titulo).HasMaxLength(200).IsRequired();
+            e.Property(x => x.Descricao).HasMaxLength(2000);
+            e.Property(x => x.Sala).HasMaxLength(120).IsRequired();
+            e.HasIndex(x => new { x.TurmaId, x.DataHora });
+            e.HasOne(x => x.Turma).WithMany().HasForeignKey(x => x.TurmaId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PresencaAula>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.UsuarioId).HasMaxLength(200).IsRequired();
+            e.HasIndex(x => new { x.AulaAoVivoId, x.UsuarioId }).IsUnique();
+            e.HasOne(x => x.AulaAoVivo).WithMany(a => a.Presencas).HasForeignKey(x => x.AulaAoVivoId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<HistoricoTutor>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.UsuarioId).HasMaxLength(200).IsRequired();
+            e.Property(x => x.Papel).HasMaxLength(20).IsRequired();
+            e.Property(x => x.Texto).HasMaxLength(8000).IsRequired();
+            e.HasIndex(x => new { x.UsuarioId, x.CriadoEm });
         });
     }
 }

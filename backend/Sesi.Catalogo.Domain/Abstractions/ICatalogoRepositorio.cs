@@ -75,4 +75,58 @@ public interface ICatalogoRepositorio
 
     /// <summary>Recupera o estado atual de uma sessão SCORM.</summary>
     Task<SessaoScormDto?> ObterSessaoScormAsync(string sessaoId, CancellationToken ct = default);
+
+    // ---------- Gestão acadêmica (turmas, matrículas e notas) ----------
+
+    /// <summary>Lista todas as turmas para a gestão acadêmica.</summary>
+    Task<IReadOnlyList<TurmaAdminDto>> ListarTurmasAdminAsync(CancellationToken ct = default);
+
+    /// <summary>Cria ou atualiza uma turma. Retorna null quando o id informado não existe.</summary>
+    Task<TurmaAdminDto?> SalvarTurmaAdminAsync(int? id, SalvarTurmaRequest request, CancellationToken ct = default);
+
+    /// <summary>Exclui uma turma sem matrículas. Retorna a mensagem de erro ou null em caso de sucesso.</summary>
+    Task<string?> ExcluirTurmaAdminAsync(int id, CancellationToken ct = default);
+
+    /// <summary>Lista matrículas para a gestão, filtrando opcionalmente por turma ou curso.</summary>
+    Task<IReadOnlyList<MatriculaAdminDto>> ListarMatriculasAdminAsync(int? turmaId = null, string? cursoSlug = null, CancellationToken ct = default);
+
+    /// <summary>Cria/atualiza uma matrícula pelo admin. Retorna null quando a turma não existe.</summary>
+    Task<MatriculaAdminDto?> SalvarMatriculaAdminAsync(int? id, SalvarMatriculaAdminRequest request, CancellationToken ct = default);
+
+    /// <summary>Remove uma matrícula e suas notas.</summary>
+    Task<bool> ExcluirMatriculaAdminAsync(int id, CancellationToken ct = default);
+
+    /// <summary>Lista as notas de uma matrícula.</summary>
+    Task<IReadOnlyList<NotaDto>> ListarNotasAsync(int matriculaId, CancellationToken ct = default);
+
+    /// <summary>Lanca ou atualiza uma nota. Retorna null quando a matrícula não existe.</summary>
+    Task<NotaDto?> SalvarNotaAsync(int matriculaId, int? id, SalvarNotaRequest request, CancellationToken ct = default);
+
+    /// <summary>Remove uma nota.</summary>
+    Task<bool> ExcluirNotaAsync(int id, CancellationToken ct = default);
+
+    /// <summary>Monta o boletim completo do aluno.</summary>
+    Task<BoletimDto> ObterBoletimAsync(string usuarioId, CancellationToken ct = default);
+
+    // ---------- Comunidade da turma (fórum, chat, plantão) ----------
+
+    /// <summary>Lista as mensagens de uma turma em um canal.</summary>
+    Task<IReadOnlyList<MensagemComunidadeDto>> ListarMensagensComunidadeAsync(int turmaId, string canal, CancellationToken ct = default);
+
+    /// <summary>Publica uma mensagem na comunidade da turma.</summary>
+    Task<MensagemComunidadeDto> CriarMensagemComunidadeAsync(EnviarMensagemComunidadeRequest request, CancellationToken ct = default);
+
+    // ---------- Aulas ao vivo (semi-presencial) ----------
+
+    /// <summary>Lista as aulas ao vivo de uma turma.</summary>
+    Task<IReadOnlyList<AulaAoVivoDto>> ListarAulasAoVivoAsync(int turmaId, CancellationToken ct = default);
+
+    /// <summary>Cria uma aula ao vivo.</summary>
+    Task<AulaAoVivoDto> CriarAulaAoVivoAsync(SalvarAulaAoVivoRequest request, CancellationToken ct = default);
+
+    /// <summary>Registra a presença de um aluno em uma aula.</summary>
+    Task<PresencaAulaDto> RegistrarPresencaAulaAsync(int aulaId, string usuarioId, bool presente, CancellationToken ct = default);
+
+    /// <summary>Lista as presenças de uma aula.</summary>
+    Task<IReadOnlyList<PresencaAulaDto>> ListarPresencasAulaAsync(int aulaId, CancellationToken ct = default);
 }

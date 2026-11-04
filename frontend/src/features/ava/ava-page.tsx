@@ -3,20 +3,19 @@ import { Link, Navigate, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useCurso } from "@/hooks/use-catalogo"
 import { usePerfil } from "@/lib/auth/perfil"
-import { useScormAcessibilidade } from "@/features/scorm/use-scorm-acessibilidade"
 import { useBodyScrollLock } from "@/lib/ui/use-body-scroll-lock"
-import { API_URL, type CursoDetalheDto, type ModuloDto } from "@/lib/api/catalogo"
+import { API_ORIGIN, type CursoDetalheDto, type ModuloDto } from "@/lib/api/catalogo"
 import { Container } from "@/components/layout/container"
 import { MainLayout } from "@/components/layout/main-layout"
 import { SesiMark } from "@/components/layout/footer"
-import bannerAva from "@/assets/banner-ava.png"
+import bannerAva from "@/assets/banner-ava.webp"
 import logoSesi from "@/assets/logo-sesi.svg"
 import { calcularPercentualAva, carregarProgressoAva, salvarProgressoAva } from "./progresso-ava"
+import { obterBoletim, type BoletimCurso } from "@/lib/api/academico"
 import {
   obterPacoteScorm,
   obterProgressoScorm,
   reiniciarProgressoScorm,
-  urlPlayerScorm,
   type PacoteScormDto,
   type ProgressoScormDto,
 } from "@/features/scorm/scorm-api"
@@ -169,15 +168,27 @@ export function AvaPage() {
   const [scormResolvido, setScormResolvido] = useState(false)
   const [erroScorm, setErroScorm] = useState("")
   const [reiniciandoScorm, setReiniciandoScorm] = useState(false)
-  const [playerScormAtivo, setPlayerScormAtivo] = useState(true)
-  const [versaoPlayerScorm, setVersaoPlayerScorm] = useState(0)
+  const [boletimCurso, setBoletimCurso] = useState<BoletimCurso | null>(null)
+
+  const emailAluno = perfil?.email
+
+  useEffect(() => {
+    if (!emailAluno || !slug) return
+    let ativo = true
+    obterBoletim(emailAluno)
+      .then((boletim) => {
+        if (ativo) setBoletimCurso(boletim.cursos.find((item) => item.cursoSlug === slug) ?? null)
+      })
+      .catch(() => {
+        if (ativo) setBoletimCurso(null)
+      })
+    return () => {
+      ativo = false
+    }
+  }, [emailAluno, slug])
   const retomadaAvaliada = useRef<string | null>(null)
   const conclusaoRegistrada = useRef(false)
   useBodyScrollLock(mostrarRetomada)
-  useScormAcessibilidade(
-    Boolean(pacoteScorm && scormResolvido && playerScormAtivo),
-    `${pacoteScorm?.id ?? ""}:${versaoPlayerScorm}`,
-  )
 
   useEffect(() => {
     conclusaoRegistrada.current = false
@@ -305,7 +316,7 @@ export function AvaPage() {
 
   useEffect(() => {
     if (!pacoteScorm) return
-    const origemApi = new URL(API_URL).origin
+    const origemApi = API_ORIGIN
 
     const aoReceberMensagem = (evento: MessageEvent) => {
       if (evento.origin !== origemApi) return
@@ -342,34 +353,6 @@ export function AvaPage() {
     window.addEventListener("message", aoReceberMensagem)
     return () => window.removeEventListener("message", aoReceberMensagem)
   }, [pacoteScorm, slug, perfil?.email])
-
-  useEffect(() => {
-    if (!reiniciandoScorm || playerScormAtivo || !pacoteScorm || !perfil?.email) return
-    let ativo = true
-
-    reiniciarProgressoScorm(slug, perfil.email)
-      .then((reiniciado) => {
-        if (!ativo) return
-        setProgressoScorm(reiniciado)
-        setVersaoPlayerScorm((versao) => versao + 1)
-        setMostrarRetomada(false)
-      })
-      .catch((falha: unknown) => {
-        if (ativo) {
-          setErroScorm(falha instanceof Error ? falha.message : "Não foi possível reiniciar o conteúdo SCORM.")
-        }
-      })
-      .finally(() => {
-        if (ativo) {
-          setPlayerScormAtivo(true)
-          setReiniciandoScorm(false)
-        }
-      })
-
-    return () => {
-      ativo = false
-    }
-  }, [reiniciandoScorm, playerScormAtivo, pacoteScorm, perfil?.email, slug])
 
   if (!perfil) return <Navigate to="/area-do-aluno" replace />
 
@@ -411,15 +394,35 @@ export function AvaPage() {
     }
   }
 
-  const continuarDeOndeParei = () => setMostrarRetomada(false)
-  const comecarDoInicio = () => {
-    if (pacoteScorm && perfil.email) {
+  /** Abre o player do SCORM em guia própria (sem header/footer do AVA). */
+  const abrirPlayerScorm = (doInicio = false, retomar = false) => {
+    setMostrarRetomada(false)
+    setErroScorm("")
+    if (doInicio && pacoteScorm && perfil.email) {
       setReiniciandoScorm(true)
-      setErroScorm("")
-      setPlayerScormAtivo(false)
+      reiniciarProgressoScorm(slug, perfil.email)
+        .then((reiniciado) => setProgressoScorm(reiniciado))
+        .catch((falha: unknown) => {
+          setErroScorm(falha instanceof Error ? falha.message : "Não foi possível reiniciar o conteúdo SCORM.")
+        })
+        .finally(() => setReiniciandoScorm(false))
+    }
+    const parametros = retomar ? "?retomar=1" : doInicio ? "?reiniciar=1" : ""
+    window.open(`/curso/${slug}/scorm/player${parametros}`, "_blank")
+  }
+
+  const continuarDeOndeParei = () => {
+    if (pacoteScorm) {
+      abrirPlayerScorm(false, true)
       return
     }
-
+    setMostrarRetomada(false)
+  }
+  const comecarDoInicio = () => {
+    if (pacoteScorm) {
+      abrirPlayerScorm(true)
+      return
+    }
     selecionarItem("introducao")
     setMostrarRetomada(false)
   }
@@ -437,88 +440,99 @@ export function AvaPage() {
   }
 
   if (modoScorm && pacoteScorm) {
+    const concluido = progresso >= 100 || ["completed", "passed", "complete"].includes((progressoScorm?.lessonStatus ?? "").toLowerCase())
+
     return (
       <MainLayout>
-        {mostrarRetomada && (
-          <div
-            data-modal-retomada
-            className="fixed inset-0 z-[60] grid place-items-center bg-black/60 p-4"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="titulo-retomada"
-            data-lenis-prevent
-          >
-            <div className="w-full max-w-md rounded-[var(--radius-lg)] bg-white p-6 shadow-2xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sesi-muted)]">Sua jornada</p>
-              <h2 id="titulo-retomada" className="mt-2 font-['Open_Sans_Condensed',sans-serif] text-2xl font-bold text-[var(--sesi-black)]">
-                Continuar de onde parei?
-              </h2>
-              <p className="mt-2 text-sm text-[var(--sesi-muted)]">
-                Seu progresso máximo é {progresso}%. Você pode retomar o checkpoint salvo ou reiniciar o conteúdo sem apagar esse progresso.
-              </p>
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={continuarDeOndeParei}
-                  disabled={reiniciandoScorm}
-                  className="flex-1 rounded-[var(--radius-lg)] bg-[var(--sesi-red)] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--sesi-red-dark)]"
-                >
-                  Continuar de onde parei
-                </button>
-                <button
-                  type="button"
-                  onClick={comecarDoInicio}
-                  disabled={reiniciandoScorm}
-                  className="flex-1 rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] px-4 py-2.5 text-sm font-semibold text-[var(--sesi-black)] transition hover:bg-[var(--sesi-gray)]"
-                >
-                  {reiniciandoScorm ? "Reiniciando..." : "Começar do início"}
-                </button>
-              </div>
-              {erroScorm && (
-                <p role="alert" className="mt-3 text-sm font-medium text-[var(--sesi-red)]">
-                  {erroScorm}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div className="bg-[var(--sesi-white)] py-4 sm:py-6">
-          <Container className="flex flex-col">
+        <div className="bg-[var(--sesi-white)] py-6 sm:py-10">
+          <Container className="flex flex-col gap-6">
             <Link
               to="/area-do-aluno"
-              className="mb-3 inline-flex text-xs font-semibold text-[var(--sesi-muted)] underline-offset-4 transition hover:text-[var(--sesi-black)] hover:underline"
+              className="inline-flex text-xs font-semibold text-[var(--sesi-muted)] underline-offset-4 transition hover:text-[var(--sesi-black)] hover:underline"
             >
               ← {t("backToArea")}
             </Link>
-            <section className="flex flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--sesi-gray)] px-4 py-3">
-                <div>
-                  <h2 className="font-semibold text-[var(--sesi-black)]">Conteúdo original do curso</h2>
-                  <p className="mt-1 text-xs text-[var(--sesi-muted)]">SCORM {pacoteScorm.versao} · Seu progresso é salvo automaticamente.</p>
+
+            <section className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white shadow-sm">
+              <header className="border-b border-[var(--sesi-gray)] px-5 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sesi-muted)]">Curso SCORM {pacoteScorm.versao}</p>
+                <h1 className="mt-1 font-['Open_Sans_Condensed',sans-serif] text-2xl font-bold text-[var(--sesi-black)] sm:text-3xl">
+                  {curso?.nomeCompleto ?? curso?.nomeBreve ?? "Curso"}
+                </h1>
+              </header>
+
+              <div className="px-5 py-5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold text-[var(--sesi-black)]">Seu progresso</span>
+                  <strong className="text-sm text-[var(--sesi-black)]">{progresso}%</strong>
                 </div>
-                <strong className="text-sm text-[var(--sesi-black)]">{progresso}% concluído</strong>
-              </div>
-              {erroScorm && (
-                <p role="alert" className="border-b border-[var(--sesi-gray)] px-4 py-3 text-sm text-[var(--sesi-red)]">
-                  {erroScorm}
+                <div
+                  role="progressbar"
+                  aria-label={t("progress")}
+                  aria-valuenow={progresso}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--sesi-gray)]"
+                >
+                  <div
+                    className="h-full rounded-full bg-[var(--sesi-red)] transition-[width] duration-300"
+                    style={{ width: `${Math.min(100, Math.max(0, progresso))}%` }}
+                  />
+                </div>
+                <p className="mt-3 text-sm text-[var(--sesi-muted)]">
+                  {concluido
+                    ? "Você concluiu este conteúdo. Pode revisar quando quiser."
+                    : "Continue de onde parou: o curso abre em uma nova guia, em tela cheia, e salva seu progresso automaticamente."}
                 </p>
-              )}
-              {!playerScormAtivo ? (
-                <div className="grid min-h-[500px] place-items-center text-sm text-[var(--sesi-muted)]">
-                  {reiniciandoScorm ? "Reiniciando o conteúdo SCORM..." : "Carregando o conteúdo SCORM..."}
+
+                <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => abrirPlayerScorm(false, progresso > 0)}
+                    className="inline-flex items-center justify-center rounded-[var(--radius-lg)] bg-[var(--sesi-red)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--sesi-red-dark)]"
+                  >
+                    {concluido ? "Revisar conteúdo" : progresso > 0 ? "Continuar de onde parei" : "Iniciar curso"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => abrirPlayerScorm(true)}
+                    disabled={reiniciandoScorm}
+                    className="inline-flex items-center justify-center rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] px-5 py-3 text-sm font-semibold text-[var(--sesi-black)] transition hover:bg-[var(--sesi-gray)] disabled:opacity-60"
+                  >
+                    {reiniciandoScorm ? "Reiniciando..." : "Começar do início"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.open(`/curso/${slug}/scorm/player?debug=1`, "_blank")}
+                    className="inline-flex items-center justify-center rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] px-5 py-3 text-sm font-semibold text-[var(--sesi-black)] transition hover:bg-[var(--sesi-gray)]"
+                  >
+                    Diagnóstico
+                  </button>
                 </div>
-              ) : (
-                <iframe
-                  key={versaoPlayerScorm}
-                  data-player-scorm
-                  src={urlPlayerScorm(pacoteScorm, perfil.email)}
-                  title={`Conteúdo SCORM do curso ${curso?.nomeBreve ?? "do aluno"}`}
-                  className="h-[calc(100vh-210px)] min-h-[560px] w-full border-0"
-                  allow="fullscreen"
-                />
-              )}
+
+                {erroScorm && (
+                  <p role="alert" className="mt-4 rounded-[var(--radius-lg)] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                    {erroScorm}
+                  </p>
+                )}
+
+                <ul className="mt-5 grid gap-2 text-xs text-[var(--sesi-muted)] sm:grid-cols-2">
+                  <li>Progresso, nota e navegação sincronizados com o AVA.</li>
+                  <li>Idioma e acessibilidade acompanham suas preferências.</li>
+                  <li>O conteúdo abre em nova guia, sem cabeçalho nem rodapé.</li>
+                  <li>Use o botão flutuante para voltar ao AVA.</li>
+                </ul>
+              </div>
             </section>
+
+            {boletimCurso && (
+              <section className="rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white p-5 shadow-sm">
+                <h2 className="font-semibold text-[var(--sesi-black)]">Minhas notas neste curso</h2>
+                <p className="mt-1 text-sm text-[var(--sesi-muted)]">
+                  Média parcial: <strong className="text-[var(--sesi-black)]">{boletimCurso.mediaFinal.toFixed(1)}</strong>
+                </p>
+              </section>
+            )}
           </Container>
         </div>
       </MainLayout>
@@ -683,6 +697,65 @@ export function AvaPage() {
               className="absolute left-4 top-4 z-10 h-8 w-auto drop-shadow-md sm:left-6 sm:top-6 sm:h-10"
             />
           </div>
+
+          {boletimCurso && (
+            <section
+              aria-labelledby="notas-curso"
+              className="mt-6 rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-white p-5"
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 id="notas-curso" className="text-lg font-bold text-[var(--sesi-black)]">Minhas notas neste curso</h2>
+                <p className="text-sm text-[var(--sesi-muted)]">
+                  Turma {boletimCurso.turmaCodigo || "—"} · média{" "}
+                  <strong className="text-[var(--sesi-black)]">
+                    {boletimCurso.notas.length ? boletimCurso.mediaFinal.toFixed(1) : "—"}
+                  </strong>
+                </p>
+              </div>
+              {boletimCurso.notas.length === 0 ? (
+                <p className="mt-3 text-sm text-[var(--sesi-muted)]">Nenhuma nota lançada ainda.</p>
+              ) : (
+                <div className="mt-3 overflow-x-auto rounded-lg border border-[var(--sesi-gray)]">
+                  <table className="w-full min-w-[480px] text-left text-sm">
+                    <thead className="bg-[#F5F5F5] text-xs uppercase text-[var(--sesi-muted)]">
+                      <tr>
+                        <th className="px-4 py-2.5">Avaliação</th>
+                        <th className="px-4 py-2.5">Tipo</th>
+                        <th className="px-4 py-2.5">Data</th>
+                        <th className="px-4 py-2.5">Nota</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {boletimCurso.notas.map((nota) => (
+                        <tr key={nota.id} className="border-t border-[var(--sesi-gray)]">
+                          <td className="px-4 py-2.5 font-medium">{nota.titulo}</td>
+                          <td className="px-4 py-2.5">{nota.tipo}</td>
+                          <td className="px-4 py-2.5">{new Date(nota.data).toLocaleDateString("pt-BR")}</td>
+                          <td className="px-4 py-2.5">{nota.valor} / {nota.valorMaximo}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <div className="mt-3 flex flex-wrap gap-3">
+                <Link
+                  to="/area-do-aluno/boletim"
+                  className="text-sm font-semibold text-[var(--sesi-red)] hover:underline"
+                >
+                  Ver boletim completo
+                </Link>
+                {boletimCurso.turmaId > 0 && (
+                  <Link
+                    to={`/area-do-aluno/comunidade/${boletimCurso.turmaId}`}
+                    className="text-sm font-semibold text-[var(--sesi-red)] hover:underline"
+                  >
+                    Comunidade da turma (fórum, chat, plantão)
+                  </Link>
+                )}
+              </div>
+            </section>
+          )}
 
               <article data-ava-texto className="mt-8 w-full">
             {itemSelecionado.id === "boas-praticas" ? (

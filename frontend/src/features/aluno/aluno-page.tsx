@@ -382,6 +382,20 @@ export function AlunoPage() {
             >
               {t("student:courses.viewCatalog")}
             </Link>
+            <Link
+              to="/area-do-aluno/boletim"
+              className="rounded-[var(--radius-lg)] border border-white/30 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white hover:text-[var(--sesi-black)]"
+            >
+              Meu boletim
+            </Link>
+            {perfil.papel === "admin" && (
+              <Link
+                to="/admin/academico"
+                className="rounded-[var(--radius-lg)] border border-white/30 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white hover:text-[var(--sesi-black)]"
+              >
+                Gestão acadêmica
+              </Link>
+            )}
             <button
               type="button"
               onClick={() => void aoSair()}

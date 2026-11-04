@@ -761,6 +761,10 @@ const [enviandoImagemScorm, setEnviandoImagemScorm] = useState(false)
                 <p className="truncate text-sm font-semibold text-[var(--sesi-black)]">{pacoteAtual.nomeArquivo}</p>
                 <p className="text-xs text-[var(--sesi-muted)]">
                   {(pacoteAtual.tamanho / (1024 * 1024)).toFixed(1)} MB · SCORM {pacoteAtual.versao}
+                  {pacoteAtual.responsavel ? ` · Enviado por ${pacoteAtual.responsavel}` : ""}
+                </p>
+                <p className="text-xs text-[var(--sesi-muted)]">
+                  {new Date(pacoteAtual.criadoEm).toLocaleString("pt-BR")}
                 </p>
               </div>
               <a

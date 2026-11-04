@@ -10,3 +10,7 @@ public record TutorRequest(
 public record TutorMensagemHistorico(string Papel, string Texto);
 
 public record TutorResponse(string Resposta);
+
+public record TraduzirRequest(string Texto, string? IdiomaDestino = null);
+
+public record TraduzirResponse(string Traducao);

@@ -185,6 +185,7 @@ public sealed class ScormArmazenamento
         long tamanho,
         Stream conteudo,
         string? versaoSolicitada,
+        string? responsavel,
         CancellationToken ct)
     {
         var slug = NormalizarSlug(cursoSlug);
@@ -261,7 +262,8 @@ public sealed class ScormArmazenamento
                 entryFile,
                 DateTime.UtcNow,
                 $"/scorm/{id}/{entryFile}",
-                $"/api/v1/scorm/pacotes/{id}/launch");
+                $"/api/v1/scorm/pacotes/{id}/launch",
+                responsavel);
 
             await _trava.WaitAsync(ct);
             try

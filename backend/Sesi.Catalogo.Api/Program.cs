@@ -1104,6 +1104,49 @@ gestao.MapGet("/cursos", async (ICatalogoRepositorio repo, CancellationToken ct)
     .AllowAnonymous()
     .Produces<TutorResponse>(StatusCodes.Status200OK);
 
+    // ---------- Tradução automática via IA (Ollama) ----------
+    v1.MapPost("/ia/traduzir", async (
+        [FromBody] TraduzirRequest request,
+        IHttpClientFactory fabrica,
+        CancellationToken ct) =>
+    {
+        if (string.IsNullOrWhiteSpace(request.Texto))
+            return Results.BadRequest(new { erro = "Texto é obrigatório." });
+        var destino = string.IsNullOrWhiteSpace(request.IdiomaDestino) ? "en" : request.IdiomaDestino.Trim().ToLowerInvariant();
+        var nomeIdioma = destino.StartsWith("en") ? "English" : destino.StartsWith("es") ? "Spanish" : destino;
+        try
+        {
+            var cliente = fabrica.CreateClient();
+            cliente.Timeout = TimeSpan.FromSeconds(120);
+            var corpo = new
+            {
+                model = "llama3.2:3b",
+                stream = false,
+                messages = new object[]
+                {
+                    new { role = "system", content = $"You are a professional translator. Translate the user's text into {nomeIdioma}. Return ONLY the translated text, no explanations, no quotes." },
+                    new { role = "user", content = request.Texto },
+                },
+            };
+            var respostaHttp = await cliente.PostAsJsonAsync("http://localhost:11434/api/chat", corpo, ct);
+            if (!respostaHttp.IsSuccessStatusCode)
+            {
+                var detalhe = await respostaHttp.Content.ReadAsStringAsync(ct);
+                return Results.Problem($"Ollama respondeu {(int)respostaHttp.StatusCode}: {detalhe}", statusCode: 502);
+            }
+            var dados = await respostaHttp.Content.ReadFromJsonAsync<JsonElement>(ct);
+            var texto = dados.GetProperty("message").GetProperty("content").GetString()?.Trim() ?? "";
+            return Results.Ok(new TraduzirResponse(texto));
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Não foi possível falar com a IA local (Ollama): {ex.Message}", statusCode: 503);
+        }
+    })
+    .WithName("TraduzirTexto")
+    .AllowAnonymous()
+    .Produces<TraduzirResponse>(StatusCodes.Status200OK);
+
     // Histórico do tutor (últimos 7 dias).
     v1.MapGet("/tutor/historico", async (
         [FromQuery] string usuarioId,
@@ -1579,6 +1622,7 @@ adminV1.MapPost("/scorm/pacotes", async (HttpRequest request, ScormArmazenamento
     var arquivo = form.Files.GetFile("arquivo") ?? form.Files.FirstOrDefault();
     var cursoSlug = form["cursoSlug"].ToString();
     var versao = form["versao"].ToString();
+    var responsavel = form["responsavel"].ToString();
 
     if (arquivo is null || arquivo.Length == 0)
         return Results.BadRequest(new { erro = "Anexe o arquivo .zip do pacote SCORM." });
@@ -1594,6 +1638,7 @@ adminV1.MapPost("/scorm/pacotes", async (HttpRequest request, ScormArmazenamento
             arquivo.Length,
             stream,
             string.IsNullOrWhiteSpace(versao) ? null : versao,
+            string.IsNullOrWhiteSpace(responsavel) ? null : responsavel,
             ct);
 
         return Results.Ok(pacote);

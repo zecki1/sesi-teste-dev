@@ -11,6 +11,7 @@ export interface PacoteScormDto {
   criadoEm: string
   conteudoUrl: string
   lancamentoUrl: string
+  responsavel?: string | null
 }
 
 export interface ProgressoScormDto {
@@ -123,12 +124,14 @@ export async function enviarPacoteScorm(
   cursoSlug: string,
   arquivo: File,
   versao: "1.2" | "2004",
+  responsavel?: string,
   onProgress?: (percentual: number) => void,
 ): Promise<PacoteScormDto> {
   const formulario = new FormData()
   formulario.append("arquivo", arquivo)
   formulario.append("cursoSlug", cursoSlug)
   formulario.append("versao", versao)
+  if (responsavel) formulario.append("responsavel", responsavel)
 
   return new Promise((resolve, reject) => {
     const requisicao = new XMLHttpRequest()

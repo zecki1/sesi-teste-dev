@@ -172,6 +172,7 @@ export function AdminCursosPage() {
           curso.slug,
           arquivoPacote,
           curso.scorm?.versao ?? "1.2",
+          perfil?.email ?? undefined,
           setProgressoUploadScorm,
         )
       }

@@ -178,6 +178,9 @@ app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
+// CORS deve vir antes dos static files e dos endpoints.
+app.UseCors();
+
 // Conteúdo dos pacotes SCORM extraídos (mesma origem do wrapper/player).
 var armazenamentoScorm = app.Services.GetRequiredService<ScormArmazenamento>();
 var tiposConteudo = new FileExtensionContentTypeProvider();
@@ -222,7 +225,6 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = "swagger";
 });
 
-app.UseCors();
 app.UseMiddleware<IdiomaMiddleware>();
 app.UseHttpsRedirection();
 app.UseAuthentication();

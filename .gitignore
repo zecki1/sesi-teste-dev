@@ -64,3 +64,4 @@ playwright-report/
 *.bak
 /cam-simulator-scorm/
 *.zip
+.vercel

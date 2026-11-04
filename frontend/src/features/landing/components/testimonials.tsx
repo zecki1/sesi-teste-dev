@@ -29,6 +29,13 @@ export function useDepoimentosReais(): { itens: DepoimentoExibido[]; usandoReais
 
   const reais = (data ?? [])
     .filter((avaliacao) => avaliacao.depoimento.trim().length > 0)
+    .filter((avaliacao) =>
+      avaliacao.nota === 5 &&
+      avaliacao.notaPlataforma === 5 &&
+      avaliacao.notaCurso === 5 &&
+      avaliacao.notaAvaliacao === 5 &&
+      avaliacao.notaAcessibilidade === 5,
+    )
     .map<DepoimentoExibido>((avaliacao) => ({
       chave: `avaliacao-${avaliacao.id}`,
       name: avaliacao.nome,

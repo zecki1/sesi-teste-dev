@@ -13,7 +13,8 @@ public record ScormPacoteDto(
     DateTime CriadoEm,
     string ConteudoUrl,
     string LancamentoUrl,
-    string? Responsavel = null);
+    string? Responsavel = null,
+    int VersaoPacote = 1);
 
 /// <summary>
 /// Progresso de um aluno dentro de um pacote SCORM.

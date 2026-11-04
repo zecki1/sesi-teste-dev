@@ -160,8 +160,10 @@ export function ScormPlayerPage() {
 
   // Envia idioma atual para o wrapper (que repassa ao conteúdo SCORM).
   const enviarIdioma = useCallback(() => {
-    enviarParaPlayer({ type: "SESI_LANG_CHANGED", lang: i18n.language })
-  }, [enviarParaPlayer, i18n.language])
+    const idioma = (window.localStorage.getItem("sesi.idioma") as "pt-BR" | "en-US" | "es-ES" | null) || "pt-BR"
+    aplicarIdioma(idioma)
+    enviarParaPlayer({ type: "SESI_LANG_CHANGED", lang: idioma })
+  }, [enviarParaPlayer])
 
   useEffect(() => {
     enviarIdioma()

@@ -12,6 +12,7 @@ export interface PacoteScormDto {
   conteudoUrl: string
   lancamentoUrl: string
   responsavel?: string | null
+  versaoPacote?: number
 }
 
 export interface ProgressoScormDto {

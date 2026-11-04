@@ -253,23 +253,27 @@ public sealed class ScormArmazenamento
             entryFile = AjustarEntryFile(destino, entryFile);
             ReescreverCaminhosAbsolutos(destino, entryFile);
 
-            var pacote = new ScormPacoteDto(
-                id,
-                slug,
-                nomeArquivoSeguro,
-                tamanho,
-                versao,
-                entryFile,
-                DateTime.UtcNow,
-                $"/scorm/{id}/{entryFile}",
-                $"/api/v1/scorm/pacotes/{id}/launch",
-                responsavel);
-
+            ScormPacoteDto? pacote = null;
             await _trava.WaitAsync(ct);
             try
             {
                 var pacotes = await LerIndiceAsync(ct);
                 var anterior = pacotes.FirstOrDefault(p => p.CursoSlug == slug);
+                var versaoPacote = (anterior?.VersaoPacote ?? 0) + 1;
+
+                pacote = new ScormPacoteDto(
+                    id,
+                    slug,
+                    nomeArquivoSeguro,
+                    tamanho,
+                    versao,
+                    entryFile,
+                    DateTime.UtcNow,
+                    $"/scorm/{id}/{entryFile}",
+                    $"/api/v1/scorm/pacotes/{id}/launch",
+                    responsavel,
+                    versaoPacote);
+
                 pacotes.RemoveAll(p => p.CursoSlug == slug);
                 pacotes.Add(pacote);
                 await GravarIndiceAsync(pacotes, ct);
@@ -290,7 +294,7 @@ public sealed class ScormArmazenamento
                 _trava.Release();
             }
 
-            return pacote;
+            return pacote!;
         }
         catch
         {

@@ -17,17 +17,29 @@ export function useScormAcessibilidade(ativo: boolean, chaveInstancia?: string |
         "*",
       )
     }
-    const aoAtualizar = () => sincronizar()
+    const enviarIdioma = () => {
+      const idioma = window.localStorage.getItem("sesi.idioma") || "pt-BR"
+      player.contentWindow?.postMessage(
+        { type: "SESI_LANG_CHANGED", lang: idioma },
+        "*",
+      )
+    }
+    const aoAtualizar = () => {
+      sincronizar()
+      enviarIdioma()
+    }
 
-    player.addEventListener("load", sincronizar)
+    player.addEventListener("load", aoAtualizar)
     window.addEventListener("sesi:acessibilidade-atualizada", aoAtualizar)
-    window.addEventListener("storage", aoAtualizar)
+    window.addEventListener("storage", (evento) => {
+      if (evento.key === "sesi.idioma" || evento.key === "sesi.a11y.v1") aoAtualizar()
+    })
     sincronizar()
+    enviarIdioma()
 
     return () => {
-      player.removeEventListener("load", sincronizar)
+      player.removeEventListener("load", aoAtualizar)
       window.removeEventListener("sesi:acessibilidade-atualizada", aoAtualizar)
-      window.removeEventListener("storage", aoAtualizar)
     }
   }, [ativo, chaveInstancia, desabilitarVlibrasScorm])
 }

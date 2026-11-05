@@ -134,7 +134,10 @@ export function SuperSesinhoTutor({ obterContexto }: { obterContexto?: () => str
         <div
           role="dialog"
           aria-label="Super Sesinho - tutor virtual"
-          className={`fixed bottom-24 ${posicao} z-50 flex h-[460px] w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-[var(--sesi-gray)] bg-white shadow-2xl`}
+          className={`fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-[var(--sesi-gray)] bg-white shadow-2xl ${
+            // Mobile: tela cheia com margem de 2px
+            "bottom-[2px] right-[2px] h-[calc(100vh-4px)] w-[calc(100vw-4px)]"
+          } sm:bottom-24 sm:right-6 sm:h-[460px] sm:w-[360px] sm:max-w-[calc(100vw-2rem)]`}
         >
           <header className="flex items-center justify-between bg-[var(--sesi-black)] px-4 py-3 text-white">
             <div>

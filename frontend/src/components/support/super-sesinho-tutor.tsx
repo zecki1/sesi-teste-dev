@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { FaRobot } from "react-icons/fa"
 import { usePerfil } from "@/lib/auth/perfil"
 import { obterHistoricoTutor, limparHistoricoTutor, perguntarTutor } from "@/lib/api/academico"
@@ -11,6 +11,46 @@ interface Mensagem {
 }
 
 const SAUDACAO = "Olá! Eu sou o Super Sesinho, seu tutor virtual. Como posso ajudar nos seus estudos hoje?"
+
+// Reconhece URLs (http/https) e trechos em **negrito** na resposta do tutor.
+const PADRAO_MARCACAO = /(https?:\/\/[^\s<>()]+)|\*\*([^*\n]+)\*\*/g
+
+function TextoComLinks({ texto }: { texto: string }) {
+  const partes: ReactNode[] = []
+  let ultimo = 0
+  let achado: RegExpExecArray | null
+  PADRAO_MARCACAO.lastIndex = 0
+  while ((achado = PADRAO_MARCACAO.exec(texto)) !== null) {
+    if (achado.index > ultimo) partes.push(texto.slice(ultimo, achado.index))
+    if (achado[1]) {
+      // remove pontuação colada no fim da URL (ex.: "link." ou "link,")
+      const limpa = achado[1].replace(/[.,;:!?]+$/, "")
+      const resto = achado[1].slice(limpa.length)
+      partes.push(
+        <a
+          key={`link-${achado.index}`}
+          href={limpa}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="break-all font-medium underline underline-offset-2"
+          style={{ color: "var(--sesi-red)" }}
+        >
+          {limpa}
+        </a>,
+      )
+      if (resto) partes.push(resto)
+    } else {
+      partes.push(
+        <strong key={`forte-${achado.index}`} className="font-semibold">
+          {achado[2]}
+        </strong>,
+      )
+    }
+    ultimo = achado.index + achado[0].length
+  }
+  if (ultimo < texto.length) partes.push(texto.slice(ultimo))
+  return <p className="whitespace-pre-wrap break-words">{partes}</p>
+}
 
 /**
  * `obterContexto` permite que o tutor leia o conteúdo aberto na tela (por
@@ -184,7 +224,7 @@ export function SuperSesinhoTutor({ obterContexto }: { obterContexto?: () => str
                 key={i}
                 className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${m.papel === "user" ? "ml-auto bg-[var(--sesi-red)] text-white" : "bg-white text-[var(--sesi-black)] shadow-sm"}`}
               >
-                <p className="whitespace-pre-wrap">{m.texto}</p>
+                <TextoComLinks texto={m.texto} />
                 {m.criadoEm && (
                   <p className="mt-1 text-[10px] opacity-70">{new Date(m.criadoEm).toLocaleString("pt-BR")}</p>
                 )}

@@ -831,6 +831,27 @@ const [enviandoImagemScorm, setEnviandoImagemScorm] = useState(false)
               {arquivoPacote.name} · {(arquivoPacote.size / (1024 * 1024)).toFixed(1)} MB
             </p>
           )}
+          <div className="mt-4 space-y-2 rounded-[var(--radius-lg)] border border-[var(--sesi-gray)] bg-[#F5F5F5] p-4">
+            <label className="flex items-center gap-2 text-sm text-[var(--sesi-black)]">
+              <input
+                type="checkbox"
+                checked={Boolean(draft.scorm?.exigirDesafioFinal)}
+                onChange={(evento) => alterarScorm({ exigirDesafioFinal: evento.target.checked })}
+              />
+              Exigir desafio final para concluir o curso
+            </label>
+            <label className="flex items-center gap-2 text-sm text-[var(--sesi-black)]">
+              <input
+                type="checkbox"
+                checked={Boolean(draft.scorm?.notaPeloDesafioFinal)}
+                onChange={(evento) => alterarScorm({ notaPeloDesafioFinal: evento.target.checked })}
+              />
+              Nota do curso vem do desafio final
+            </label>
+            <p className="text-xs text-[var(--sesi-muted)]">
+              Quando ativado, o progresso só chega a 100% e a nota é registrada após a conclusão do desafio final.
+            </p>
+          </div>
           {progressoUploadScorm !== null && (
             <div className="fixed inset-0 z-[11000] flex items-center justify-center bg-black/60 p-4" role="presentation">
               <div

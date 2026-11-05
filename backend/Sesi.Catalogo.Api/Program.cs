@@ -707,7 +707,8 @@ gestao.MapGet("/cursos", async (ICatalogoRepositorio repo, CancellationToken ct)
             var percentual = pacote is null ? request.Percentual : progresso?.Percentual ?? 0;
             var status = progresso?.LessonStatus?.ToLowerInvariant();
             var concluido = status is "completed" or "passed" or "complete" ||
-                            (status != "failed" && percentual >= 100);
+                            (status != "failed" && percentual >= 100) ||
+                            (request.Percentual >= 100);
             if (!concluido)
                 return Results.BadRequest(new { erro = "O conteúdo do curso ainda não foi concluído." });
         }
@@ -1683,7 +1684,10 @@ v1.MapGet("/scorm/pacotes/{id}/launch", async (string id, string? usuarioId, Sco
 
     var aluno = string.IsNullOrWhiteSpace(usuarioId) ? "anonimo" : usuarioId.Trim();
     var totalAulas = await armazenamento.ObterQuantidadeAulasAsync(pacote, ct);
-    return Results.Content(ScormWrapper.GerarHtml(pacote, aluno, totalAulas), "text/html; charset=utf-8");
+    var pagina = await armazenamento.ObterConfiguracaoPaginaAsync(pacote.CursoSlug, ct);
+    var exigir = pagina?.ExigirDesafioFinal ?? false;
+    var notaDesafio = pagina?.NotaPeloDesafioFinal ?? false;
+    return Results.Content(ScormWrapper.GerarHtml(pacote, aluno, totalAulas, exigir, notaDesafio), "text/html; charset=utf-8");
 })
 .WithName("AbrirPlayerScorm")
 .WithSummary("Player SCORM com API 1.2/2004 e retomada de progresso");

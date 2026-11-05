@@ -19,4 +19,6 @@ public record ScormPaginaConfigDto(
     int CargaHoraria,
     string BotaoTexto,
     IReadOnlyList<string>? Idiomas = null,
-    string? IdiomaPadrao = null);
+    string? IdiomaPadrao = null,
+    bool? ExigirDesafioFinal = null,
+    bool? NotaPeloDesafioFinal = null);

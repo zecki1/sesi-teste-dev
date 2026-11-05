@@ -23,6 +23,10 @@ export interface ScormPaginaConfig {
   idiomas: string[]
   /** Idioma exibido quando o visitante escolhe um idioma ainda não traduzido. */
   idiomaPadrao: string
+  /** Exige a conclusão do desafio final para o curso ser considerado concluído. */
+  exigirDesafioFinal?: boolean
+  /** A nota do curso vem do desafio final. */
+  notaPeloDesafioFinal?: boolean
 }
 
 export type CursoScormBase = Pick<

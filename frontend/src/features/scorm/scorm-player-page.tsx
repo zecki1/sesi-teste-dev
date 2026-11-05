@@ -260,9 +260,16 @@ export function ScormPlayerPage() {
       )
     }
 
-    registrarMarcoCurso(slug, perfil.email, "conclusao", progresso)
-      .then((marco) => celebrar(marco.concluidoEm || new Date().toISOString()))
-      .catch(() => celebrar(new Date().toISOString()))
+    let tentativas = 0;
+    const tentar = () => {
+      registrarMarcoCurso(slug, perfil.email!, "conclusao", progresso)
+        .then((marco) => celebrar(marco.concluidoEm || new Date().toISOString()))
+        .catch(() => {
+          if (tentativas++ < 4) window.setTimeout(tentar, 1000);
+          else celebrar(new Date().toISOString());
+        });
+    };
+    tentar();
   }, [slug, perfil?.email, perfil?.nome, perfil?.sobrenome, progresso, statusScorm, curso?.nomeCompleto, curso?.nomeBreve])
 
   /** Fecha a guia (quando aberta pelo AVA) ou volta para a página do curso. */

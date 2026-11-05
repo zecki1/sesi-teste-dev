@@ -11,7 +11,8 @@ namespace Sesi.Catalogo.Api.Scorm;
 /// </summary>
 public static class ScormWrapper
 {
-    public static string GerarHtml(ScormPacoteDto pacote, string usuarioId, int totalAulas)
+    public static string GerarHtml(ScormPacoteDto pacote, string usuarioId, int totalAulas,
+        bool exigirDesafioFinal = false, bool notaPeloDesafioFinal = false)
     {
         var config = JsonSerializer.Serialize(new
         {
@@ -20,6 +21,8 @@ public static class ScormWrapper
             conteudoUrl = pacote.ConteudoUrl,
             versao = pacote.Versao,
             totalAulas,
+            exigirDesafioFinal,
+            notaPeloDesafioFinal,
         });
 
         return $$"""
@@ -387,7 +390,13 @@ public static class ScormWrapper
 
                     const frame = document.getElementById("sco");
                     frame.src = config.conteudoUrl;
-                    depurar("iniciar", { conteudoUrl: config.conteudoUrl, totalAulas: config.totalAulas });
+                    let __u = frame.src;
+                    const __p = [];
+                    if (config.exigirDesafioFinal) __p.push("sesi_exigir_desafio=1");
+                    if (config.notaPeloDesafioFinal) __p.push("sesi_nota_desafio=1");
+                    if (__p.length) __u += (__u.indexOf("?") >= 0 ? "&" : "?") + __p.join("&");
+                    frame.src = __u;
+                    depurar("iniciar", { conteudoUrl: __u, totalAulas: config.totalAulas });
                     notificar("SCORM_READY", { dados: estado() });
                   }
 

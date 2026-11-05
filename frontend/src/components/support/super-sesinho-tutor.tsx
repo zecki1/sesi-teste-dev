@@ -38,7 +38,7 @@ export function SuperSesinhoTutor({ obterContexto }: { obterContexto?: () => str
     }
   }, [])
 
-  const posicao = vlibrasAtivo ? "right-24" : "right-6"
+  const posicao = vlibrasAtivo ? "right-4" : "right-4"
 
   const carregarHistorico = async () => {
     if (!perfil?.email) return
@@ -205,15 +205,17 @@ export function SuperSesinhoTutor({ obterContexto }: { obterContexto?: () => str
           </form>
         </div>
       )}
-      <button
-        type="button"
-        onClick={() => setAberto((v) => !v)}
-        className={`fixed bottom-6 ${posicao} z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--sesi-red)] text-2xl text-white shadow-xl transition hover:bg-[var(--sesi-red-dark)]`}
-        aria-label="Abrir Super Sesinho, tutor virtual"
-        title="Super Sesinho - tutor virtual"
-      >
-        <FaRobot size={24} />
-      </button>
+      {!aberto && (
+        <button
+          type="button"
+          onClick={() => setAberto((v) => !v)}
+          className={`fixed bottom-6 ${posicao} z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--sesi-red)] text-2xl text-white shadow-xl transition hover:bg-[var(--sesi-red-dark)]`}
+          aria-label="Abrir Super Sesinho, tutor virtual"
+          title="Super Sesinho - tutor virtual"
+        >
+          <FaRobot size={24} />
+        </button>
+      )}
     </>
   )
 }

@@ -63,6 +63,7 @@ public static class InjecaoDependencia
         await CatalogoScormSeeder.SemearAsync(db, ct);
         await CatalogoTraducoesSeeder.SemearAsync(db, ct);
         await CatalogoPerguntasSeeder.SemearAsync(db, ct);
+        await CatalogoAvaliacoesSeeder.SemearAsync(db, ct);
     }
 
     /// <summary>

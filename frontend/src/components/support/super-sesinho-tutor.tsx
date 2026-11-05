@@ -27,6 +27,19 @@ export function SuperSesinhoTutor({ obterContexto }: { obterContexto?: () => str
   const [vlibrasAtivo, setVlibrasAtivo] = useState(() => lerConfig().vlibras)
   const fimRef = useRef<HTMLDivElement>(null)
 
+  // Oculta os ícones da esquerda no mobile quando o chat está aberto.
+  useEffect(() => {
+    if (aberto) document.body.classList.add("sesi-tutor-aberto")
+    else document.body.classList.remove("sesi-tutor-aberto")
+    const botaoMenu = document.getElementById("botaoMenu")
+    if (botaoMenu) botaoMenu.style.display = aberto ? "none" : ""
+    return () => {
+      document.body.classList.remove("sesi-tutor-aberto")
+      const bm = document.getElementById("botaoMenu")
+      if (bm) bm.style.display = ""
+    }
+  }, [aberto])
+
   // O botão do VLibras ocupa o canto inferior direito: desloca o tutor para não sobrepor.
   useEffect(() => {
     const sincronizar = () => setVlibrasAtivo(lerConfig().vlibras)
